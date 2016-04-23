@@ -14,9 +14,9 @@ BuildDepends:
               bap
 
 
-Executable test_shingled
+Executable shingled_disasm_metrics
   Path:			src/
   Install:        	true
-  MainIs:	  	test_shingled.ml
+  MainIs:	  	shingled_disasm_metrics.ml
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, cmdliner, threads, oUnit
