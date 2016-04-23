@@ -1,0 +1,43 @@
+opam-version: "1.2"
+name: "sheathed_disassemblers"
+version: "master"
+maintainer: "Kenneth Adam Miller <kennethadammiller@gmail.com>"
+authors: "Kenneth Adam Miller <kennethadammiller@gmail.com>", "Ivan Gotovchits <ivg@ieee.com>"
+license: "MIT"
+build: [
+  [make]
+]
+
+install: [
+  [make "install"]
+]
+
+remove: [
+  ["ocamlfind" "remove" "shingled_disassembler"]
+  ["rm" "-rf" "%{prefix}%/share/shingled_disassembler"]
+]
+
+depends: [
+    "bap"
+]
+
+depexts: [
+    [["ubuntu"] [
+        "libgmp-dev"
+        "libzip-dev"
+        "libcurl4-gnutls-dev"
+        "llvm-3.4-dev"
+        "time"
+        "clang"
+        "llvm"
+        "m4"
+     ]]
+     [["osx" "macports"] [
+        "gmp"
+        "llvm-3.4"
+        "graphviz"
+        "curl"
+        "libzip"
+     ]
+    ]
+]

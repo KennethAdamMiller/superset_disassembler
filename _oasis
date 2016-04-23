@@ -1,0 +1,22 @@
+OASISFormat: 0.4
+Name:        superset_disasm
+Version:     0.1
+Synopsis:    A whole program, superset disassembler equipped to discriminate more deftly against false interpretations using contextual information and with various possible actions upon either unavailability of information or .
+Authors:     Kenneth Adam Miller <kennethadammiller@gmail.com>
+Maintainers: Kenneth Adam Miller <kennethadammiller@gmail.com>
+License:     MIT
+Plugins:     META (0.4)
+AlphaFeatures: ocamlbuild_more_args
+BuildTools: ocamlbuild, camlp4o
+XOCamlbuildExtraArgs: -j 5
+BuildDepends:
+              core_kernel,
+              bap
+
+
+Executable test_shingled
+  Path:			src/
+  Install:        	true
+  MainIs:	  	test_shingled.ml
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, threads, oUnit

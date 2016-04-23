@@ -45,10 +45,16 @@ let sheer brancher shingles gmem =
                      match lookup addr with
                      | Some (mem, (Some _)) -> false
                      | _ -> true in
+  let visited = Array.create ~len:(Addr.to_int max|>ok_exn) false in
+  (* TODO refactor this to use the control flow graph and DFS on bad *)
   let rec sheer_data shingles addr =
     if not (target_in_mem addr)
     then find_mem addr mark_data shingles
-    else match lookup addr with
+    else if visited.(Addr.to_int addr |> ok_exn) then
+      sheer_data shingles (Addr.succ addr)
+    else (
+      visited.(Addr.to_int addr |> ok_exn) <- true;
+      match lookup addr with
       | Some (mem, Some insn) ->
         let targets = get_targets mem insn in
         let shingles, result =
@@ -67,11 +73,11 @@ let sheer brancher shingles gmem =
                     mark_data shingles mem, true
                   else shingles, so_far
                 | None -> shingles, true) in
-        if result
+        if final_result
         then sheer_data (mark_data shingles mem) (Addr.succ addr)
         else sheer_data shingles (Addr.succ addr)
       | Some (_, None)
-      | None -> sheer_data shingles (Addr.succ addr) in
+      | None -> sheer_data shingles (Addr.succ addr)) in
   sheer_data shingles min
 
 let dests_of_shingles brancher shingles =
@@ -89,7 +95,7 @@ let dests_of_shingles brancher shingles =
 let find_barriers dests =
   let barriers = Addr.Hash_set.create () in
   let mark_barrier = Hash_set.add barriers in
-  Hashtbl.iter dests ~f:(fun ~key:src ~data:dsts -> match dsts with
+  Hashtbl.iteri dests ~f:(fun ~key:src ~data:dsts -> match dsts with
       | _ :: _ :: _ ->
         List.iter dsts ~f:(fun (addr,_) -> mark_barrier addr)
       | _ -> ());
@@ -104,7 +110,8 @@ let lift lift (mem,insn) =
       | Error _ -> None in
     Some (mem,Insn.of_basic ?bil insn)
 
-let run ?brancher shingles arch mem : cfg =
+let run ?cfg ?brancher shingles arch mem : cfg =
+  let cfg = Option.value cfg ~default:Cfg.empty in
   let brancher = Option.value brancher ~default:(Brancher.of_bil arch) in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
@@ -121,7 +128,7 @@ let run ?brancher shingles arch mem : cfg =
   let cfg,rest =
     Memmap.to_sequence shingles |>
     Seq.filter_map ~f:(lift lifter) |>
-    Seq.fold ~init:(Cfg.empty,[]) ~f:(fun (cfg,insns) (mem,insn) ->
+    Seq.fold ~init:(cfg,[]) ~f:(fun (cfg,insns) (mem,insn) ->
         if is_barrier mem then match insns with
           | [] -> cfg, [mem, insn]
           | insns -> insert_node ((mem,insn) :: insns) cfg, []
