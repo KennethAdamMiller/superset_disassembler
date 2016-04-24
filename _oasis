@@ -34,3 +34,18 @@ Executable test_disasm
   Install:		false
   BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, shingled
   CompiledObject:	best
+
+Executable sheathed_disasm
+  Path:			src/sheathed
+  Install:        	true
+  MainIs:	  	sheathed_disasm.ml
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, threads
+
+Library sheathed
+  Path:			src/sheathed
+  Install:        	true
+  Modules:	  	Span, Inverse_grammar, Sheath, Sheath_choice
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, threads, shingled
+
