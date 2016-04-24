@@ -14,8 +14,15 @@ BuildDepends:
               bap
 
 
+Library shingled
+  Path:			src/shingled
+  Install:        	true
+  Modules:	  	Common, Shingle, Shingled_disasm
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, threads
+
 Executable shingled_disasm_metrics
-  Path:			src/
+  Path:			src/shingled
   Install:        	true
   MainIs:	  	shingled_disasm_metrics.ml
   CompiledObject: 	best
