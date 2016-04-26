@@ -152,16 +152,15 @@ module Conservative = struct
   type maybe_insn = mem * (asm, kinds) insn option
 
   let run dis mem =
-    let open Seq.Generator in
-    let rec disasm mem =
-      let elem = match Dis.insn_of_mem dis mem with
-        | Ok (mem, insn, _) -> mem, insn
-        | Error _ -> mem, None in
-      match prev_chunk mem ~addr:(Memory.min_addr mem) with
-      | Ok next -> yield elem >>= fun () -> disasm next
-      | Error _ -> yield elem >>= fun () -> return () in
+    let rec disasm cur_mem =
+      let elem = match Dis.insn_of_mem dis cur_mem with
+        | Ok (m, insn, _) -> m, insn
+        | Error _ -> cur_mem, None in
+      match prev_chunk mem ~addr:(Memory.min_addr cur_mem) with
+      | Ok next -> elem :: disasm next
+      | Error _ -> [elem] in
     match Memory.view mem ~from:(Memory.max_addr mem) with
-    | Ok mem -> Ok (Seq.Generator.run (disasm mem))
+    | Ok m -> Ok (disasm m)
     | Error err -> Error err
 
   let disasm ?(backend="llvm") arch mem =
@@ -173,7 +172,7 @@ module Conservative = struct
 end
 
 let to_memmap insns =
-  Seq.fold insns ~init:Memmap.empty ~f:(fun shingles -> function
+  List.fold insns ~init:Memmap.empty ~f:(fun shingles -> function
       | mem,None -> Memmap.add shingles mem None
       | mem,Some insn -> Memmap.add shingles mem (Some insn))
 
