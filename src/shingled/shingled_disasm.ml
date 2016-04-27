@@ -152,15 +152,15 @@ module Conservative = struct
   type maybe_insn = mem * (asm, kinds) insn option
 
   let run dis mem =
-    let rec disasm cur_mem =
+    let rec disasm accu cur_mem =
       let elem = match Dis.insn_of_mem dis cur_mem with
         | Ok (m, insn, _) -> m, insn
         | Error _ -> cur_mem, None in
       match prev_chunk mem ~addr:(Memory.min_addr cur_mem) with
-      | Ok next -> elem :: disasm next
+      | Ok next -> disasm (elem :: accu) next
       | Error _ -> [elem] in
     match Memory.view mem ~from:(Memory.max_addr mem) with
-    | Ok m -> Ok (disasm m)
+    | Ok m -> Ok (disasm [] m)
     | Error err -> Error err
 
   let disasm ?(backend="llvm") arch mem =
