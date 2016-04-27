@@ -33,7 +33,7 @@ let shingles_to_length_list shingles =
      |> Seq.join) ~f:(fun (mem, insn) -> (Memory.length mem))
 
 let superset_to_length_list superset =
-  List.rev_map superset ~f:(fun (mem, insn) -> (Memory.length mem))
+  List.map superset ~f:(fun (mem, insn) -> (Memory.length mem))
 
 (* This test affirms that both the order and the inner sequences of a set of bytes
    will be interpreted appropriately by the superset conservative disassembler *)
