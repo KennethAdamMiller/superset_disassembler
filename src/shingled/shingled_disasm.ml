@@ -158,9 +158,9 @@ module Conservative = struct
         | Error _ -> cur_mem, None in
       match prev_chunk mem ~addr:(Memory.min_addr cur_mem) with
       | Ok next -> disasm (elem :: accu) next
-      | Error _ -> [elem] in
+      | Error _ -> elem :: accu in
     match Memory.view mem ~from:(Memory.max_addr mem) with
-    | Ok m -> Ok (disasm [] m)
+    | Ok cur_mem -> Ok (disasm [] cur_mem)
     | Error err -> Error err
 
   let disasm ?(backend="llvm") arch mem =
