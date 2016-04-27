@@ -7,7 +7,7 @@ open Bap_plugins.Std
 module Dis = Disasm_expert.Basic
 module Cfg = Graphs.Cfg
 
-let () = Plugins.load (); ()
+let () = Pervasives.ignore(Plugins.load ())
 
 let make_params bytes =
   let arch = Arch.(`x86) in

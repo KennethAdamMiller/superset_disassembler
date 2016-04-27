@@ -1,10 +1,12 @@
-open OUnit2
 open Core_kernel.Std
 open Bap.Std
+open Bap_plugins.Std
 open Or_error
 open Format
 module Dis = Disasm_expert.Basic
 module Cfg = Graphs.Cfg
+
+let () = Pervasives.ignore(Plugins.load ())
 
 let shingled_disasm ?cfg ?brancher arch mem =
   Disasm_expert.Basic.with_disasm
@@ -13,7 +15,7 @@ let shingled_disasm ?cfg ?brancher arch mem =
         Shingled_disasm.run ?cfg ?brancher (Shingled_disasm.to_memmap insns) arch mem
       )
 
-let test test_ctxt =
+let () =
   let img_of_filename filename = 
     let img, errs = Image.create filename |> ok_exn in img in
   let files = Sys.readdir (Sys.getcwd () ^ "/corpora") in
@@ -30,12 +32,3 @@ let test test_ctxt =
       print_endline ("Total instructions sheered: "
                      ^ (string_of_int (Seq.length @@ Cfg.nodes cfg)));
       ())
-
-let () =
-  let suite = 
-    "suite">:::
-    [
-      "test">:: test;
-    ] in
-  run_test_tt_main suite
-;;

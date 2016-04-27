@@ -26,7 +26,7 @@ Executable shingled_disasm_metrics
   Install:        	true
   MainIs:	  	shingled_disasm_metrics.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, threads, oUnit
+  BuildDepends:   	core_kernel, bap, cmdliner, threads
 
 Executable test_disasm
   Path:			unit_tests
