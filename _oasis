@@ -32,7 +32,7 @@ Executable test_disasm
   Path:			unit_tests
   MainIs:		test_shingled_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, shingled
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, shingled, bap.plugins, ocamlgraph
   CompiledObject:	best
 
 Executable sheathed_disasm

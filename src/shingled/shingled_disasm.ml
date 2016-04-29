@@ -1,19 +1,26 @@
 open Core_kernel.Std
 open Regular.Std
-open Graphlib.Std
 open Bap.Std
 open Or_error.Monad_infix
-
+open Graph
 module Dis = Disasm_expert.Basic
 module Cfg = Graphs.Cfg
 
+module G = Persistent.Digraph.ConcreteBidirectional(struct 
+    type t = Addr.t 
+    let compare = Addr.compare
+    let hash = Addr.hash
+    let equal = Addr.equal
+  end)
+
+module Dfs = Traverse.Dfs(G)
 
 let prev_chunk mem ~addr =
   let prev_addr = Addr.pred addr in
   Memory.view ~from:prev_addr mem
 
 let targ_in_mem gmem_min gmem_max addr =
-  Addr.(addr >= gmem_min && addr < gmem_max)
+  Addr.(addr >= gmem_min && addr <= gmem_max)
 
 let is_exec_ok gmem_min gmem_max lmem  =
   Addr.(Memory.min_addr lmem >= gmem_min) &&
@@ -24,65 +31,58 @@ let static_successors brancher ~min ~max mem insn =
   then Brancher.resolve brancher mem insn
   else [None, `Fall]
 
+let bad_of_arch arch = 
+  G.V.create (Addr.of_int
+                ~width:(Size.in_bits @@ Arch.addr_size arch) 0)
 
-(* Sheer simply prunes known unacceptable receiving state points by
-   calculating the transitive closure of a node set of x, if it
-   contains an invalid instruction, this x is invalid too  *)
-let sheer brancher shingles gmem =
+let insert_all ?superset_cfg ?brancher shingles gmem arch =
   (* depth first search for all that bad points to *)
-  let mark_data shingles mem =
-    Memmap.add (Memmap.remove shingles mem) mem None in
+  let brancher = Option.value brancher ~default:(Brancher.of_bil arch)
+  in
+  let superset_cfg = Option.value superset_cfg ~default:G.empty in
   let min,max = Memory.(min_addr gmem, max_addr gmem) in
   let target_in_mem = targ_in_mem min max in
+  (* TODO touches non-mem *)
+  let bad = bad_of_arch arch in
+  let accesses_non_mem insn = false in
   let get_targets = static_successors brancher ~min ~max in
-  let lookup addr = Memmap.lookup shingles addr |>
-                    Seq.find ~f:(fun (mem,_) ->
-                        Addr.equal addr (Memory.min_addr mem)) in
-  let find_mem addr f default= match lookup addr with
-    | Some (mem, _) -> f default mem
-    | _ -> default in
-  let is_data addr = not (target_in_mem addr) ||
-                     match lookup addr with
-                     | Some (mem, (Some _)) -> false
-                     | _ -> true in
-  let visited = Array.create ~len:(Addr.to_int max|>ok_exn) false in
-  (* TODO refactor this to use the control flow graph and DFS on bad *)
-  let rec sheer_data shingles addr =
-    if not (target_in_mem addr)
-    then find_mem addr mark_data shingles
-    else if visited.(Addr.to_int addr |> ok_exn) then
-      sheer_data shingles (Addr.succ addr)
-    else (
-      visited.(Addr.to_int addr |> ok_exn) <- true;
-      match lookup addr with
-      | Some (mem, Some insn) ->
-        let targets = get_targets mem insn in
-        let shingles, result =
-          List.fold ~init:(shingles,false) targets
-            ~f:(fun (shingles, so_far) (target,_) -> match target with
-                | Some target ->
-                  if so_far || is_data target
-                  then mark_data shingles mem, true
-                  else sheer_data shingles target, false
-                | None -> mark_data shingles mem, true) in
-        let shingles, final_result =
-          List.fold ~init:(shingles, result) targets
-            ~f:(fun (shingles, so_far) (target,_) -> match target with
-                | Some target ->
-                  if (so_far || is_data target) then
-                    mark_data shingles mem, true
-                  else shingles, so_far
-                | None -> shingles, true) in
-        if final_result
-        then sheer_data (mark_data shingles mem) (Addr.succ addr)
-        else sheer_data shingles (Addr.succ addr)
-      | Some (_, None)
-      | None -> sheer_data shingles (Addr.succ addr)) in
-  sheer_data shingles min
+  let is_non_code addr insn = 
+    not (target_in_mem addr) ||
+    accesses_non_mem insn in
+  let add_shingles superset_cfg shingles =
+    List.fold shingles ~init:superset_cfg ~f:(fun superset_cfg (mem, insn) ->
+        let src = Memory.min_addr mem in
+        match insn with
+        | Some(insn) ->
+          let targets = get_targets mem insn in
+          List.fold targets ~init:superset_cfg
+            ~f:(fun superset_cfg (target,_) ->
+                match target with 
+                | Some(target) -> 
+                  if is_non_code target insn then
+                    G.add_edge superset_cfg bad src
+                  else 
+                    G.add_edge superset_cfg target src
+                | _ -> superset_cfg
+              )
+        | None -> 
+          G.add_edge superset_cfg bad src
+      )
+  in bad, add_shingles superset_cfg shingles
 
+let sheer superset_cfg arch =
+  let bad = bad_of_arch arch in
+  let to_drop = Addr.Hash_set.create () in
+  Dfs.prefix_component (Hash_set.add to_drop) superset_cfg bad;
+  let sheered_cfg = Hash_set.fold to_drop ~init:superset_cfg
+      ~f:(fun superset_cfg data_point
+           -> G.remove_vertex superset_cfg data_point) in
+  G.remove_vertex sheered_cfg bad
+
+(* component returns the set of jump points and destinations *)
 let dests_of_shingles brancher shingles =
   let dests = Addr.Table.create () in
-  Memmap.to_sequence shingles |> Seq.iter ~f:(function
+  Seq.iter shingles ~f:(function
       | _,None -> ()
       | mem,Some insn ->
         Brancher.resolve brancher mem insn |> List.iter ~f:(function
@@ -110,33 +110,31 @@ let lift lift (mem,insn) =
       | Error _ -> None in
     Some (mem,Insn.of_basic ?bil insn)
 
-let run ?cfg ?brancher shingles arch mem : cfg =
-  let cfg = Option.value cfg ~default:Cfg.empty in
-  let brancher = Option.value brancher ~default:(Brancher.of_bil arch) in
+(*let run ?superset_cfg ?brancher shingles arch mem =
+  let superset_cfg = Option.value superset_cfg ~default:G.empty in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
-  let shingles = sheer brancher shingles mem in
+  sheer superset_cfg mem arch
   let dests  = dests_of_shingles brancher shingles in
-  let nodes = Addr.Table.create () in
-  let barriers = find_barriers dests in
-  let is_barrier mem = Hash_set.mem barriers (Memory.min_addr mem) in
-  let insert_node rev_insns cfg =
+    let nodes = Addr.Table.create () in
+    let barriers = find_barriers dests in
+    let is_barrier mem = Hash_set.mem barriers (Memory.min_addr mem) in
+    let insert_node rev_insns cfg =
     let blk = Block.create mem (List.rev rev_insns) in
     Hashtbl.set nodes ~key:(Block.addr blk) ~data:blk;
     Cfg.Node.insert blk cfg in
-  let node = Hashtbl.find nodes in
-  let cfg,rest =
-    Memmap.to_sequence shingles |>
-    Seq.filter_map ~f:(lift lifter) |>
-    Seq.fold ~init:(cfg,[]) ~f:(fun (cfg,insns) (mem,insn) ->
+    let node = Hashtbl.find nodes in
+    let cfg,rest =
+    Seq.filter_map shingles ~f:(lift lifter) |>
+    Seq.fold ~init:(superset_cfg,[]) ~f:(fun (cfg,insns) (mem,insn) ->
         if is_barrier mem then match insns with
           | [] -> cfg, [mem, insn]
           | insns -> insert_node ((mem,insn) :: insns) cfg, []
         else cfg, (mem,insn) :: insns) in
-  let cfg = match rest with
+    let cfg = match rest with
     | [] -> cfg
     | insns -> insert_node insns cfg in
-  Hashtbl.fold dests ~init:cfg ~f:(fun ~key:addr ~data:dests cfg ->
+    Hashtbl.fold dests ~init:cfg ~f:(fun ~key:addr ~data:dests cfg ->
       match node addr with
       | None -> cfg
       | Some src ->
@@ -146,10 +144,10 @@ let run ?cfg ?brancher shingles arch mem : cfg =
             | Some dst ->
               let e = Cfg.Edge.create src dst kind in
               Cfg.Edge.insert e cfg))
+*)
 
 module Conservative = struct
   open Disasm_expert.Basic
-  type maybe_insn = mem * (asm, kinds) insn option
 
   let run dis mem =
     let rec disasm accu cur_mem =
@@ -171,14 +169,13 @@ module Conservative = struct
   end
 end
 
-let to_memmap insns =
-  List.fold insns ~init:Memmap.empty ~f:(fun shingles -> function
-      | mem,None -> Memmap.add shingles mem None
-      | mem,Some insn -> Memmap.add shingles mem (Some insn))
-
-let disasm ?brancher ?backend arch mem =
+let superset_of ?superset_cfg ?brancher ?backend arch mem =
   Conservative.disasm ?backend arch mem >>| fun insns ->
-  run ?brancher (to_memmap insns) arch mem
+  insert_all ?superset_cfg ?brancher insns mem arch
+
+let disasm ?superset_cfg ?brancher ?backend arch mem =
+  superset_of ?superset_cfg ?brancher ?backend arch mem >>|
+  fun  (bad,superset_cfg) -> sheer superset_cfg arch
 
 module With_exn = struct
   let disasm ?brancher ?backend arch mem =

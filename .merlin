@@ -1,5 +1,7 @@
 PKG bap
 PKG ounit
+PKG bap.plugins
+PKG ocamlgraph
 
 S src/
 S src/shingled/
