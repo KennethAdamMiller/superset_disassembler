@@ -17,7 +17,7 @@ BuildDepends:
 Library shingled
   Path:			src/shingled
   Install:        	true
-  Modules:	  	Common, Shingle, Shingled_disasm
+  Modules:	  	Common, Superset, Shingled
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, cmdliner, threads
 

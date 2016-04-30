@@ -20,23 +20,23 @@ let () =
       let cfg = Memmap.to_sequence (Image.memory img)
                 |> Seq.fold ~init:None ~f:(fun accu (mem,_) ->
                     let superset_cfg = match accu with 
-                      | Some (bad, superset_cfg) ->
+                      | Some (superset_cfg) ->
                         superset_cfg
-                      | None -> Shingled_disasm.G.create () in
-                    Some (Shingled_disasm.superset_of
+                      | None -> Shingled.G.create () in
+                    Some (Shingled.superset_cfg_of
                             ~superset_cfg arch mem |> ok_exn)) |> 
-                function | Some (_, cfg) -> cfg
-                         | None -> Shingled_disasm.G.create ()
+                function | Some (cfg) -> cfg
+                         | None -> Shingled.G.create ()
       in
-      let total_insn_count = Shingled_disasm.G.nb_vertex cfg in
+      let total_insn_count = Shingled.G.nb_vertex cfg in
       print_endline ("Total instructions recovered: "
                      ^ (string_of_int total_insn_count));
-      let sheered = Shingled_disasm.sheer cfg arch in
+      let sheered = Shingled.sheer cfg arch in
       print_endline ("Total sheered: "
                      ^ (string_of_int (total_insn_count
-                                       - (Shingled_disasm.G.nb_vertex
+                                       - (Shingled.G.nb_vertex
                                             sheered))));
       print_endline ("Final insn count: " ^ 
-                     (string_of_int @@ Shingled_disasm.G.nb_vertex
+                     (string_of_int @@ Shingled.G.nb_vertex
                         sheered));
     )
