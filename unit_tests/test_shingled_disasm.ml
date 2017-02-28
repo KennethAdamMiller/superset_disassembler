@@ -4,6 +4,7 @@ open Bap.Std
 open Or_error
 open Common
 open Bap_plugins.Std
+open Insn_cfg
 module Cfg = Graphs.Cfg
 
 let () = Pervasives.ignore(Plugins.load ())
@@ -26,7 +27,7 @@ let check_results sizes expected_results =
           expected_size)  
 
 let shingles_to_length_list shingles = 
-  Seq.of_list [Shingled.G.nb_vertex shingles]
+  Seq.of_list [G.nb_vertex shingles]
 
 let superset_to_length_list superset =
   List.map superset ~f:(fun (mem, insn) -> (Memory.length mem))
@@ -50,12 +51,12 @@ let test_sheers test_ctxt =
                      (* the above is a byte sequence no compiler would produce. The
                         sheering algorithm would therefore wipe all
                         clean  *)
-                     let msg = Shingled.G.fold_vertex
+                     let msg = G.fold_vertex
                          (fun vert  accu -> 
                             accu ^ "\n" ^ (Addr.to_string vert))
                          sheered_shingles "" in
                      assert_equal ~msg 0
-                     @@ Shingled.G.nb_vertex sheered_shingles)
+                     @@ G.nb_vertex sheered_shingles)
 
 let test_retain_valid_jump test_ctxt = ()
 
@@ -63,16 +64,12 @@ let test_sheers_invalid_jump test_ctxt =
   let memory, arch = make_params "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
   let sheered_shingles = Shingled.disasm arch memory |> ok_exn in
   let expected_results = [ ] in
-  assert_equal ~msg:"lengths unequal" (Shingled.G.nb_vertex sheered_shingles)
+  assert_equal ~msg:"lengths unequal" (G.nb_vertex sheered_shingles)
     (List.length expected_results)
 
 
 (* TODO tests *)
 let test_retain_valid_loop test_ctxt = ()
-
-let test_drop_reinterpretive test_ctxt = ()
-
-let test_drop_conditional_jump test_ctxt = ()
 
 let test_retain_cross_segment_references = ()
 

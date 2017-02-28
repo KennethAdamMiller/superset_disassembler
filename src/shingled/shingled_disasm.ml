@@ -3,17 +3,16 @@ open Bap.Std
 open Bap_plugins.Std
 open Or_error
 open Format
-open Cmdoptions
 open Metrics
-open Metrics.Opts
+open Cmdoptions
 
 let () = Pervasives.ignore(Plugins.load ())
 
-type sheathed_disasm = 
-  | Tree_set
-  | Sheered_tree_set 
+type shingled_disasm = | Sheered_disasm
+                       | Superset_disasm
+[@@deriving sexp]
 
-module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
+module Program(Conf : Provider with type kind = shingled_disasm)  = struct
   open Conf
 
   let main () =
@@ -21,21 +20,19 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
-    let sheathed = match options.disasm_method with
-      | Tree_set -> Sheathed.sheaths_of_file ~backend
-      | Sheered_tree_set -> Sheathed.sheered_sheaths_of_file ~backend
+    let shingled = match options.disasm_method with
+      | Superset_disasm -> Shingled.shingled_cfg_of_file ~backend
+      | Sheered_disasm ->  Shingled.sheered_cfg_of_file ~backend
     in
-    let collect = 
-      match options.stats with
-      | Some symbol_file -> 
-        fun accu backend f -> let cfgs = sheathed f in
-          List.fold_left cfgs ~init:accu ~f:(fun accu cfg ->
-              gather_metrics f accu cfg)
+    let collect = match options.stats with
+      | Some symbol_file -> fun accu backend f
+        -> (let (arch, cfg) = shingled f in
+            gather_metrics f accu cfg)
       | None -> fun accu backend f -> accu in
     match options.input_kind with
     | Binary f -> 
-      let metrics = collect None backend f in
-      format metrics |> print_endline
+      print_endline @@ format @@ 
+      collect None backend f
     | Corpora_folder corpdir -> 
       print_endline @@ format @@ 
       Common.process_corpora ~corpdir ~backend collect
@@ -46,16 +43,36 @@ module Cmdline = struct
   open Cmdliner
 
   let list_disasm_methods = [
-    "tree_set", Tree_set;
-    "sheered_tree_set" , Sheered_tree_set;
+    "superset", Superset_disasm;
+    "sheered" , Sheered_disasm;
   ]
   let list_disasm_methods_doc = sprintf
       "Select of the the following disassembly methods: %s" @@ 
     Arg.doc_alts_enum list_disasm_methods
   let disasm_method = 
     Arg.(required & opt (some (enum list_disasm_methods))
-           (Some Sheered_tree_set) 
+           (Some Sheered_disasm) 
          & info ["method"] ~doc:list_disasm_methods_doc)
+
+  (* content: all metrics, summarized metrics *)
+  let list_content_doc = sprintf
+      "Metrics may be collected against a symbol file"
+  let content_type = 
+    Arg.(value &
+         opt (some string) (None)
+         & info ["metrics_data"] ~doc:list_content_doc)
+
+  (* format:  to standard out, serialized or for latex?;*)
+  let list_formats_types = [
+    "standard", Standard;
+    "latex", Latex;
+  ]
+  let list_formats_doc = sprintf
+      "Available output metrics formats: %s" @@ 
+    Arg.doc_alts_enum list_formats_types
+  let metrics_format = 
+    Arg.(value & opt (enum list_formats_types) Standard
+         & info ["metrics_format"] ~doc:list_formats_doc)
 
   let create disassembler input_kind disasm_method stats metrics_format = 
     Fields.create ~disassembler ~input_kind ~disasm_method ~stats ~metrics_format
@@ -72,9 +89,8 @@ module Cmdline = struct
         Arg.doc_alts_enum backends in
       Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
 
-  (* TODO can probably move this into provider *)
   let program () =
-    let doc = "Extended sheath sheering superset disassembler" in
+    let doc = "Extended shingled sheering superset disassembler" in
     let man = [
       `S "SYNOPSIS";
       `Pre "
@@ -83,8 +99,8 @@ module Cmdline = struct
       `P
         "Given a binary, or a corpora folder location, will
     disassemble using the extended sheering techniques according to
-    what is sepecified before formatting as requested and finally
-    releasing that information to the specified location.";
+    what is sepecified to construct the output that is desired and
+    release that information to the specified location.";
       `S "OPTIONS";
     ](* TODO test and curate the following for version, help and other opations
         @ Bap_cmdline_terms.common_loader_options *) 
@@ -92,7 +108,13 @@ module Cmdline = struct
     Term.(const create 
           $(disassembler ()) $input_kind $disasm_method $content_type
           $metrics_format),
-    Term.info "sheathed_disasm" ~doc ~man ~version:Config.version
+    Term.info "shingled_disasm" ~doc ~man ~version:Config.version
+
+
+  let print_data_formats t = 
+    match t with
+    | Standard -> printf "Standard: print metrics output to stdout"
+    | Latex -> printf "Latex: metrics output to a latex parsable data file"
 
   let parse argv =
     match Term.eval ~argv (program ()) ~catch:false with
@@ -106,8 +128,8 @@ let exitf n =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
 
 let start options = 
-  let module Program = Program(struct
-      type kind = sheathed_disasm
+  let module Program = Program(struct 
+      type kind = shingled_disasm
       let options = options
     end) in
   return @@ Program.main ()

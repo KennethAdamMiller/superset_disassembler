@@ -1,1 +1,5 @@
 _build/**
+/*.native
+/setup.log
+/setup.ml
+/setup.data
