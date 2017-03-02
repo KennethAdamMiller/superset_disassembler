@@ -34,12 +34,20 @@ Executable shingled_disasm
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads
 
-Executable test_disasm
+Executable test_shingled
   Path:			unit_tests
   MainIs:		test_shingled_disasm.ml
   Install:		false
   BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, shingled, bap.plugins, ocamlgraph
   CompiledObject:	best
+
+Executable test_sheathed
+  Path:			unit_tests
+  MainIs:		test_sheathed_disasm.ml
+  Install:		false
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, shingled, bap.plugins, ocamlgraph
+  CompiledObject:	best
+
 
 Library sheathed
   Path:			src/sheathed

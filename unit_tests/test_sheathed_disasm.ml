@@ -9,7 +9,7 @@ module Cfg = Graphs.Cfg
 
 let () = Pervasives.ignore(Plugins.load ())
 
-let arch = Arch.of_string "x86_64";;
+let arch = Option.value ~default:`x86 @@ Arch.of_string "x86_64";;
 
 let construct_loop insn_map insn_cfg start finish = 
   if Addr.(finish > start) then (
@@ -17,10 +17,12 @@ let construct_loop insn_map insn_cfg start finish =
        condition back up to the loop body entry, here all the edges are
        reversed in the spirit of the disassembled insn_cfg. *)
     Insn_cfg.G.add_edge insn_cfg start finish;
-    let rec construct_loop_body insn_cfg start finish = 
-      if Addr.(start != finish) then
-        let dist = Addr.max Addr.((finish - start)/2) 1 in
-        let step = Addr.(start ++ dist) in
+    let rec construct_loop_body insn_map start finish = 
+      if not (Addr.equal start finish) then
+        let one  = (Addr.of_int 1 ~width:(Addr.size_in_bytes finish)) in
+        let two  = (Addr.of_int 2 ~width:(Addr.size_in_bytes finish)) in
+        let dist = Addr.max Addr.((finish - start)/two) one in
+        let step = Addr.(start + dist) in
         (* Add edge from some intermediate point between the start and
            the finish going from the calculated step toward the parameter
            start, decreasing the distance between the outermost start
@@ -30,11 +32,11 @@ let construct_loop insn_map insn_cfg start finish =
         Insn_cfg.G.add_edge insn_cfg step start;
         (* Because the algorithm at this point relies on the graph
            and map entirely, it doesn't matter the contents of the memory. *)
-        let junk_data = String.create dist in
-        let insn_map = Addr.Map.add insn_map step
-          @@ create_memory arch step junk_data in
-        construct_loop_body insn_map insn_cfg step finish in
-    construct_loop_body insn_cfg start finish
+        let junk_data = String.create @@ (Addr.to_int dist |> ok_exn) in
+        let insn_map = Addr.Map.add insn_map ~key:step
+            ~data:(create_memory arch step junk_data |> ok_exn) in
+        construct_loop_body insn_map step finish in
+    construct_loop_body insn_map start finish
   )
 
 let construct_branch insn_cfg branch_at left right = 
@@ -47,7 +49,11 @@ let construct_tail_conflict tail_addr conflict_count =  ()
 
 let construct_overlay_conflict = ()
 
-let test_idom_relationship test_ctxt = ()
+let test_conflicts_of_entries test_ctxt = ()
+
+let test_decision_tree_of_entries test_ctxt = ()
+
+let test_tails_of_conflicts test_ctxt = ()
 
 let test_tail_construction test_ctxt = ()
 
@@ -71,7 +77,6 @@ let () =
   let suite = 
     "suite">:::
     [
-      "test_idom_relationship">:: test_idom_relationship;
       "test_tail_construction">:: test_tail_construction;
       "test_many_tail_competitors">:: test_many_tail_competitors;
       "test_extenuating_tail_competitors">::test_extenuating_tail_competitors;
