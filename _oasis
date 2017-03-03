@@ -27,6 +27,14 @@ Library shingled
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, cmdliner, threads, common
 
+
+Library sheathed
+  Path:			src/sheathed
+  Install:        	true
+  Modules:	  	Sheath, Sheathed, Sheath_tree_set
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, threads, shingled
+
 Executable shingled_disasm
   Path:			src/shingled
   Install:        	true
@@ -45,16 +53,8 @@ Executable test_sheathed
   Path:			unit_tests
   MainIs:		test_sheathed_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, shingled, bap.plugins, ocamlgraph
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, sheathed, bap.plugins, ocamlgraph
   CompiledObject:	best
-
-
-Library sheathed
-  Path:			src/sheathed
-  Install:        	true
-  Modules:	  	Sheath, Sheathed, Sheath_tree_set
-  CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, threads, shingled
 
 Executable sheathed_disasm
   Path:			src/sheathed

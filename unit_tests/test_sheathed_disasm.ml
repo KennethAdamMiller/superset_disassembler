@@ -11,6 +11,13 @@ let () = Pervasives.ignore(Plugins.load ())
 
 let arch = Option.value ~default:`x86 @@ Arch.of_string "x86_64";;
 
+let width = 8*(Arch.size_in_bytes arch);;
+
+let init () = 
+  let insn_cfg = Insn_cfg.G.create () in
+  let insn_map = Addr.Map.empty in
+  insn_map, insn_cfg
+
 let construct_loop insn_map insn_cfg start finish = 
   if Addr.(finish > start) then (
     (* Where we would otherwise connect the nodes from the tail
@@ -43,13 +50,45 @@ let construct_branch insn_cfg branch_at left right =
   Insn_cfg.G.add_edge insn_cfg left branch_at;
   Insn_cfg.G.add_edge insn_cfg right branch_at
 
-let construct_entry_conflict insn_map insn_cfg = ()
+let construct_entry_conflict insn_map insn_cfg at conflict_len = 
+  let junk_data = String.create conflict_len in
+  let conflict = Addr.(at ++ conflict_len) in
+  Insn_cfg.G.add_edge insn_cfg at conflict;
+  Insn_cfg.G.add_edge insn_cfg Addr.(at ++ 1) Addr.(conflict ++ 1);
+  let insn_map = Addr.Map.add insn_map ~key:conflict 
+      ~data:(create_memory arch conflict junk_data |> ok_exn, ()) in
+  let insn_map = Addr.Map.add insn_map ~key:Addr.(conflict ++ 1) 
+      ~data:(create_memory arch Addr.(conflict ++ 1) junk_data
+             |> ok_exn, ()) in
+  insn_map, insn_cfg
 
-let construct_tail_conflict tail_addr conflict_count =  ()
+let rec construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
+  if conflict_count > 0 then
+    let junk_data = String.create conflict_count in
+    let conflict_addr = Addr.(tail_addr ++ conflict_count) in
+    Insn_cfg.G.add_edge insn_cfg tail_addr conflict_addr;
+    let insn_map = Addr.Map.add insn_map ~key:conflict_addr 
+        ~data:(create_memory arch conflict_addr junk_data |> ok_exn, ()) in
+    construct_tail_conflict 
+      insn_map insn_cfg tail_addr (conflict_count - 1)
+  else 
+    insn_map, insn_cfg
 
-let construct_overlay_conflict = ()
 
-let test_conflicts_of_entries test_ctxt = ()
+let test_construct_entry_conflict test_ctxt = 
+  let insn_map, insn_cfg = init () in
+  let entry = Addr.(of_int ~width 1) in
+  let insn_map, insn_cfg =
+    construct_entry_conflict insn_map insn_cfg 
+      entry 10 in
+  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+  let conflicts = Sheath_tree_set.conflicts_of_entries
+      entries insn_map in
+  List.iter conflicts ~f:(fun conflict ->
+      assert_equal ~msg:"expected 2 conflicts" 
+        (Hash_set.length conflict) 2)
+
+let test_conflicts_of_entries test_ctxt =  ()
 
 let test_decision_tree_of_entries test_ctxt = ()
 
@@ -77,12 +116,21 @@ let () =
   let suite = 
     "suite">:::
     [
+      "test_construct_entry_conflict"
+      >:: test_construct_entry_conflict;
+      "test_conflicts_of_entries" >:: test_conflicts_of_entries;
+      "test_decision_tree_of_entries"
+      >:: test_decision_tree_of_entries;
+      "test_tails_of_conflicts" >:: test_tails_of_conflicts;
       "test_tail_construction">:: test_tail_construction;
       "test_many_tail_competitors">:: test_many_tail_competitors;
       "test_extenuating_tail_competitors">::test_extenuating_tail_competitors;
       "test_overlay_construction">:: test_overlay_construction;
-      "test_conflicted_entry_decisions" >:: test_conflicted_entry_decisions;
-      "test_decision_construction_combinatorics">:: test_decision_construction_combinatorics;
+      "test_decision_construction_combinatorics"
+      >:: test_decision_construction_combinatorics;
+      "test_conflicted_entry_decisions"
+      >:: test_conflicted_entry_decisions;
+      "test_decision_sets_of_discrete_components" >:: test_decision_sets_of_discrete_components;      
     ] in
   run_test_tt_main suite
 ;;
