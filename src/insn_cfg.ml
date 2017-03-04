@@ -63,4 +63,4 @@ let find_all_conflicts insn_map insn_cfg =
         (* Not supposed to be a vert that isn't *)
         (* in the map *)
         assert false 
-    ) insn_cfg @@ Addr.Hash_set.create ()
+    ) insn_cfg (Addr.Hash_set.create ())

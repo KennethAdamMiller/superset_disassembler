@@ -57,22 +57,32 @@ let construct_entry_conflict insn_map insn_cfg at conflict_len =
   Insn_cfg.G.add_edge insn_cfg Addr.(at ++ 1) Addr.(conflict ++ 1);
   let insn_map = Addr.Map.add insn_map ~key:at 
       ~data:(create_memory arch at junk_data |> ok_exn, ()) in
+  let insn_map = Addr.Map.add insn_map ~key:conflict
+      ~data:(create_memory arch conflict junk_data |> ok_exn, ()) in
+  let insn_map = Addr.Map.add insn_map ~key:Addr.(conflict ++1)
+      ~data:(create_memory arch Addr.(conflict ++1) junk_data |> ok_exn, ()) in
   let insn_map = Addr.Map.add insn_map ~key:Addr.(at ++ 1) 
       ~data:(create_memory arch Addr.(at ++ 1) junk_data
              |> ok_exn, ()) in
   insn_map, insn_cfg
 
-let rec construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
-  if conflict_count > 0 then
-    let junk_data = String.create conflict_count in
-    let conflict_addr = Addr.(tail_addr ++ conflict_count) in
-    Insn_cfg.G.add_edge insn_cfg tail_addr conflict_addr;
-    let insn_map = Addr.Map.add insn_map ~key:conflict_addr 
-        ~data:(create_memory arch conflict_addr junk_data |> ok_exn, ()) in
-    construct_tail_conflict 
-      insn_map insn_cfg tail_addr (conflict_count - 1)
-  else 
-    insn_map, insn_cfg
+let construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
+  let tail_data = String.create 1 in
+  let insn_map = Addr.Map.add insn_map ~key:tail_addr
+      ~data:(create_memory arch tail_addr tail_data |> ok_exn, ()) in
+  let rec make_tail_options insn_map insn_cfg tail_addr conflict_count =
+    if conflict_count > 0 then
+      let junk_data = String.create conflict_count in
+      let conflict_addr = Addr.(tail_addr ++ conflict_count) in
+      Insn_cfg.G.add_edge insn_cfg tail_addr conflict_addr;
+      let insn_map = Addr.Map.add insn_map ~key:conflict_addr 
+          ~data:(create_memory arch conflict_addr junk_data |> ok_exn, (
+            )) in
+      make_tail_options
+        insn_map insn_cfg tail_addr (conflict_count - 1)
+    else 
+      insn_map, insn_cfg
+  in make_tail_options insn_map insn_cfg tail_addr conflict_count
 
 (* TODO write this to run in a loop, over different conflict lengths *)
 (* and at different addresses *)
@@ -86,31 +96,67 @@ let test_construct_entry_conflict test_ctxt =
   let conflicts = Sheath_tree_set.conflicts_of_entries
       entries insn_map in
   match conflicts with
-  | conflict_set :: [] -> 
+  | conflict_set :: nil -> 
     assert_equal true (Hash_set.mem conflict_set entry);
     assert_equal true (Hash_set.mem conflict_set @@ Addr.succ entry);
-  | _ -> assert_equal true false ~msg:"Should single conflict set";
+  | _ -> assert_equal true false ~msg:"Should have single conflict set";
     List.iter conflicts ~f:(fun conflict ->
         assert_equal ~msg:"expected 2 conflicts" 
           (Hash_set.length conflict) 2)
 
-let test_tail_construction test_ctxt = ()
+let test_tails_of_conflicts test_ctxt =
+  let entry = Addr.(of_int ~width 1) in
+  let tail = Addr.(of_int ~width 30) in
+  let insn_map, insn_cfg = init () in
+  let insn_map, insn_cfg =
+    construct_entry_conflict insn_map insn_cfg 
+      entry 10 in
+  let insn_map, insn_cfg = 
+    construct_tail_conflict insn_map insn_cfg tail 4 in
+  let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
+  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+  let tails = Sheath_tree_set.tails_of_conflicts
+      conflicts insn_cfg entries in
+  assert_equal true (Addr.Map.length tails = 1)
+    ~msg:"There should be exactly one tail" 
 
-let test_many_tail_competitors test_ctxt = ()
+let test_tail_construction test_ctxt = ()
 
 let test_extenuating_tail_competitors test_ctxt = ()
 
+let test_many_tail_competitors test_ctxt = ()
+
+(* TODO construct an entry conflict and ensure 
+   that the two are reachable from addr 0.  *)
+let test_decision_tree_of_entries test_ctxt =
+  let insn_map, insn_cfg = init () in
+  let entry = Addr.(of_int ~width 1) in
+  let insn_map, insn_cfg =
+    construct_entry_conflict insn_map insn_cfg 
+      entry 10 in
+  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+  let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
+  let tails = Sheath_tree_set.tails_of_conflicts
+      conflicts insn_cfg entries in
+  let conflicted_entries = Sheath_tree_set.conflicts_of_entries
+      entries insn_map in
+  let decision_trees = Sheath_tree_set.decision_tree_of_entries
+      conflicted_entries tails insn_cfg in
+  assert_equal true @@ (not ((List.length decision_trees) = 0))
+
+(* This test is intended to be only slightly different from the entry *)
+(* conflict test, differing by the fact that it will occur inline of *)
+(* the insn_cfg. *)
 let test_overlay_construction test_ctxt = ()
 
 let test_decision_construction_combinatorics test_ctxt = ()
 
 let test_conflicted_entry_decisions test_ctxt = ()
 
+(* Add two completely discrete cfg to the graph, and assert that two *)
+(* decision sets, which are identical in structure are found by the *)
+(* decision tree construction algorithm. *)
 let test_decision_sets_of_discrete_components test_ctxt = ()
-
-(* need to test decisions of shingles with composable edge cases *)
-(* to do this, need some functions that construct sub pieces of the *)
-(* graph with respect to edge cases *)
 
 let () =
   let suite = 
@@ -118,7 +164,6 @@ let () =
     [
       "test_construct_entry_conflict"
       >:: test_construct_entry_conflict;
-      "test_conflicts_of_entries" >:: test_conflicts_of_entries;
       "test_decision_tree_of_entries"
       >:: test_decision_tree_of_entries;
       "test_tails_of_conflicts" >:: test_tails_of_conflicts;
