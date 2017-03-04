@@ -39,20 +39,25 @@ let conflicts_of_entries entries insn_map =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
     (fun conflicted_entries entry -> 
-       if not (Hash_set.mem visited_entries entry) then 
+       if not (Hash_set.mem visited_entries entry) then (
          let in_entry_conflicts = 
            Insn_cfg.conflicts_within_insn insn_map entry in
-         let conflicts = Addr.Hash_set.create () in
-         Hash_set.iter in_entry_conflicts 
-           ~f:(fun conflict ->
-               (* A conflict that an entry may have may or may not *)
-               (* itself be an entry. *)
-               if Hash_set.mem entries conflict then (
-                 Hash_set.add conflicts conflict;
-               )
-             );
-         conflicts :: conflicted_entries
-       else conflicted_entries
+         if (Hash_set.length in_entry_conflicts) > 0 then (
+           Hash_set.add visited_entries entry; 
+           let conflicts = Addr.Hash_set.create () in
+           Hash_set.iter in_entry_conflicts 
+             ~f:(fun conflict ->
+                 (* A conflict that an entry may have may or may not *)
+                 (* itself be an entry. *)
+                 Hash_set.add visited_entries entry;
+                 if Hash_set.mem entries conflict then (
+                   Hash_set.add conflicts conflict;
+                 )
+               );
+           Hash_set.add conflicts entry;
+           conflicts :: conflicted_entries
+         ) else conflicted_entries
+       ) else conflicted_entries
     ) 
 
 

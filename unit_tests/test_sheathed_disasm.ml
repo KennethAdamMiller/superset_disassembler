@@ -55,10 +55,10 @@ let construct_entry_conflict insn_map insn_cfg at conflict_len =
   let conflict = Addr.(at ++ conflict_len) in
   Insn_cfg.G.add_edge insn_cfg at conflict;
   Insn_cfg.G.add_edge insn_cfg Addr.(at ++ 1) Addr.(conflict ++ 1);
-  let insn_map = Addr.Map.add insn_map ~key:conflict 
-      ~data:(create_memory arch conflict junk_data |> ok_exn, ()) in
-  let insn_map = Addr.Map.add insn_map ~key:Addr.(conflict ++ 1) 
-      ~data:(create_memory arch Addr.(conflict ++ 1) junk_data
+  let insn_map = Addr.Map.add insn_map ~key:at 
+      ~data:(create_memory arch at junk_data |> ok_exn, ()) in
+  let insn_map = Addr.Map.add insn_map ~key:Addr.(at ++ 1) 
+      ~data:(create_memory arch Addr.(at ++ 1) junk_data
              |> ok_exn, ()) in
   insn_map, insn_cfg
 
@@ -74,7 +74,8 @@ let rec construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
   else 
     insn_map, insn_cfg
 
-
+(* TODO write this to run in a loop, over different conflict lengths *)
+(* and at different addresses *)
 let test_construct_entry_conflict test_ctxt = 
   let insn_map, insn_cfg = init () in
   let entry = Addr.(of_int ~width 1) in
@@ -84,15 +85,14 @@ let test_construct_entry_conflict test_ctxt =
   let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
   let conflicts = Sheath_tree_set.conflicts_of_entries
       entries insn_map in
-  List.iter conflicts ~f:(fun conflict ->
-      assert_equal ~msg:"expected 2 conflicts" 
-        (Hash_set.length conflict) 2)
-
-let test_conflicts_of_entries test_ctxt =  ()
-
-let test_decision_tree_of_entries test_ctxt = ()
-
-let test_tails_of_conflicts test_ctxt = ()
+  match conflicts with
+  | conflict_set :: [] -> 
+    assert_equal true (Hash_set.mem conflict_set entry);
+    assert_equal true (Hash_set.mem conflict_set @@ Addr.succ entry);
+  | _ -> assert_equal true false ~msg:"Should single conflict set";
+    List.iter conflicts ~f:(fun conflict ->
+        assert_equal ~msg:"expected 2 conflicts" 
+          (Hash_set.length conflict) 2)
 
 let test_tail_construction test_ctxt = ()
 
