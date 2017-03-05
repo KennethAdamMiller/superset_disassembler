@@ -62,15 +62,14 @@ let construct_entry_conflict insn_map insn_cfg at conflict_len =
   let insn_map = Addr.Map.add insn_map ~key:Addr.(conflict ++1)
       ~data:(create_memory arch Addr.(conflict ++1) junk_data |> ok_exn, ()) in
   let insn_map = Addr.Map.add insn_map ~key:Addr.(at ++ 1) 
-      ~data:(create_memory arch Addr.(at ++ 1) junk_data
-             |> ok_exn, ()) in
+      ~data:(create_memory arch Addr.(at ++ 1) junk_data |> ok_exn, ()) in
   insn_map, insn_cfg
 
 let construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
   let tail_data = String.create 1 in
   let insn_map = Addr.Map.add insn_map ~key:tail_addr
       ~data:(create_memory arch tail_addr tail_data |> ok_exn, ()) in
-  let rec make_tail_options insn_map insn_cfg tail_addr conflict_count =
+  let rec make_tail_options insn_map conflict_count =
     if conflict_count > 0 then
       let junk_data = String.create conflict_count in
       let conflict_addr = Addr.(tail_addr ++ conflict_count) in
@@ -79,31 +78,68 @@ let construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
           ~data:(create_memory arch conflict_addr junk_data |> ok_exn, (
             )) in
       make_tail_options
-        insn_map insn_cfg tail_addr (conflict_count - 1)
+        insn_map (conflict_count - 1)
     else 
       insn_map, insn_cfg
-  in make_tail_options insn_map insn_cfg tail_addr conflict_count
+  in make_tail_options insn_map conflict_count
 
-(* TODO write this to run in a loop, over different conflict lengths *)
-(* and at different addresses *)
 let test_construct_entry_conflict test_ctxt = 
-  let insn_map, insn_cfg = init () in
+  let rec test_entry_conflict_of_len entry conflict_len = 
+    if conflict_len < 2 then
+      () 
+    else
+      let insn_map, insn_cfg = init () in
+      let insn_map, insn_cfg =
+        construct_entry_conflict insn_map insn_cfg 
+          entry conflict_len in
+      let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+      let conflicts = Sheath_tree_set.conflicts_of_entries
+          entries insn_map in
+      (match conflicts with
+       | conflict_set :: nil -> 
+         assert_equal true (Hash_set.mem conflict_set entry)
+           ~msg:(List.to_string ~f:Addr.to_string @@ Hash_set.to_list conflict_set);
+         assert_equal true (Hash_set.mem conflict_set @@ Addr.succ entry);
+       | _ -> assert_equal true false ~msg:"Should have single conflict set";
+         List.iter conflicts ~f:(fun conflict ->
+             assert_equal ~msg:"expected 2 conflicts" 
+               (Hash_set.length conflict) 2));
+      test_entry_conflict_of_len (Addr.succ entry) (conflict_len-1) in
+  let conflict_len = 10 in
   let entry = Addr.(of_int ~width 1) in
-  let insn_map, insn_cfg =
-    construct_entry_conflict insn_map insn_cfg 
-      entry 10 in
-  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
-  let conflicts = Sheath_tree_set.conflicts_of_entries
-      entries insn_map in
-  match conflicts with
-  | conflict_set :: nil -> 
-    assert_equal true (Hash_set.mem conflict_set entry);
-    assert_equal true (Hash_set.mem conflict_set @@ Addr.succ entry);
-  | _ -> assert_equal true false ~msg:"Should have single conflict set";
-    List.iter conflicts ~f:(fun conflict ->
-        assert_equal ~msg:"expected 2 conflicts" 
-          (Hash_set.length conflict) 2)
+  test_entry_conflict_of_len entry conflict_len
 
+(* TODO this should assert that all items in insn_map are in insn_cfg *)
+(* and vice versa after tail construction. *)
+let test_tail_construction test_ctxt =
+  let rec test_tail_construction_with entry tail conflict_len =
+    if conflict_len <= 1 then
+      ()
+    else
+      let insn_map, insn_cfg = init () in
+      let insn_map, insn_cfg = 
+        construct_tail_conflict insn_map insn_cfg tail conflict_len in
+      let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+      let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
+      let tails = Sheath_tree_set.tails_of_conflicts
+          conflicts insn_cfg entries in
+      let num_tails = Addr.Map.length tails in
+      let msg = "There should be exactly one tail; there was "
+                ^ string_of_int num_tails ^ ", tail at: "
+                ^ (Addr.to_string tail) ^ " conflict len="
+                ^ (string_of_int conflict_len) in
+      assert_equal true (num_tails = 1)
+        ~msg;
+      test_tail_construction_with 
+        entry Addr.(succ tail) (conflict_len-1) in
+  let entry = Addr.(of_int ~width 1) in
+  let tail = Addr.(of_int ~width 30) in
+  let conflict_len = 10 in
+  test_tail_construction_with entry tail conflict_len
+
+
+(* This tests that the tail(s) recognized is differentiable from other *)
+(* noise conflicts*)
 let test_tails_of_conflicts test_ctxt =
   let entry = Addr.(of_int ~width 1) in
   let tail = Addr.(of_int ~width 30) in
@@ -120,11 +156,10 @@ let test_tails_of_conflicts test_ctxt =
   assert_equal true (Addr.Map.length tails = 1)
     ~msg:"There should be exactly one tail" 
 
-let test_tail_construction test_ctxt = ()
 
+(* TODO This should test that, for each possible number of conflicts, *)
+(* there is always one tail *)
 let test_extenuating_tail_competitors test_ctxt = ()
-
-let test_many_tail_competitors test_ctxt = ()
 
 (* TODO construct an entry conflict and ensure 
    that the two are reachable from addr 0.  *)
@@ -168,7 +203,6 @@ let () =
       >:: test_decision_tree_of_entries;
       "test_tails_of_conflicts" >:: test_tails_of_conflicts;
       "test_tail_construction">:: test_tail_construction;
-      "test_many_tail_competitors">:: test_many_tail_competitors;
       "test_extenuating_tail_competitors">::test_extenuating_tail_competitors;
       "test_overlay_construction">:: test_overlay_construction;
       "test_decision_construction_combinatorics"

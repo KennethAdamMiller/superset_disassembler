@@ -49,8 +49,8 @@ let conflicts_of_entries entries insn_map =
              ~f:(fun conflict ->
                  (* A conflict that an entry may have may or may not *)
                  (* itself be an entry. *)
-                 Hash_set.add visited_entries entry;
                  if Hash_set.mem entries conflict then (
+                   Hash_set.add visited_entries conflict;
                    Hash_set.add conflicts conflict;
                  )
                );
@@ -59,7 +59,6 @@ let conflicts_of_entries entries insn_map =
          ) else conflicted_entries
        ) else conflicted_entries
     ) 
-
 
 let decision_tree_of_entries conflicted_entries tails insn_cfg =
   let visited_choices = Addr.Hash_set.create () in

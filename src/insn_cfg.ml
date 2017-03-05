@@ -35,7 +35,7 @@ let find_conflicts_with conflicts insn_map addr len =
           Hash_set.add conflicts cur_addr; conflicts
         | None ->  conflicts in 
       within_insn conflicts insn_map Addr.(cur_addr ++ 1) in
-  within_insn conflicts insn_map Addr.(addr++1)
+  within_insn conflicts insn_map addr
 
 let conflicts_within_insn_at conflicts insn_map addr f = 
   match Map.find insn_map addr with
