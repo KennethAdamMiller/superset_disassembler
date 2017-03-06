@@ -129,7 +129,7 @@ let decision_tree_of_entries conflicted_entries tails insn_cfg =
             (* TODO need to keep track of egress nodes along the *)
             (* way by storing them in edges *)
             Insn_cfg.Dfs.prefix_component add_choices insn_cfg entry;
-            let width = 8*(Addr.size_in_bytes entry) in
+            let width = Addr.bitwidth entry in
             let saved_vert = ref @@
               Addr.of_int ~width 0 in
             let link_choices current_vert = 

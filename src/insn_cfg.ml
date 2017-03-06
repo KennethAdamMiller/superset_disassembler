@@ -22,7 +22,7 @@ let bad_of_arch arch =
 
 let bad_of_addr addr =
   G.V.create (Addr.of_int
-                ~width:(8*(Addr.size_in_bytes addr)) 0)
+                ~width:(Addr.bitwidth addr) 0)
 
 
 let find_conflicts_with conflicts insn_map addr len =
