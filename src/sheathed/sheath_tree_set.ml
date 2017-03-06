@@ -42,70 +42,23 @@ let conflicts_of_entries entries insn_map =
        if not (Hash_set.mem visited_entries entry) then (
          let in_entry_conflicts = 
            Insn_cfg.conflicts_within_insn insn_map entry in
-         if (Hash_set.length in_entry_conflicts) > 0 then (
-           Hash_set.add visited_entries entry; 
-           let conflicts = Addr.Hash_set.create () in
-           Hash_set.iter in_entry_conflicts 
-             ~f:(fun conflict ->
-                 (* A conflict that an entry may have may or may not *)
-                 (* itself be an entry. *)
-                 if Hash_set.mem entries conflict then (
-                   Hash_set.add visited_entries conflict;
-                   Hash_set.add conflicts conflict;
-                 )
-               );
-           Hash_set.add conflicts entry;
+         let conflicts = Addr.Hash_set.create () in
+         Hash_set.add visited_entries entry;          
+         Hash_set.iter in_entry_conflicts 
+           ~f:(fun conflict ->
+               (* A conflict that an entry may have may or may not *)
+               (* itself be an entry. *)
+               if Hash_set.mem entries conflict then (
+                 Hash_set.add visited_entries conflict;
+                 Hash_set.add conflicts conflict;
+               )
+             );
+         Hash_set.add conflicts entry;
+         if (Hash_set.length conflicts) > 1 then (
            conflicts :: conflicted_entries
          ) else conflicted_entries
        ) else conflicted_entries
     ) 
-
-let decision_tree_of_entries conflicted_entries tails insn_cfg =
-  let visited_choices = Addr.Hash_set.create () in
-  List.map conflicted_entries ~f:(fun entries ->
-      let decision_tree = Insn_cfg.G.create () in
-      Hash_set.iter entries
-        ~f:(fun entry -> 
-            let add_choices = 
-              (fun current_vert -> 
-                 let unvisited =
-                   not (Hash_set.mem visited_choices current_vert) in
-                 if unvisited then
-                   let possible_tail = current_vert in
-                   match Addr.Map.find tails possible_tail with
-                   | Some(sheath) ->
-                     List.iter sheath ~f:(fun competitor ->
-                         Hash_set.add visited_choices competitor;
-                         Insn_cfg.G.add_edge decision_tree possible_tail
-                           competitor;
-                       );
-                   | _ -> ()
-                 else ();
-              ) in
-            (* TODO need to keep track of egress nodes along the *)
-            (* way by storing them in edges *)
-            Insn_cfg.Dfs.prefix_component add_choices insn_cfg entry;
-            let width = 8*(Addr.size_in_bytes entry) in
-            let saved_vert = ref @@
-              Addr.of_int ~width 0 in
-            let link_choices = 
-              (fun current_vert -> 
-                 let contained = Insn_cfg.G.mem_vertex
-                     decision_tree current_vert in
-                 let is_new = not @@ Addr.(current_vert = !saved_vert) in
-                 if contained && is_new then (
-                   if not @@ Insn_cfg.G.mem_edge decision_tree !saved_vert
-                       current_vert then
-                     Insn_cfg.G.add_edge decision_tree !saved_vert
-                       current_vert;
-                   saved_vert := current_vert;
-                 )
-              ) in
-            (* Would like to have fold_component; version not available *)
-            Insn_cfg.Dfs.prefix_component link_choices insn_cfg entry;
-          );
-      decision_tree
-    )
 
 let tails_of_conflicts conflicts insn_cfg entries = Hash_set.fold entries ~init:Addr.Map.empty
     ~f:(fun accu entry -> 
@@ -148,6 +101,54 @@ let tails_of_conflicts conflicts insn_cfg entries = Hash_set.fold entries ~init:
                 | _ -> tails) blocks in
         tails
       ) 
+
+let decision_tree_of_entries conflicted_entries tails insn_cfg =
+  let visited_choices = Addr.Hash_set.create () in
+  List.map conflicted_entries ~f:(fun entries ->
+      let decision_tree = Insn_cfg.G.create () in
+      Hash_set.iter entries
+        ~f:(fun entry ->
+            let width = Addr.bitwidth entry in
+            let zero = Addr.(of_int ~width 0) in
+            Insn_cfg.G.add_edge decision_tree zero entry;
+            let add_choices current_vert = 
+              let unvisited =
+                not (Hash_set.mem visited_choices current_vert) in
+              if unvisited then
+                let possible_tail = current_vert in
+                match Addr.Map.find tails possible_tail with
+                | Some(sheath) ->
+                  List.iter sheath ~f:(fun competitor ->
+                      Hash_set.add visited_choices competitor;
+                      Insn_cfg.G.add_edge decision_tree possible_tail
+                        competitor;
+                    );
+                | _ -> ()
+              else ();
+            in
+            (* TODO need to keep track of egress nodes along the *)
+            (* way by storing them in edges *)
+            Insn_cfg.Dfs.prefix_component add_choices insn_cfg entry;
+            let width = 8*(Addr.size_in_bytes entry) in
+            let saved_vert = ref @@
+              Addr.of_int ~width 0 in
+            let link_choices current_vert = 
+              let contained = Insn_cfg.G.mem_vertex
+                  decision_tree current_vert in
+              let is_new = not @@ Addr.(current_vert = !saved_vert) in
+              if contained && is_new then (
+                if not @@ Insn_cfg.G.mem_edge decision_tree !saved_vert
+                    current_vert then
+                  Insn_cfg.G.add_edge decision_tree !saved_vert
+                    current_vert;
+                saved_vert := current_vert;
+              )
+            in
+            (* Would like to have fold_component; version not available *)
+            Insn_cfg.Dfs.prefix_component link_choices insn_cfg entry;
+          );
+      decision_tree
+    )
 
 (** Accepts a per instruction control flow graph, and a map from addr *)
 (** to (insn, mem) *)

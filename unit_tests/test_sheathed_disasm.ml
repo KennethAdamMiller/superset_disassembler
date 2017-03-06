@@ -26,8 +26,8 @@ let construct_loop insn_map insn_cfg start finish =
     Insn_cfg.G.add_edge insn_cfg start finish;
     let rec construct_loop_body insn_map start finish = 
       if not (Addr.equal start finish) then
-        let one  = (Addr.of_int 1 ~width:(Addr.size_in_bytes finish)) in
-        let two  = (Addr.of_int 2 ~width:(Addr.size_in_bytes finish)) in
+        let one  = (Addr.of_int 1 ~width:(Addr.bitwidth finish)) in
+        let two  = (Addr.of_int 2 ~width:(Addr.bitwidth finish)) in
         let dist = Addr.max Addr.((finish - start)/two) one in
         let step = Addr.(start + dist) in
         (* Add edge from some intermediate point between the start and
@@ -109,8 +109,8 @@ let test_construct_entry_conflict test_ctxt =
   let entry = Addr.(of_int ~width 1) in
   test_entry_conflict_of_len entry conflict_len
 
-(* TODO this should assert that all items in insn_map are in insn_cfg *)
-(* and vice versa after tail construction. *)
+(* This tests variations on the tail location and range of total *)
+(* conflicts for a given tail can still be found by the algorithm *)
 let test_tail_construction test_ctxt =
   let rec test_tail_construction_with entry tail conflict_len =
     if conflict_len <= 1 then
@@ -119,6 +119,12 @@ let test_tail_construction test_ctxt =
       let insn_map, insn_cfg = init () in
       let insn_map, insn_cfg = 
         construct_tail_conflict insn_map insn_cfg tail conflict_len in
+      Map.iteri insn_map ~f:(fun ~key ~data -> 
+          assert_equal true @@ Insn_cfg.G.mem_vertex insn_cfg key;
+        );
+      Insn_cfg.G.iter_vertex (fun vert -> 
+          assert_equal true @@ Map.mem insn_map vert;
+        ) insn_cfg;
       let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
       let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
       let tails = Sheath_tree_set.tails_of_conflicts
@@ -157,14 +163,32 @@ let test_tails_of_conflicts test_ctxt =
     ~msg:"There should be exactly one tail" 
 
 
-(* TODO This should test that, for each possible number of conflicts, *)
-(* there is always one tail *)
-let test_extenuating_tail_competitors test_ctxt = ()
+(* This should test that, for each possible number of conflicts, *)
+(* there is always as many tails as were created *)
+let test_extenuating_tail_competitors test_ctxt =
+  let conflict_len = 4 in
+  let entry = Addr.(of_int ~width 1) in
+  let tail = Addr.(of_int ~width 30) in
+  let insn_map, insn_cfg = init () in
+  let insn_map, insn_cfg = 
+    construct_tail_conflict insn_map insn_cfg tail conflict_len in
+  let extenuation_addr = Addr.(entry ++ conflict_len) in
+  let insn_map, insn_cfg = 
+    construct_tail_conflict 
+      insn_map insn_cfg extenuation_addr conflict_len in  
+  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+  let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
+  let tails = Sheath_tree_set.tails_of_conflicts
+      conflicts insn_cfg entries in
+  assert_equal true @@ Addr.Map.mem tails tail;
+  assert_equal true @@ Addr.Map.mem tails extenuation_addr;
+  assert_equal (Addr.Map.length tails) 2
 
-(* TODO construct an entry conflict and ensure 
+(* construct an entry conflict and ensure 
    that the two are reachable from addr 0.  *)
 let test_decision_tree_of_entries test_ctxt =
   let insn_map, insn_cfg = init () in
+  let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
   let insn_map, insn_cfg =
     construct_entry_conflict insn_map insn_cfg 
@@ -177,16 +201,28 @@ let test_decision_tree_of_entries test_ctxt =
       entries insn_map in
   let decision_trees = Sheath_tree_set.decision_tree_of_entries
       conflicted_entries tails insn_cfg in
-  assert_equal true @@ (not ((List.length decision_trees) = 0))
+  let expect_entry_msg = "Expect entry in decision_tree" in
+  let expect_zero_msg = "Expect zero node in decision tree" in
+  let non_empty_tree_msg = "Expect decision tree to be non empty" in
+  assert_equal true @@ (not ((List.length decision_trees) = 0));
+  List.iter decision_trees ~f:(fun decision_tree ->
+      assert_equal ~msg:non_empty_tree_msg 
+        true @@ not ((Insn_cfg.G.nb_vertex insn_cfg)=0);
+      assert_equal ~msg:expect_entry_msg 
+        true @@ (Insn_cfg.G.mem_vertex decision_tree entry);
+      assert_equal ~msg:expect_zero_msg 
+        true @@ (Insn_cfg.G.mem_vertex decision_tree zero);
+    )
 
 (* This test is intended to be only slightly different from the entry *)
 (* conflict test, differing by the fact that it will occur inline of *)
 (* the insn_cfg. *)
 let test_overlay_construction test_ctxt = ()
 
-let test_decision_construction_combinatorics test_ctxt = ()
+let test_sheer_scc test_ctxt = ()
 
-let test_conflicted_entry_decisions test_ctxt = ()
+
+let test_decision_construction_combinatorics test_ctxt = ()
 
 (* Add two completely discrete cfg to the graph, and assert that two *)
 (* decision sets, which are identical in structure are found by the *)
@@ -207,9 +243,9 @@ let () =
       "test_overlay_construction">:: test_overlay_construction;
       "test_decision_construction_combinatorics"
       >:: test_decision_construction_combinatorics;
-      "test_conflicted_entry_decisions"
-      >:: test_conflicted_entry_decisions;
-      "test_decision_sets_of_discrete_components" >:: test_decision_sets_of_discrete_components;      
+      "test_decision_sets_of_discrete_components"
+      >:: test_decision_sets_of_discrete_components;      
+      "test_sheer_scc" >:: test_sheer_scc;
     ] in
   run_test_tt_main suite
 ;;
