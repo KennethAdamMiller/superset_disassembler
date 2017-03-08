@@ -6,19 +6,43 @@ open Graphlib.Std
 open Graph
 
 
+let filter_components components = 
+  List.fold_left components ~init:[] ~f:(fun filtered component ->
+      match component with
+      | _ :: [] | [] -> filtered
+      | _ :: _ -> component :: filtered
+    )
+
 let sheer cfg insn_map = 
-  let keep = StrongComponents.scc_list cfg in
-  let to_remove = List.fold ~init:(Addr.Hash_set.create ()) keep ~f:(fun accu component -> 
-      List.fold ~init:accu component ~f:(fun to_remove vert -> 
-          conflicts_within_insn_at to_remove insn_map vert find_conflicts_with
-        )) in
-  let (insn_map, _) = Hash_set.fold ~init:(insn_map, None) to_remove
-      ~f:(fun (insn_map, bad) vert -> 
+  let keep = filter_components @@ StrongComponents.scc_list cfg in
+  let to_remove = Addr.Hash_set.create () in
+  List.iter keep ~f:(fun component -> 
+      List.iter component ~f:(fun vert -> 
+          let _ = conflicts_within_insn_at
+              to_remove insn_map vert find_conflicts_with
+          in ()
+        ));
+  List.iter keep ~f:(fun component -> 
+      List.iter component ~f:(fun vert -> 
+          Hash_set.remove to_remove vert
+        ));
+  let bad = Hash_set.fold ~init:None to_remove
+      ~f:(fun bad vert -> 
           let bad = Option.value bad ~default:(bad_of_addr vert) in
           G.add_edge cfg bad vert;
-          (Map.remove insn_map vert, Some (bad))
+          Some(bad)
         ) in
-  insn_map
+  match bad with
+  | Some(bad) ->
+    Insn_cfg.Dfs.prefix_component (fun addr -> Hash_set.add to_remove addr)
+      cfg bad;
+    let insn_map = Hash_set.fold ~init:insn_map to_remove
+        ~f:(fun insn_map addr -> 
+            Insn_cfg.G.remove_vertex cfg addr;
+            Addr.Map.remove insn_map addr) in
+    insn_map, cfg
+  | None -> 
+    insn_map, cfg
 
 let disasm_file ?(backend="llvm") bin = 
   let img = img_of_filename bin in
@@ -48,7 +72,7 @@ let sheaths_of_file ?(backend="llvm") bin =
 let sheered_sheaths_of_file ?(backend="llvm") bin =
   let superset, insn_map, arch = disasm_file ~backend bin in
   let sheered = Shingled.sheer superset arch in
-  let insn_map = sheer sheered insn_map in
+  let insn_map, insn_cfg = sheer sheered insn_map in
   Sheath_tree_set.decision_trees_of_shingles sheered insn_map
 
 let fold_decision_set ?(backend="llvm") bin ~f = ()

@@ -10,6 +10,7 @@ module G = Imperative.Digraph.ConcreteBidirectional(struct
   end)
 type t = G.t
 
+module Oper = Oper.I(G)
 module StrongComponents = Components.Make(G)
 module DiscreteComponents = Components.Undirected(G)
 module Dfs        = Traverse.Dfs(G)
@@ -27,7 +28,7 @@ let bad_of_addr addr =
 
 let find_conflicts_with conflicts insn_map addr len =
   let rec within_insn conflicts insn_map cur_addr =
-    if Addr.(cur_addr = (addr++len)) then
+    if Addr.(cur_addr = (addr++len)) || len=1 then
       conflicts
     else
       let conflicts = match Map.find insn_map cur_addr with
@@ -46,6 +47,7 @@ let conflicts_within_insn_at conflicts insn_map addr f =
       (Memory.length mem) 
   | None -> conflicts
 
+(* TODO make conflicts optional *)
 let conflicts_within_insn insn_map insn = 
   let conflicts = Addr.Hash_set.create () in
   conflicts_within_insn_at conflicts insn_map insn find_conflicts_with

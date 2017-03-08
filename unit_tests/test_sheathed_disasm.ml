@@ -23,11 +23,14 @@ let construct_loop insn_map insn_cfg start finish =
     (* Where we would otherwise connect the nodes from the tail
        condition back up to the loop body entry, here all the edges are
        reversed in the spirit of the disassembled insn_cfg. *)
-    Insn_cfg.G.add_edge insn_cfg start finish;
+    Insn_cfg.G.add_edge insn_cfg finish start;
+    let junk_data = String.create 1 in
+    let start_mem = create_memory arch start junk_data |> ok_exn in
+    let insn_map = Addr.Map.add insn_map start (start_mem, ()) in
+    let one  = (Addr.of_int 1 ~width) in
+    let two  = (Addr.of_int 2 ~width) in
     let rec construct_loop_body insn_map start finish = 
       if not (Addr.equal start finish) then
-        let one  = (Addr.of_int 1 ~width:(Addr.bitwidth finish)) in
-        let two  = (Addr.of_int 2 ~width:(Addr.bitwidth finish)) in
         let dist = Addr.max Addr.((finish - start)/two) one in
         let step = Addr.(start + dist) in
         (* Add edge from some intermediate point between the start and
@@ -35,16 +38,18 @@ let construct_loop insn_map insn_cfg start finish =
            start, decreasing the distance between the outermost start
            and finish. As this function executes, it creates log(dist)
            nodes, each going from finish to step (reverse as it would
-           be a flow in a real binary) before finally reaching the start *)
-        Insn_cfg.G.add_edge insn_cfg step start;
+           be a flow in a real binary) before finally reaching the
+           start *)
+        Insn_cfg.G.add_edge insn_cfg start step;
         (* Because the algorithm at this point relies on the graph
            and map entirely, it doesn't matter the contents of the memory. *)
         let junk_data = String.create @@ (Addr.to_int dist |> ok_exn) in
         let insn_map = Addr.Map.add insn_map ~key:step
-            ~data:(create_memory arch step junk_data |> ok_exn) in
-        construct_loop_body insn_map step finish in
+            ~data:(create_memory arch step junk_data |> ok_exn, ()) in
+        construct_loop_body insn_map step finish 
+      else insn_map, insn_cfg in
     construct_loop_body insn_map start finish
-  )
+  ) else insn_map, insn_cfg
 
 let construct_branch insn_cfg branch_at left right = 
   Insn_cfg.G.add_edge insn_cfg left branch_at;
@@ -219,7 +224,79 @@ let test_decision_tree_of_entries test_ctxt =
 (* the insn_cfg. *)
 let test_overlay_construction test_ctxt = ()
 
-let test_sheer_scc test_ctxt = ()
+let test_loop_scc test_ctxt = 
+  let insn_map, insn_cfg = init () in
+  let entry = Addr.(of_int ~width 1) in
+  let insn_map, insn_cfg = 
+    construct_loop insn_map insn_cfg entry Addr.(entry ++ 20) in
+  let loop_points = Addr.Hash_set.create () in
+  Insn_cfg.G.iter_vertex (fun vert -> Hash_set.add loop_points vert) insn_cfg;
+  let scc = Insn_cfg.StrongComponents.scc_list insn_cfg in
+  let scc_points = Addr.Hash_set.create () in
+  List.iter scc ~f:(fun scc -> 
+      List.iter scc ~f:(fun component_addr -> 
+          Hash_set.add scc_points component_addr;
+        ));
+  let in_loop_not_scc = "Found addr in loop but not in scc" in
+  Hash_set.iter loop_points ~f:(fun loop_addr ->
+      assert_equal ~msg:in_loop_not_scc true
+      @@ Hash_set.mem scc_points loop_addr);
+  let in_scc_not_loop = "Found addr in scc not loop" in
+  Hash_set.iter scc_points ~f:(fun loop_addr ->
+      assert_equal ~msg:in_scc_not_loop true
+      @@ Hash_set.mem loop_points loop_addr)
+
+let test_scc test_ctxt =
+  let _, insn_cfg = init () in
+  let zero = Addr.(of_int ~width 0) in
+  let entry = Addr.(of_int ~width 1) in
+  Insn_cfg.G.add_edge insn_cfg zero entry;
+  let components = Insn_cfg.StrongComponents.scc_list insn_cfg in
+  let components = Sheathed.filter_components components in
+  assert_equal ~msg:"found non scc component" [] components
+
+(* Need to test sheer scc with an extenuation of a tail competitor *)
+let test_sheer_scc test_ctxt = 
+  let insn_map, insn_cfg = init () in
+  let zero = Addr.(of_int ~width 0) in
+  let entry = Addr.(of_int ~width 1) in
+  let insn_map, insn_cfg = 
+    construct_loop insn_map insn_cfg entry Addr.(entry ++ 20) in
+  let in_loop_addr = Addr.(of_int ~width 0x10) in
+  let loop_points = Addr.Hash_set.create () in
+  Insn_cfg.G.iter_vertex (fun vert -> Hash_set.add loop_points vert)
+    insn_cfg;
+  let insn_map, insn_cfg =
+    construct_tail_conflict insn_map insn_cfg in_loop_addr 6 in
+  let conflicts_added = Addr.Hash_set.create () in
+  Insn_cfg.G.iter_vertex (fun vert -> 
+      if not (Hash_set.mem loop_points vert) then 
+        Hash_set.add conflicts_added vert) insn_cfg;
+  let insn_map, insn_cfg = Sheathed.sheer insn_cfg insn_map in
+  let removed_msg = "residual conflict present within" in
+  Hash_set.iter conflicts_added ~f:(fun addr -> 
+      let removed_cfg = removed_msg ^ " cfg at " ^ Addr.to_string addr in
+      assert_equal ~msg:removed_cfg true
+      @@ not (Insn_cfg.G.mem_vertex insn_cfg addr);
+      let removed_map = removed_msg ^ " insn_map at " ^ Addr.to_string addr in
+      assert_equal ~msg:removed_map true
+      @@ not (Addr.Map.mem insn_map addr);
+    );  
+  let loop_msg = "loop addr should remain during tail sheer" in
+  Hash_set.iter loop_points ~f:(fun addr -> 
+      assert_equal ~msg:loop_msg true @@ Insn_cfg.G.mem_vertex insn_cfg addr);
+  let map_non_subset = "addr in map but not in graph" in
+  Addr.Map.iteri insn_map ~f:(fun ~key ~data -> 
+      assert_equal ~msg:map_non_subset true @@
+      Insn_cfg.G.mem_vertex insn_cfg key
+    );
+  let graph_non_subset = "addr in graph but not in map, " in
+  Insn_cfg.G.iter_vertex 
+    (fun addr -> 
+       if not (Addr.equal addr zero) then
+         assert_equal ~msg:(graph_non_subset ^ Addr.to_string addr) true
+         @@ Addr.Map.mem insn_map addr
+    ) insn_cfg
 
 
 let test_decision_construction_combinatorics test_ctxt = ()
@@ -244,7 +321,9 @@ let () =
       "test_decision_construction_combinatorics"
       >:: test_decision_construction_combinatorics;
       "test_decision_sets_of_discrete_components"
-      >:: test_decision_sets_of_discrete_components;      
+      >:: test_decision_sets_of_discrete_components;
+      "test_loop_scc" >:: test_loop_scc;
+      "test_scc" >:: test_scc;
       "test_sheer_scc" >:: test_sheer_scc;
     ] in
   run_test_tt_main suite
