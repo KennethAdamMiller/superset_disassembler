@@ -18,32 +18,51 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
 
   let main () =
     let backend = options.disassembler in
-    let format = match options.metrics_format with
-      | Latex -> format_latex
-      | Standard -> format_standard in
     let sheathed = match options.disasm_method with
       | Tree_set -> Sheathed.sheaths_of_file ~backend
       | Sheered_tree_set -> Sheathed.sheered_sheaths_of_file ~backend
     in
-    let collect = 
-      match options.stats with
-      | Some symbol_file -> 
-        fun accu backend f -> let cfgs = sheathed f in
-          List.fold_left cfgs ~init:accu ~f:(fun accu cfg ->
-              gather_metrics f accu cfg)
-      | None -> fun accu backend f -> accu in
+    (* TODO result of sheathed disasm functions types are not
+       consistent with `execute_disasm options sheathed` being able to
+       use the results *)
+    let format = match options.metrics_format with
+      | Latex -> format_latex
+      | Standard -> format_standard in
+    let collect accu bin =
+      let (insns, cfg, decision_trees) = sheathed bin in
+      (match options.content with
+       | Some content -> 
+         List.iter content ~f:(function
+             | Cfg -> Insn_cfg.Gml.print std_formatter cfg
+             | Insn_map -> 
+               let map_str = Sexp.to_string
+                 @@ Addr.Map.sexp_of_t 
+                   (Tuple2.sexp_of_t Memory.sexp_of_t
+                      (Option.sexp_of_t @@ Disasm_expert.Basic.Insn.sexp_of_t))
+                   insns in
+               print_endline map_str
+           )
+       | None -> ());
+      match options.ground_truth with
+      | Some ground_truth -> 
+        gather_metrics ~ground_truth cfg accu
+      | None -> accu in
+    (* TODO Should explore the possibility to abuse the cmd options
+       by passing in the wrong filesystem kinds to the options *)
     match options.input_kind with
-    | Binary f -> 
-      let metrics = collect None backend f in
+    | Binary bin -> 
+      (* Output the results of disassembly *)
+      let metrics = collect None bin in
       format metrics |> print_endline
     | Corpora_folder corpdir -> 
       print_endline @@ format @@ 
-      Common.process_corpora ~corpdir ~backend collect
+      Common.process_corpora ~corpdir collect
 
 end
 
 module Cmdline = struct
   open Cmdliner
+  open Insn_disasm_benchmark
 
   let list_disasm_methods = [
     "tree_set", Tree_set;
@@ -57,8 +76,8 @@ module Cmdline = struct
            (Some Sheered_tree_set) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
-  let create disassembler input_kind disasm_method stats metrics_format = 
-    Fields.create ~disassembler ~input_kind ~disasm_method ~stats ~metrics_format
+  let create content disassembler ground_truth input_kind disasm_method metrics_format = 
+    Fields.create ~content ~disassembler ~ground_truth ~input_kind ~disasm_method ~metrics_format
 
   (* TODO eliminate this through bap usage *)
   let disassembler () : string Term.t =
@@ -78,7 +97,8 @@ module Cmdline = struct
     let man = [
       `S "SYNOPSIS";
       `Pre "
- $(b,$mname) [FORMAT/METRICS/BACKEND/DISASM_METHOD OPTION] --target=FILE/DIR ";
+ $(b,$mname) [FORMAT/METRICS/DISASM_METHOD OPTION]
+  [--ground_truth=FILE/DIR] --target=FILE/DIR ";
       `S "DESCRIPTION";
       `P
         "Given a binary, or a corpora folder location, will
@@ -90,7 +110,7 @@ module Cmdline = struct
         @ Bap_cmdline_terms.common_loader_options *) 
     in
     Term.(const create 
-          $(disassembler ()) $input_kind $disasm_method $content_type
+          $content $(disassembler ()) $ground_truth $input_kind $disasm_method
           $metrics_format),
     Term.info "sheathed_disasm" ~doc ~man ~version:Config.version
 

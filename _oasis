@@ -16,7 +16,7 @@ BuildDepends:
 Library common
   Path:                 src/
   Install:		false
-  Modules:		Metrics, Cmdoptions, Insn_cfg, Common
+  Modules:		Metrics, Cmdoptions, Insn_cfg, Common, Insn_disasm_benchmark
   CompiledObject:	best
   BuildDepends:		bap, core_kernel, cmdliner, ocamlgraph
 
@@ -42,6 +42,13 @@ Executable shingled_disasm
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads
 
+Executable sheathed_disasm
+  Path:			src/sheathed
+  Install:        	true
+  MainIs:	  	sheathed_disasm.ml
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, threads, common, sheathed
+
 Executable test_shingled
   Path:			unit_tests
   MainIs:		test_shingled_disasm.ml
@@ -55,11 +62,4 @@ Executable test_sheathed
   Install:		false
   BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, sheathed, bap.plugins, ocamlgraph
   CompiledObject:	best
-
-Executable sheathed_disasm
-  Path:			src/sheathed
-  Install:        	true
-  MainIs:	  	sheathed_disasm.ml
-  CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, threads, common, sheathed
 

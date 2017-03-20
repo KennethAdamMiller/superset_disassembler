@@ -15,7 +15,11 @@ module StrongComponents = Components.Make(G)
 module DiscreteComponents = Components.Undirected(G)
 module Dfs        = Traverse.Dfs(G)
 module Path       = Path.Check(G)
-
+module Gml        = Gml.Print(G)(struct 
+    let node (label : G.V.label) = 
+      [ "addr", Gml.String (Addr.to_string label)  ]
+    let edge (label : G.E.label) = [ ]
+  end)
 
 let bad_of_arch arch = 
   G.V.create (Addr.of_int

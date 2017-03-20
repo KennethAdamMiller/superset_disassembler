@@ -13,6 +13,7 @@ let filter_components components =
       | _ :: _ -> component :: filtered
     )
 
+(* TODO simplify the code *)
 let sheer cfg insn_map = 
   let keep = filter_components @@ StrongComponents.scc_list cfg in
   let to_remove = Addr.Hash_set.create () in
@@ -65,15 +66,13 @@ let disasm_file ?(backend="llvm") bin =
 let sheaths_of_file ?(backend="llvm") bin = 
   let superset, insn_map, arch = disasm_file ~backend bin in
   let sheered = Shingled.sheer superset arch in
-  Sheath_tree_set.decision_trees_of_shingles sheered insn_map
-
-
+  insn_map, sheered, Sheath_tree_set.decision_trees_of_shingles sheered insn_map
 
 let sheered_sheaths_of_file ?(backend="llvm") bin =
   let superset, insn_map, arch = disasm_file ~backend bin in
   let sheered = Shingled.sheer superset arch in
   let insn_map, insn_cfg = sheer sheered insn_map in
-  Sheath_tree_set.decision_trees_of_shingles sheered insn_map
+  insn_map, insn_cfg, Sheath_tree_set.decision_trees_of_shingles sheered insn_map
 
 let fold_decision_set ?(backend="llvm") bin ~f = ()
 let iter_decision_set ?(backend="llvm") bin ~f = ()

@@ -299,6 +299,10 @@ let test_sheer_scc test_ctxt =
     ) insn_cfg
 
 
+(* This is an extension of the sheering test wherein a double *)
+(* interpretation within a strongly connected component has ancestors. *)
+let test_extenuating_sheer_scc test_ctxt = ()
+
 let test_decision_construction_combinatorics test_ctxt = ()
 
 (* Add two completely discrete cfg to the graph, and assert that two *)
@@ -318,13 +322,14 @@ let () =
       "test_tail_construction">:: test_tail_construction;
       "test_extenuating_tail_competitors">::test_extenuating_tail_competitors;
       "test_overlay_construction">:: test_overlay_construction;
-      "test_decision_construction_combinatorics"
-      >:: test_decision_construction_combinatorics;
       "test_decision_sets_of_discrete_components"
       >:: test_decision_sets_of_discrete_components;
       "test_loop_scc" >:: test_loop_scc;
       "test_scc" >:: test_scc;
       "test_sheer_scc" >:: test_sheer_scc;
+      "test_extenuating_sheer_scc" >:: test_extenuating_sheer_scc;
+      "test_decision_construction_combinatorics"
+      >:: test_decision_construction_combinatorics;
     ] in
   run_test_tt_main suite
 ;;

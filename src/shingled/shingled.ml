@@ -74,9 +74,12 @@ end
 
 let with_img ~accu ~backend img ~f = 
   let arch = Image.arch img in
-  Memmap.to_sequence (Image.memory img)
-  |> Seq.fold ~init:accu ~f:(fun accu (mem,_) ->
-      (f ~accu ~backend arch mem |> ok_exn))
+  let segments = Table.to_sequence @@ Image.segments img in
+  Seq.fold segments ~init:accu ~f:(fun accu (mem, segment) ->
+      if Image.Segment.is_executable segment then
+        (f ~accu ~backend arch mem |> ok_exn)
+      else accu 
+    )
 
 let shingled_cfg_of_img ?superset_cfg ~backend img =
   let superset_cfg = Option.value superset_cfg ~default:(G.create ()) in

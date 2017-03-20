@@ -14,33 +14,45 @@ type shingled_disasm = | Sheered_disasm
 
 module Program(Conf : Provider with type kind = shingled_disasm)  = struct
   open Conf
+  open Metrics
 
   let main () =
     let backend = options.disassembler in
+    let shingled = match options.disasm_method with
+      | Superset_disasm -> Shingled.shingled_cfg_of_file ~backend
+      | Sheered_disasm ->  Shingled.sheered_cfg_of_file  ~backend
+    in
+    let shingled = shingled in
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
-    let shingled = match options.disasm_method with
-      | Superset_disasm -> Shingled.shingled_cfg_of_file ~backend
-      | Sheered_disasm ->  Shingled.sheered_cfg_of_file ~backend
-    in
-    let collect = match options.stats with
-      | Some symbol_file -> fun accu backend f
-        -> (let (arch, cfg) = shingled f in
-            gather_metrics f accu cfg)
-      | None -> fun accu backend f -> accu in
+    let collect accu bin =
+      let (arch, cfg) = shingled bin in
+      (match options.content with
+       | Some content -> 
+         List.iter content ~f:(function
+             | Cfg -> Insn_cfg.Gml.print std_formatter cfg
+             | _ -> ())
+       | None -> ());
+      match options.ground_truth with
+      | Some ground_truth -> 
+        gather_metrics ~ground_truth cfg accu
+      | None -> accu in
     match options.input_kind with
-    | Binary f -> 
+    | Binary bin -> 
       print_endline @@ format @@ 
-      collect None backend f
+      collect None bin
     | Corpora_folder corpdir -> 
       print_endline @@ format @@ 
-      Common.process_corpora ~corpdir ~backend collect
+      Common.process_corpora ~corpdir collect
+
 
 end
 
 module Cmdline = struct
   open Cmdliner
+  open Metrics.Opts
+  open Insn_disasm_benchmark
 
   let list_disasm_methods = [
     "superset", Superset_disasm;
@@ -54,28 +66,10 @@ module Cmdline = struct
            (Some Sheered_disasm) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
-  (* content: all metrics, summarized metrics *)
-  let list_content_doc = sprintf
-      "Metrics may be collected against a symbol file"
-  let content_type = 
-    Arg.(value &
-         opt (some string) (None)
-         & info ["metrics_data"] ~doc:list_content_doc)
-
-  (* format:  to standard out, serialized or for latex?;*)
-  let list_formats_types = [
-    "standard", Standard;
-    "latex", Latex;
-  ]
-  let list_formats_doc = sprintf
-      "Available output metrics formats: %s" @@ 
-    Arg.doc_alts_enum list_formats_types
-  let metrics_format = 
-    Arg.(value & opt (enum list_formats_types) Standard
-         & info ["metrics_format"] ~doc:list_formats_doc)
-
-  let create disassembler input_kind disasm_method stats metrics_format = 
-    Fields.create ~disassembler ~input_kind ~disasm_method ~stats ~metrics_format
+  let create disassembler ground_truth input_kind 
+      disasm_method metrics_format content = 
+    Fields.create ~disassembler ~ground_truth ~input_kind ~
+      disasm_method ~metrics_format ~content
 
   (* TODO eliminate this through bap usage *)
   let disassembler () : string Term.t =
@@ -106,8 +100,8 @@ module Cmdline = struct
         @ Bap_cmdline_terms.common_loader_options *) 
     in
     Term.(const create 
-          $(disassembler ()) $input_kind $disasm_method $content_type
-          $metrics_format),
+          $(disassembler ()) $ground_truth $input_kind $disasm_method
+          $metrics_format $content),
     Term.info "shingled_disasm" ~doc ~man ~version:Config.version
 
 
