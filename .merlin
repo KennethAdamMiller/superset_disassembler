@@ -3,6 +3,8 @@ PKG bap
 PKG ounit
 PKG bap.plugins
 PKG ocamlgraph
+PKG logs
+PKG fmt
 
 S src/
 S src/shingled/

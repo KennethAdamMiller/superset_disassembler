@@ -29,44 +29,28 @@ let bad_of_addr addr =
   G.V.create (Addr.of_int
                 ~width:(Addr.bitwidth addr) 0)
 
-
-let find_conflicts_with conflicts insn_map addr len =
-  let rec within_insn conflicts insn_map cur_addr =
+let conflicts_within_insn_at ?conflicts insn_map addr =
+  let conflicts = Option.value conflicts ~default:Addr.Set.empty in
+  let rec within_insn conflicts insn_map cur_addr len =
     if Addr.(cur_addr = (addr++len)) || len=1 then
       conflicts
     else
       let conflicts = match Map.find insn_map cur_addr with
-        | Some ((mem, _)) -> 
-          Hash_set.add conflicts cur_addr; conflicts
+        | Some (mem, _) -> 
+          Set.add conflicts cur_addr
         | None ->  conflicts in 
-      within_insn conflicts insn_map Addr.(cur_addr ++ 1) in
-  within_insn conflicts insn_map addr
-
-let conflicts_within_insn_at conflicts insn_map addr f = 
+      within_insn conflicts insn_map Addr.(cur_addr ++ 1) len in
   match Map.find insn_map addr with
   | Some ((mem, _)) ->
     (* look within the body for instructions *)
-    f conflicts insn_map 
-      (Memory.min_addr mem) 
-      (Memory.length mem) 
+    let addr = (Memory.min_addr mem) in
+    let len = (Memory.length mem) in
+    within_insn conflicts insn_map addr len
   | None -> conflicts
 
-(* TODO make conflicts optional *)
-let conflicts_within_insn insn_map insn = 
-  let conflicts = Addr.Hash_set.create () in
-  conflicts_within_insn_at conflicts insn_map insn find_conflicts_with
-
-let find_conflicts conflicts insn_map insn = 
-  conflicts_within_insn_at conflicts insn_map insn find_conflicts_with
-
 let find_all_conflicts insn_map insn_cfg =
-  G.fold_vertex (fun vert conflicts -> 
-      match Map.find insn_map vert with
-      | Some (mem, _) -> 
-        let insn_addr = Memory.min_addr mem in
-        find_conflicts conflicts insn_map insn_addr
-      | None ->
-        (* Not supposed to be a vert that isn't *)
-        (* in the map *)
-        assert false 
-    ) insn_cfg (Addr.Hash_set.create ())
+  Addr.Map.fold ~init:Addr.Set.empty
+    ~f:(fun ~key ~data conflicts -> 
+        let insn_addr = key in
+        conflicts_within_insn_at ~conflicts insn_map insn_addr
+      ) insn_map

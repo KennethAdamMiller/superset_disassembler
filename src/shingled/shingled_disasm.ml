@@ -27,7 +27,7 @@ module Program(Conf : Provider with type kind = shingled_disasm)  = struct
       | Latex -> format_latex
       | Standard -> format_standard in
     let collect accu bin =
-      let (arch, cfg) = shingled bin in
+      let (arch, insn_map, cfg) = shingled bin in
       (match options.content with
        | Some content -> 
          List.iter content ~f:(function

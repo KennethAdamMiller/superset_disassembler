@@ -17,8 +17,10 @@ type metrics = {
 let format_standard metrics =
   match metrics with 
   | Some metrics -> 
-    sprintf "Total instructions recovered: %d\n"
-      metrics.detected_insn_count
+    sprintf "%s%d\n%s%d\n%s%d\n" 
+      "Total instructions recovered: " metrics.detected_insn_count
+      "False negatives: " metrics.false_negatives
+      "False positives: " metrics.false_positives
   | None -> sprintf "No metrics gathered!"
 
 let format_latex metrics = ""

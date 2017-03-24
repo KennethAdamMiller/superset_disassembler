@@ -9,6 +9,10 @@ type maybe_full_insn = (mem * Dis.full_insn option)
 type t = maybe_insn list
 type t_full = maybe_full_insn list
 
+
+val run : ('a, 'b) Dis.t -> accu:'c -> f:(maybe_insn -> 'c -> 'c) -> mem -> 
+  'c Or_error.t
+
 val disasm : ?backend:string -> accu:'a -> f:(maybe_insn -> 'a -> 'a) ->
   arch -> mem -> 'a Or_error.t
 

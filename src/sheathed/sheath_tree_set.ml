@@ -20,6 +20,8 @@ type decision_tree_set = decision_tree Addr.Map.t
       enclosing decision_tree_set *)
 type t = decision_tree_set
 
+(* TODO need to test each of these functions *)
+
 let leaders_of_blocks blocks = 
   let insn_map = Addr.Hash_set.create () in
   List.iter ~f:(fun block ->
@@ -29,10 +31,13 @@ let leaders_of_blocks blocks =
       | _ -> ()) blocks;
   insn_map
 
-let entries_of_cfg insn_cfg = Insn_cfg.G.fold_vertex (fun addr accu ->
-    if Insn_cfg.G.in_degree insn_cfg addr = 0 then
-      (Hash_set.add accu addr; accu)
-    else accu)
+let entries_of_cfg insn_cfg = 
+  Insn_cfg.G.fold_vertex (fun addr accu ->
+      if Insn_cfg.G.in_degree insn_cfg addr  = 0 &&
+         Insn_cfg.G.out_degree insn_cfg addr > 0
+      then
+        (Hash_set.add accu addr; accu)
+      else accu)
     insn_cfg (Addr.Hash_set.create ())
 
 let conflicts_of_entries entries insn_map =
@@ -41,10 +46,10 @@ let conflicts_of_entries entries insn_map =
     (fun conflicted_entries entry -> 
        if not (Hash_set.mem visited_entries entry) then (
          let in_entry_conflicts = 
-           Insn_cfg.conflicts_within_insn insn_map entry in
+           Insn_cfg.conflicts_within_insn_at insn_map entry in
          let conflicts = Addr.Hash_set.create () in
          Hash_set.add visited_entries entry;          
-         Hash_set.iter in_entry_conflicts 
+         Set.iter in_entry_conflicts 
            ~f:(fun conflict ->
                (* A conflict that an entry may have may or may not *)
                (* itself be an entry. *)
@@ -60,7 +65,8 @@ let conflicts_of_entries entries insn_map =
        ) else conflicted_entries
     ) 
 
-let tails_of_conflicts conflicts insn_cfg entries = Hash_set.fold entries ~init:Addr.Map.empty
+let tails_of_conflicts conflicts insn_cfg entries = 
+  Hash_set.fold entries ~init:Addr.Map.empty
     ~f:(fun accu entry -> 
         let blocks = Block.leader_lists insn_cfg entry in
         let leaders = leaders_of_blocks blocks in
@@ -75,16 +81,17 @@ let tails_of_conflicts conflicts insn_cfg entries = Hash_set.fold entries ~init:
            leaders map because those will be the ones that fall
            through to the tail; the tail can then be associated with
            those that lead into it. *)
-        let tails = List.fold ~init:Addr.Map.empty 
+        let tails = List.fold ~init:accu 
             ~f:(fun tails block -> 
                 let rblock = List.rev block in 
                 match rblock with 
                 | tail::_ ->
                   (* For each edge from tail, lookup the respective vertex; if it *)
                   (* is in the conflicts set, then it gets added to a sheath of choices. *)
-                  let f = (fun poss_conflict sheath -> 
-                      let is_conflict = Hash_set.mem conflicts poss_conflict in
-                      let is_leader = Hash_set.mem leaders poss_conflict in
+                  let f = (fun sheath poss_conflict -> 
+                      let is_conflict = Set.mem conflicts poss_conflict in
+                      let is_leader =
+                        Hash_set.mem leaders poss_conflict in
                       let is_connected = 
                         match Insn_cfg.G.find_all_edges
                                 insn_cfg tail poss_conflict with
@@ -92,8 +99,8 @@ let tails_of_conflicts conflicts insn_cfg entries = Hash_set.fold entries ~init:
                       if is_conflict && is_leader && is_connected then
                         poss_conflict :: sheath
                       else sheath) in
-                  let sheath = Insn_cfg.G.fold_succ
-                      f insn_cfg tail [] in
+                  let sheath = List.fold_left
+                      (Insn_cfg.G.succ insn_cfg tail) ~init:[] ~f in
                   (match sheath with
                    | [] -> tails
                    | sheath -> 

@@ -50,7 +50,7 @@ let content =
   let doc =
     "The analysis output desired; one of cfg/insn map/decision tree"
   in
-  Cmdliner.Arg.(value & opt (some (list (enum possible_content))) (Some [Insn_map])
+  Cmdliner.Arg.(value & opt (some (list (enum possible_content))) (None)
                 & info ["output"] ~docv:"" ~doc)
 
 let parse_input f = 

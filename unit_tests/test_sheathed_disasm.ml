@@ -26,7 +26,7 @@ let construct_loop insn_map insn_cfg start finish =
     Insn_cfg.G.add_edge insn_cfg finish start;
     let junk_data = String.create 1 in
     let start_mem = create_memory arch start junk_data |> ok_exn in
-    let insn_map = Addr.Map.add insn_map start (start_mem, ()) in
+    let insn_map = Addr.Map.add insn_map start (start_mem, None) in
     let one  = (Addr.of_int 1 ~width) in
     let two  = (Addr.of_int 2 ~width) in
     let rec construct_loop_body insn_map start finish = 
@@ -45,7 +45,7 @@ let construct_loop insn_map insn_cfg start finish =
            and map entirely, it doesn't matter the contents of the memory. *)
         let junk_data = String.create @@ (Addr.to_int dist |> ok_exn) in
         let insn_map = Addr.Map.add insn_map ~key:step
-            ~data:(create_memory arch step junk_data |> ok_exn, ()) in
+            ~data:(create_memory arch step junk_data |> ok_exn, None) in
         construct_loop_body insn_map step finish 
       else insn_map, insn_cfg in
     construct_loop_body insn_map start finish
@@ -61,27 +61,27 @@ let construct_entry_conflict insn_map insn_cfg at conflict_len =
   Insn_cfg.G.add_edge insn_cfg at conflict;
   Insn_cfg.G.add_edge insn_cfg Addr.(at ++ 1) Addr.(conflict ++ 1);
   let insn_map = Addr.Map.add insn_map ~key:at 
-      ~data:(create_memory arch at junk_data |> ok_exn, ()) in
+      ~data:(create_memory arch at junk_data |> ok_exn, None) in
   let insn_map = Addr.Map.add insn_map ~key:conflict
-      ~data:(create_memory arch conflict junk_data |> ok_exn, ()) in
+      ~data:(create_memory arch conflict junk_data |> ok_exn, None) in
   let insn_map = Addr.Map.add insn_map ~key:Addr.(conflict ++1)
-      ~data:(create_memory arch Addr.(conflict ++1) junk_data |> ok_exn, ()) in
+      ~data:(create_memory arch Addr.(conflict ++1) junk_data |> ok_exn, None) in
   let insn_map = Addr.Map.add insn_map ~key:Addr.(at ++ 1) 
-      ~data:(create_memory arch Addr.(at ++ 1) junk_data |> ok_exn, ()) in
+      ~data:(create_memory arch Addr.(at ++ 1) junk_data |> ok_exn, None) in
   insn_map, insn_cfg
 
 let construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
   let tail_data = String.create 1 in
   let insn_map = Addr.Map.add insn_map ~key:tail_addr
-      ~data:(create_memory arch tail_addr tail_data |> ok_exn, ()) in
+      ~data:(create_memory arch tail_addr tail_data |> ok_exn, None) in
   let rec make_tail_options insn_map conflict_count =
     if conflict_count > 0 then
       let junk_data = String.create conflict_count in
       let conflict_addr = Addr.(tail_addr ++ conflict_count) in
       Insn_cfg.G.add_edge insn_cfg tail_addr conflict_addr;
       let insn_map = Addr.Map.add insn_map ~key:conflict_addr 
-          ~data:(create_memory arch conflict_addr junk_data |> ok_exn, (
-            )) in
+          ~data:(create_memory arch conflict_addr junk_data |> ok_exn,
+                 None) in
       make_tail_options
         insn_map (conflict_count - 1)
     else 
@@ -253,7 +253,7 @@ let test_scc test_ctxt =
   Insn_cfg.G.add_edge insn_cfg zero entry;
   let components = Insn_cfg.StrongComponents.scc_list insn_cfg in
   let components = Sheathed.filter_components components in
-  assert_equal ~msg:"found non scc component" [] components
+  assert_equal ~msg:"found non scc component" 0 (Set.length components)
 
 (* Need to test sheer scc with an extenuation of a tail competitor *)
 let test_sheer_scc test_ctxt = 
@@ -272,8 +272,11 @@ let test_sheer_scc test_ctxt =
   Insn_cfg.G.iter_vertex (fun vert -> 
       if not (Hash_set.mem loop_points vert) then 
         Hash_set.add conflicts_added vert) insn_cfg;
-  let insn_map, insn_cfg = Sheathed.sheer insn_cfg insn_map in
-  let removed_msg = "residual conflict present within" in
+  let insn_map, insn_cfg = Sheathed.sheer insn_map insn_cfg arch in
+  let conflicts_added_str = List.to_string ~f:Addr.to_string @@ 
+    Hash_set.to_list conflicts_added in
+  let removed_msg = "of conflicts " ^ conflicts_added_str 
+                    ^ ", residual conflict present within" in
   Hash_set.iter conflicts_added ~f:(fun addr -> 
       let removed_cfg = removed_msg ^ " cfg at " ^ Addr.to_string addr in
       assert_equal ~msg:removed_cfg true
@@ -281,7 +284,7 @@ let test_sheer_scc test_ctxt =
       let removed_map = removed_msg ^ " insn_map at " ^ Addr.to_string addr in
       assert_equal ~msg:removed_map true
       @@ not (Addr.Map.mem insn_map addr);
-    );  
+    );
   let loop_msg = "loop addr should remain during tail sheer" in
   Hash_set.iter loop_points ~f:(fun addr -> 
       assert_equal ~msg:loop_msg true @@ Insn_cfg.G.mem_vertex insn_cfg addr);

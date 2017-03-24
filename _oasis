@@ -11,14 +11,16 @@ BuildTools: ocamlbuild, camlp4o
 XOCamlbuildExtraArgs: -j 5
 BuildDepends:
               core_kernel,
-              bap
+              bap,
+              fmt,
+              logs
 
 Library common
   Path:                 src/
   Install:		false
   Modules:		Metrics, Cmdoptions, Insn_cfg, Common, Insn_disasm_benchmark
   CompiledObject:	best
-  BuildDepends:		bap, core_kernel, cmdliner, ocamlgraph
+  BuildDepends:		fmt, bap, core_kernel, cmdliner, ocamlgraph, logs
 
 Library shingled
   Path:			src/shingled
@@ -40,7 +42,7 @@ Executable shingled_disasm
   Install:        	true
   MainIs:	  	shingled_disasm.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads
+  BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads, shingled, common
 
 Executable sheathed_disasm
   Path:			src/sheathed
