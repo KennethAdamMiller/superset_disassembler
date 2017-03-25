@@ -31,6 +31,12 @@ let leaders_of_blocks blocks =
       | _ -> ()) blocks;
   insn_map
 
+let mergers_of_cfg insn_cfg = 
+  Insn_cfg.G.fold_vertex (fun addr mergers ->
+      if Insn_cfg.G.out_degree insn_cfg addr > 1 then
+        Addr.Set.add mergers addr
+      else mergers) insn_cfg Addr.Set.empty
+
 let entries_of_cfg insn_cfg = 
   Insn_cfg.G.fold_vertex (fun addr accu ->
       if Insn_cfg.G.in_degree insn_cfg addr  = 0 &&
@@ -66,48 +72,39 @@ let conflicts_of_entries entries insn_map =
     ) 
 
 let tails_of_conflicts conflicts insn_cfg entries = 
-  Hash_set.fold entries ~init:Addr.Map.empty
-    ~f:(fun accu entry -> 
-        let blocks = Block.leader_lists insn_cfg entry in
-        let leaders = leaders_of_blocks blocks in
-        (* we iterate over the basic blocks, reversing them in order to
-           find the tails first because our cfg is in reverse, and also
-           because in the case of basic blocks, we always group 
-           competitors with a common tail by their entire instruction 
-           lineage due to leader list. 
-           This tail is the particular instruction
-           that is the fall through target of several potential
-           competitors. We use this instruction against the
-           leaders map because those will be the ones that fall
-           through to the tail; the tail can then be associated with
-           those that lead into it. *)
-        let tails = List.fold ~init:accu 
-            ~f:(fun tails block -> 
-                let rblock = List.rev block in 
-                match rblock with 
-                | tail::_ ->
-                  (* For each edge from tail, lookup the respective vertex; if it *)
-                  (* is in the conflicts set, then it gets added to a sheath of choices. *)
-                  let f = (fun sheath poss_conflict -> 
-                      let is_conflict = Set.mem conflicts poss_conflict in
-                      let is_leader =
-                        Hash_set.mem leaders poss_conflict in
-                      let is_connected = 
-                        match Insn_cfg.G.find_all_edges
-                                insn_cfg tail poss_conflict with
-                        | [] -> false | _ -> true in
-                      if is_conflict && is_leader && is_connected then
-                        poss_conflict :: sheath
-                      else sheath) in
-                  let sheath = List.fold_left
-                      (Insn_cfg.G.succ insn_cfg tail) ~init:[] ~f in
-                  (match sheath with
-                   | [] -> tails
-                   | sheath -> 
-                     Addr.Map.add tails ~key:tail ~data:sheath)
-                | _ -> tails) blocks in
-        tails
-      ) 
+  print_endline "tails_of_conflicts";
+  let possible_tails = mergers_of_cfg insn_cfg in
+  (* we iterate over the basic blocks, reversing them in order to
+     find the tails first because our cfg is in reverse, and also
+     because in the case of basic blocks, we always group 
+     competitors with a common tail by their entire instruction 
+     lineage due to leader list. 
+     This tail is the particular instruction
+     that is the fall through target of several potential
+     competitors. We use this instruction against the
+     leaders map because those will be the ones that fall
+     through to the tail; the tail can then be associated with
+     those that lead into it. *)
+  Set.fold ~init:Addr.Map.empty 
+    ~f:(fun tails possible_tail -> 
+        (* For each edge from tail, lookup the respective vertex; if it *)
+        (* is in the conflicts set, then it gets added to a sheath of choices. *)
+        let f = (fun sheath poss_conflict -> 
+            let is_conflict = Set.mem conflicts poss_conflict in
+            let is_connected = 
+              match Insn_cfg.G.find_all_edges
+                      insn_cfg possible_tail poss_conflict with
+              | [] -> false | _ -> true in
+            if is_conflict && is_connected then
+              poss_conflict :: sheath
+            else sheath) in
+        let sheath = List.fold_left
+            (Insn_cfg.G.succ insn_cfg possible_tail) ~init:[] ~f in
+        match sheath with
+        | [] -> tails
+        | sheath -> 
+          Addr.Map.add tails ~key:possible_tail ~data:sheath
+      ) possible_tails
 
 let decision_tree_of_entries conflicted_entries tails insn_cfg =
   let visited_choices = Addr.Hash_set.create () in
