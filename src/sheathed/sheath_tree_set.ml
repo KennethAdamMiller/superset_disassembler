@@ -22,15 +22,6 @@ type t = decision_tree_set
 
 (* TODO need to test each of these functions *)
 
-let leaders_of_blocks blocks = 
-  let insn_map = Addr.Hash_set.create () in
-  List.iter ~f:(fun block ->
-      match block with
-      | leader_addr :: _ ->
-        Hash_set.add insn_map leader_addr
-      | _ -> ()) blocks;
-  insn_map
-
 let mergers_of_cfg insn_cfg = 
   Insn_cfg.G.fold_vertex (fun addr mergers ->
       if Insn_cfg.G.out_degree insn_cfg addr > 1 then
@@ -55,6 +46,7 @@ let conflicts_of_entries entries insn_map =
            Insn_cfg.conflicts_within_insn_at insn_map entry in
          let conflicts = Addr.Hash_set.create () in
          Hash_set.add visited_entries entry;          
+         Hash_set.add conflicts entry;
          Set.iter in_entry_conflicts 
            ~f:(fun conflict ->
                (* A conflict that an entry may have may or may not *)

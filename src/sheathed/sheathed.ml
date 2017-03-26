@@ -24,9 +24,10 @@ let sheer insn_map cfg arch =
             ~conflicts:to_remove insn_map addr
         ) in
   let to_remove = Set.diff to_remove keep in
+  let bad = bad_of_arch arch in
   Set.iter to_remove
     ~f:(fun vert -> 
-        let bad = bad_of_addr vert in
+        printf "bad: %s\n" (Addr.to_string bad);
         G.add_edge cfg bad vert;
       );
   Shingled.sheer insn_map cfg arch
