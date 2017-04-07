@@ -2,9 +2,9 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 open Or_error.Monad_infix
+
 module Dis = Disasm_expert.Basic
 
-open Dis
 type maybe_insn = (mem * (Dis.asm, Dis.kinds) Dis.insn option)
 type maybe_full_insn = (mem * Dis.full_insn option)
 type t = maybe_insn list
@@ -27,15 +27,12 @@ let run dis ~accu ~f mem =
   | Error err -> Error err
 
 let disasm ?(backend="llvm") ~accu ~f arch mem =
-  with_disasm ~backend (Arch.to_string arch) ~f:(fun d -> run d ~accu ~f mem)
+  Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun d -> run d ~accu ~f mem)
 
 let lift lift_fn (mem,insn) =
-  match insn with
-  | None -> None
-  | Some insn ->
-    match lift_fn mem insn with
-    | Ok bil -> Some (mem, bil)
-    | Error _ -> None
+  let lift_fn = lift_fn mem in
+  let insn = Option.map insn ~f:lift_fn in
+  Option.map insn ~f:(fun bil -> (mem, bil |> ok_exn))
 
 let lift arch insns =
   let module Target = (val target_of_arch arch) in
@@ -56,11 +53,10 @@ module With_exn = struct
 end
 
 let memmap_all ?backend arch mem =
-  let filter_add = fun elem memmap -> 
+  let filter_add elem memmap =
     let (mem, insn) = elem in 
-    match insn with 
-    | Some insn -> Memmap.add memmap mem insn
-    | None -> memmap in
+    Option.value_map insn ~default:memmap
+      ~f:(Memmap.add memmap mem) in
   With_exn.disasm ?backend ~accu:Memmap.empty ~f:filter_add arch mem
 
 (* component returns the set of jump points and destinations *)

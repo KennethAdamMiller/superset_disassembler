@@ -32,20 +32,18 @@ let bad_of_addr addr =
 let conflicts_within_insn_at ?conflicts insn_map addr =
   let conflicts = Option.value conflicts ~default:Addr.Set.empty in
   let rec within_insn conflicts insn_map cur_addr len =
-    if Addr.(cur_addr = (addr++len)) || len=1 then
+    if Addr.(cur_addr >= (addr ++ len)) then
       conflicts
     else
-      let conflicts = match Map.find insn_map cur_addr with
-        | Some (mem, _) -> 
+      let conflicts = if Map.mem insn_map cur_addr then
           Set.add conflicts cur_addr
-        | None ->  conflicts in 
+        else conflicts in 
       within_insn conflicts insn_map Addr.(cur_addr ++ 1) len in
   match Map.find insn_map addr with
   | Some ((mem, _)) ->
     (* look within the body for instructions *)
-    let addr = (Memory.min_addr mem) in
     let len = (Memory.length mem) in
-    within_insn conflicts insn_map addr len
+    within_insn conflicts insn_map Addr.(addr ++ 1) len
   | None -> conflicts
 
 let find_all_conflicts insn_map insn_cfg =
@@ -54,3 +52,18 @@ let find_all_conflicts insn_map insn_cfg =
         let insn_addr = key in
         conflicts_within_insn_at ~conflicts insn_map insn_addr
       ) insn_map
+
+let seq_of_addr_range addr len = 
+  let open Seq.Generator in
+  let rec gen_next_addr cur_addr = 
+    if Addr.(cur_addr >= (addr ++ len)) then
+      return ()
+    else
+      yield cur_addr >>=  fun () -> 
+      let next_addr = Addr.succ cur_addr in
+      gen_next_addr next_addr
+  in run (gen_next_addr addr)
+
+let range_seq_of_conflicts insn_map addr len = 
+  let range_seq = seq_of_addr_range Addr.(succ addr) len in
+  Seq.filter range_seq ~f:Addr.Map.(mem insn_map)

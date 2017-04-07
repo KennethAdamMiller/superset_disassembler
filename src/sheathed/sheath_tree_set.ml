@@ -37,6 +37,11 @@ let entries_of_cfg insn_cfg =
       else accu)
     insn_cfg (Addr.Hash_set.create ())
 
+(* TODO: 
+   2) Cases where chance-orderings of entry iteration may cause one
+   entry to be within another, but get skipped due to the way that
+   conflicts_within_insn_at function works.
+*)
 let conflicts_of_entries entries insn_map =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:

@@ -10,17 +10,19 @@ type metrics = {
   detected_insn_count : int;
   false_negatives     : int;
   false_positives     : int;
-  extenuating_loss    : int option;
-  total_actual_insns  : int option;
+  detected_entries    : int;
+  actual_entries      : int;
 }
 
 let format_standard metrics =
   match metrics with 
   | Some metrics -> 
-    sprintf "%s%d\n%s%d\n%s%d\n" 
+    sprintf "%s%d\n%s%d\n%s%d\n%s%d\n%s%d\n" 
       "Total instructions recovered: " metrics.detected_insn_count
       "False negatives: " metrics.false_negatives
       "False positives: " metrics.false_positives
+      "Detected function entrances: " metrics.detected_entries
+      "Actual function entrances: " metrics.actual_entries
   | None -> sprintf "No metrics gathered!"
 
 let format_latex metrics = ""
@@ -30,36 +32,31 @@ let gather_metrics ~ground_truth cfg metrics =
       detected_insn_count = 0;
       false_negatives     = 0;
       false_positives     = 0;
-      extenuating_loss    = None;
-      total_actual_insns  = None;      
+      detected_entries    = 0;
+      actual_entries      = 0;
     } in
   let function_starts = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
       ground_truth |> ok_exn in
-  let (ground_truth, total_actual_insns) =
-    Seq.fold ~init:(Addr.Set.empty, 0)
-      function_starts ~f:(fun (all, total) tp -> 
-          Set.add all tp,total+1) in
+  let ground_truth =
+    Addr.Set.of_list @@ Seq.to_list function_starts in
   let detected_insns = 
     G.fold_vertex 
       (fun vert detected_insns -> Set.add detected_insns vert) 
       cfg Addr.Set.empty in
+  let detected_entries =
+    Set.(length (inter detected_insns ground_truth)) in
+  let missed_entrances = Set.diff ground_truth detected_insns in
   let false_negatives =
-    Set.length (Set.diff ground_truth detected_insns) in
+    Set.(length (missed_entrances)) in
   let false_positives =
-    Set.length (Set.diff detected_insns ground_truth) in
+    Set.(length (diff detected_insns ground_truth)) in
   let detected_insn_count = G.nb_vertex cfg in
-  let extenuating_loss = None in
-  let total_actual_insns = Some (total_actual_insns) in
   Some ({
-      detected_insn_count = 
-        detected_insn_count + 
-        metrics.detected_insn_count;
-      false_positives=false_positives + 
-                      metrics.false_positives;
-      false_negatives=false_negatives + 
-                      metrics.false_negatives;
-      extenuating_loss;
-      total_actual_insns;
+      detected_insn_count = detected_insn_count + metrics.detected_insn_count;
+      false_positives     = false_positives + metrics.false_positives;
+      false_negatives     = false_negatives + metrics.false_negatives;
+      detected_entries    = metrics.detected_entries + detected_entries;
+      actual_entries      = metrics.actual_entries + (Set.length ground_truth);
     })
 
 module Opts = struct 

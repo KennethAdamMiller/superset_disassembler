@@ -5,6 +5,7 @@ open Or_error.Monad_infix
 open Insn_cfg
 
 type t = Insn_cfg.t
+(* TODO need to use a table for is_exec_ok for some binaries *)
 let is_exec_ok gmem_min gmem_max addr =
   Addr.(addr >= gmem_min && addr <= gmem_max)
 
@@ -46,9 +47,11 @@ let cfg_of_shingles ?superset_cfg ?brancher shingles gmem arch =
               | Some(target) -> 
                 if is_non_code target insn then
                   G.add_edge superset_cfg bad src
+                else if Addr.(target = bad) then
+                  G.add_edge superset_cfg bad src
                 else 
                   G.add_edge superset_cfg target src
-              | None -> () (* G.add_edge superset_cfg bad src*)
+              | None -> ()
             )
       | None -> 
         G.add_edge superset_cfg bad src

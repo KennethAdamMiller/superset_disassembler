@@ -22,9 +22,6 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
       | Tree_set -> Sheathed.sheaths_of_file ~backend
       | Sheered_tree_set -> Sheathed.sheered_sheaths_of_file ~backend
     in
-    (* TODO result of sheathed disasm functions types are not
-       consistent with `execute_disasm options sheathed` being able to
-       use the results *)
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in

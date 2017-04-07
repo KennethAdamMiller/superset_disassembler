@@ -19,7 +19,7 @@ let read_addrs ic : addr list =
 
 let ground_truth_of_unstripped_bin bin : addr seq Or_error.t =
   let tmp = Filename.temp_file "bw_" ".symbol" in
-  let cmd = sprintf "bap-byteweight dump -i %s %S > %S" "symbols"
+  let cmd = sprintf "bap-byteweight dump -i symbols %S > %S" 
       bin tmp in
   if Sys.command cmd = 0
   then return (Seq.of_list @@ In_channel.with_file tmp ~f:read_addrs)

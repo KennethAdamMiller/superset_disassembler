@@ -122,7 +122,7 @@ let test_construct_entry_conflict test_ctxt =
   let entry = Addr.(of_int ~width 1) in
   test_entry_conflict_of_len entry conflict_len
 
-(* This tests variations on the tail location and range of total *)
+(* len tests variations on the tail location and range of total *)
 (* conflicts for a given tail can still be found by the algorithm *)
 let test_tail_construction test_ctxt =
   let rec test_tail_construction_with entry tail conflict_len =
@@ -269,7 +269,7 @@ let test_scc test_ctxt =
   let entry = Addr.(of_int ~width 1) in
   Insn_cfg.G.add_edge insn_cfg zero entry;
   let components = Insn_cfg.StrongComponents.scc_list insn_cfg in
-  let components = Sheathed.filter_components components in
+  let components = Sheathed.filter_components insn_cfg components in
   assert_equal ~msg:"found non scc component" 0 (Set.length components)
 
 let test_find_conflicts test_ctxt = 

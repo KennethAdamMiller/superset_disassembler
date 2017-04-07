@@ -25,11 +25,7 @@ let sheer insn_map cfg arch =
         ) in
   let to_remove = Set.diff to_remove keep in
   let bad = bad_of_arch arch in
-  Set.iter to_remove
-    ~f:(fun vert -> 
-        printf "bad: %s\n" (Addr.to_string bad);
-        G.add_edge cfg bad vert;
-      );
+  Set.iter to_remove ~f:(G.add_edge cfg bad);
   Shingled.sheer insn_map cfg arch
 
 let sheaths_of_file ?(backend="llvm") bin = 
