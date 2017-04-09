@@ -8,7 +8,7 @@ open Cmdoptions
 
 let () = Pervasives.ignore(Plugins.load ())
 
-type shingled_disasm = | Sheered_disasm
+type shingled_disasm = | Trimmed_disasm
                        | Superset_disasm
 [@@deriving sexp]
 
@@ -19,8 +19,8 @@ module Program(Conf : Provider with type kind = shingled_disasm)  = struct
   let main () =
     let backend = options.disassembler in
     let shingled = match options.disasm_method with
-      | Superset_disasm -> Shingled.shingled_cfg_of_file ~backend
-      | Sheered_disasm ->  Shingled.sheered_cfg_of_file  ~backend
+      | Superset_disasm -> Shingled.superset_cfg_of_file ~backend
+      | Trimmed_disasm ->  Shingled.trimmed_cfg_of_file  ~backend
     in
     let shingled = shingled in
     let format = match options.metrics_format with
@@ -56,14 +56,14 @@ module Cmdline = struct
 
   let list_disasm_methods = [
     "superset", Superset_disasm;
-    "sheered" , Sheered_disasm;
+    "trimmed" , Trimmed_disasm;
   ]
   let list_disasm_methods_doc = sprintf
       "Select of the the following disassembly methods: %s" @@ 
     Arg.doc_alts_enum list_disasm_methods
   let disasm_method = 
     Arg.(required & opt (some (enum list_disasm_methods))
-           (Some Sheered_disasm) 
+           (Some Trimmed_disasm) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
   let create disassembler ground_truth input_kind 

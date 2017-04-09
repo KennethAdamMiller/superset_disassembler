@@ -292,7 +292,7 @@ let test_find_conflicts test_ctxt =
       assert_equal ~msg (Set.mem conflicts addr) true
     )
 
-let test_sheer_scc test_ctxt = 
+let test_trim_scc test_ctxt = 
   let insn_map, insn_cfg = init () in
   let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
@@ -307,7 +307,7 @@ let test_sheer_scc test_ctxt =
   Insn_cfg.G.iter_vertex (fun vert -> 
       if not (Hash_set.mem loop_points vert) then 
         Hash_set.add conflicts_added vert) insn_cfg;
-  let insn_map, insn_cfg = Sheathed.sheer insn_map insn_cfg arch in
+  let insn_map, insn_cfg = Sheathed.trim insn_map insn_cfg arch in
   let conflicts_added_str = List.to_string ~f:Addr.to_string @@ 
     Hash_set.to_list conflicts_added in
   let removed_msg = "of conflicts " ^ conflicts_added_str 
@@ -320,7 +320,7 @@ let test_sheer_scc test_ctxt =
       assert_equal ~msg:removed_map true
       @@ not (Addr.Map.mem insn_map addr);
     );
-  let loop_msg = "loop addr should remain during tail sheer" in
+  let loop_msg = "loop addr should remain during tail trim" in
   Hash_set.iter loop_points ~f:(fun addr -> 
       assert_equal ~msg:loop_msg true @@ Insn_cfg.G.mem_vertex insn_cfg addr);
   let map_non_subset = "addr in map but not in graph" in
@@ -339,7 +339,7 @@ let test_sheer_scc test_ctxt =
 
 (* This is an extension of the sheering test wherein a double *)
 (* interpretation within a strongly connected component has ancestors. *)
-let test_extenuating_sheer_scc test_ctxt = ()
+let test_extenuating_scc test_ctxt = ()
 
 let test_decision_construction_combinatorics test_ctxt = ()
 
@@ -365,8 +365,8 @@ let () =
       "test_loop_scc" >:: test_loop_scc;
       "test_find_conflicts" >:: test_find_conflicts;
       "test_scc" >:: test_scc;
-      "test_sheer_scc" >:: test_sheer_scc;
-      "test_extenuating_sheer_scc" >:: test_extenuating_sheer_scc;
+      "test_trim_scc" >:: test_trim_scc;
+      "test_extenuating_scc" >:: test_extenuating_scc;
       "test_decision_construction_combinatorics"
       >:: test_decision_construction_combinatorics;
     ] in

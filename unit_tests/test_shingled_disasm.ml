@@ -46,11 +46,11 @@ let test_sheers test_ctxt =
   let memory, arch = make_params "\x2d\xdd\xc3\x54\x55" in
   Pervasives.ignore (Superset.disasm
                        ~accu:[] ~f:List.cons arch memory >>| fun insns ->
-                     let superset_cfg = Shingled.cfg_of_shingles
+                     let superset_cfg = Shingled.rcfg_of_superset
                          insns memory arch in
-                     let insn_map = Shingled.shingled_to_map
+                     let insn_map = Shingled.superset_to_map
                          insns Addr.Map.empty superset_cfg in
-                     let insn_map, sheered_shingles = Shingled.sheer insn_map superset_cfg arch in
+                     let insn_map, sheered_shingles = Shingled.trim insn_map superset_cfg arch in
                      (* the above is a byte sequence no compiler would produce. The
                         sheering algorithm would therefore wipe all
                         clean  *)
@@ -96,8 +96,8 @@ let test_shingled_of_superset test_ctxt =
   let memory, arch = make_params "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
   let insns = Superset.disasm ~accu:[] ~f:List.cons arch memory
               |> ok_exn in
-  let insn_cfg = Shingled.cfg_of_shingles insns memory arch in
-  let insn_map = Shingled.shingled_to_map insns Addr.Map.empty insn_cfg in
+  let insn_cfg = Shingled.rcfg_of_superset insns memory arch in
+  let insn_map = Shingled.superset_to_map insns Addr.Map.empty insn_cfg in
   let msg = "insn in cfg but not in map after shingled of superset" in
   Insn_cfg.G.iter_vertex (fun v -> 
       let msg = msg ^ Addr.to_string v in

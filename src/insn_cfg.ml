@@ -46,12 +46,16 @@ let conflicts_within_insn_at ?conflicts insn_map addr =
     within_insn conflicts insn_map Addr.(addr ++ 1) len
   | None -> conflicts
 
+let conflicts_within_insns insn_map keep =
+  Set.fold keep ~init:Addr.Set.empty
+    ~f:(fun to_remove addr -> 
+        conflicts_within_insn_at 
+          ~conflicts:to_remove insn_map addr
+      )
+
 let find_all_conflicts insn_map insn_cfg =
-  Addr.Map.fold ~init:Addr.Set.empty
-    ~f:(fun ~key ~data conflicts -> 
-        let insn_addr = key in
-        conflicts_within_insn_at ~conflicts insn_map insn_addr
-      ) insn_map
+  let addrs = Addr.Set.of_list @@ Addr.Map.keys insn_map in
+  conflicts_within_insns insn_map addrs
 
 let seq_of_addr_range addr len = 
   let open Seq.Generator in
@@ -67,3 +71,9 @@ let seq_of_addr_range addr len =
 let range_seq_of_conflicts insn_map addr len = 
   let range_seq = seq_of_addr_range Addr.(succ addr) len in
   Seq.filter range_seq ~f:Addr.Map.(mem insn_map)
+
+let seq_of_all_conflicts insn_map insn_cfg = 
+  let insn_map_seq = Addr.Map.to_sequence insn_map in
+  Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 
+      range_seq_of_conflicts insn_map addr (Memory.length mem)
+    )

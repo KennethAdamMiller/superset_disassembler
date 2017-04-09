@@ -19,6 +19,8 @@ val disasm : ?backend:string -> accu:'a -> f:(maybe_insn -> 'a -> 'a) ->
 val memmap_all : ?backend:string -> arch -> mem
   -> (Dis.asm, Dis.kinds) Dis.insn memmap
 
+val lift_insn : (mem -> full_insn -> bil Or_error.t) -> maybe_insn -> (mem * bil) option
+
 val lift : arch -> t_full -> (bil * int) Addr.Map.t
 
 module With_exn : sig

@@ -22,14 +22,12 @@ let run dis ~accu ~f mem =
     match prev_chunk mem ~addr:(Memory.min_addr cur_mem) with
     | Ok next -> disasm (f elem accu) next
     | Error _ -> (f elem accu) in
-  match Memory.view mem ~from:(Memory.max_addr mem) with
-  | Ok cur_mem -> Ok (disasm accu cur_mem)
-  | Error err -> Error err
+  Memory.view mem ~from:(Memory.max_addr mem) >>| disasm accu
 
 let disasm ?(backend="llvm") ~accu ~f arch mem =
   Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun d -> run d ~accu ~f mem)
 
-let lift lift_fn (mem,insn) =
+let lift_insn lift_fn (mem,insn) =
   let lift_fn = lift_fn mem in
   let insn = Option.map insn ~f:lift_fn in
   Option.map insn ~f:(fun bil -> (mem, bil |> ok_exn))
@@ -40,7 +38,7 @@ let lift arch insns =
   let lifted_superset = Addr.Map.empty in
   List.fold insns ~init:lifted_superset
     ~f:(fun lifted_superset (mem, insn) -> 
-        match lift lifter (mem, insn) with
+        match lift_insn lifter (mem, insn) with
         | Some (mem, bil) -> 
           Map.add lifted_superset ~key:(Memory.min_addr mem)
             ~data:(bil, Memory.length mem)

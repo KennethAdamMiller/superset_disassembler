@@ -20,7 +20,7 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
     let backend = options.disassembler in
     let sheathed = match options.disasm_method with
       | Tree_set -> Sheathed.sheaths_of_file ~backend
-      | Sheered_tree_set -> Sheathed.sheered_sheaths_of_file ~backend
+      | Sheered_tree_set -> Sheathed.trimmed_sheaths_of_file ~backend
     in
     let format = match options.metrics_format with
       | Latex -> format_latex
