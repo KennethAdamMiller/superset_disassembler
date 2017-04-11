@@ -43,6 +43,10 @@ let gather_metrics ~ground_truth cfg metrics =
     G.fold_vertex 
       (fun vert detected_insns -> Set.add detected_insns vert) 
       cfg Addr.Set.empty in
+  let missed_set = Set.diff ground_truth detected_insns in
+  if not (Set.length missed_set = 0) then
+    printf "Missed function entrances %s\n" 
+      (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in

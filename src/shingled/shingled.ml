@@ -65,6 +65,7 @@ let rcfg_of_superset ?superset_cfg ?brancher superset gmem arch =
       let src = Memory.min_addr mem in
       match insn with
       | Some(insn) ->
+        G.add_vertex superset_cfg src;
         let targets = get_targets mem insn in
         List.iter targets
           ~f:(fun (target,_) ->
@@ -152,13 +153,13 @@ let superset_cfg_of_img ?superset_cfg ~backend img =
         superset_cfg_of_mem ~insn_map ~superset_cfg ~backend arch mem
       )
 
-let superset_cfg_of_file ~backend binary = 
+let superset_disasm_of_file ~backend binary = 
   let img  = Common.img_of_filename binary in
   let arch = Image.arch img in
   let (insn_map, cfg) = superset_cfg_of_img ~backend img in
   (arch, insn_map, cfg)
 
-let trimmed_cfg_of_file ~backend file =
-  let (arch, insn_map, cfg) = superset_cfg_of_file ~backend file in
+let trimmed_disasm_of_file ~backend file =
+  let (arch, insn_map, cfg) = superset_disasm_of_file ~backend file in
   let insn_map, cfg = trim insn_map cfg arch in
   arch, insn_map, cfg

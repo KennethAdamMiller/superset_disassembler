@@ -59,9 +59,9 @@ let memmap_all ?backend arch mem =
 
 (* component returns the set of jump points and destinations *)
 type indirections = (addr * edge) list Addr.Table.t
-let all_indirections brancher shingles =
+let all_indirections brancher superset =
   let dests = Addr.Table.create () in
-  List.iter shingles ~f:(function
+  List.iter superset ~f:(function
       | _,None -> ()
       | mem,Some insn ->
         Brancher.resolve brancher mem insn |> List.iter ~f:(function

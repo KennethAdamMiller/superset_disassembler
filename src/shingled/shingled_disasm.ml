@@ -18,16 +18,15 @@ module Program(Conf : Provider with type kind = shingled_disasm)  = struct
 
   let main () =
     let backend = options.disassembler in
-    let shingled = match options.disasm_method with
+    let disasm_with = match options.disasm_method with
       | Superset_disasm -> Shingled.superset_cfg_of_file ~backend
       | Trimmed_disasm ->  Shingled.trimmed_cfg_of_file  ~backend
     in
-    let shingled = shingled in
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
     let collect accu bin =
-      let (arch, insn_map, cfg) = shingled bin in
+      let (arch, insn_map, cfg) = disasm_with bin in
       (match options.content with
        | Some content -> 
          List.iter content ~f:(function

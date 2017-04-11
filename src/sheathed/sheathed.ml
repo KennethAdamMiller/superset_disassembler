@@ -56,13 +56,13 @@ let trim insn_map cfg arch =
 
 let sheaths_of_file ?(backend="llvm") bin = 
   let arch, insn_map, superset = Shingled.trimmed_cfg_of_file ~backend bin in
-  insn_map, superset, Sheath_tree_set.decision_trees_of_shingles superset insn_map
+  insn_map, superset, Sheath_tree_set.decision_trees_of_superset superset insn_map
 
 let trimmed_sheaths_of_file ?(backend="llvm") bin =
   let arch, insn_map, trimmed_cfg =
     Shingled.trimmed_cfg_of_file ~backend bin in
   let insn_map, insn_cfg = trim insn_map trimmed_cfg arch in
-  insn_map, insn_cfg, Sheath_tree_set.decision_trees_of_shingles insn_cfg insn_map
+  insn_map, insn_cfg, Sheath_tree_set.decision_trees_of_superset insn_cfg insn_map
 
 (* TODO test the below functions *)
 let iter_decision_set ?(backend="llvm") bin ~f = 

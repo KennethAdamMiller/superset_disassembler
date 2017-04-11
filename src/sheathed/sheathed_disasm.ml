@@ -11,7 +11,7 @@ let () = Pervasives.ignore(Plugins.load ())
 
 type sheathed_disasm = 
   | Tree_set
-  | Sheered_tree_set 
+  | Trimmed_tree_set 
 
 module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
   open Conf
@@ -20,7 +20,7 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
     let backend = options.disassembler in
     let sheathed = match options.disasm_method with
       | Tree_set -> Sheathed.sheaths_of_file ~backend
-      | Sheered_tree_set -> Sheathed.trimmed_sheaths_of_file ~backend
+      | Trimmed_tree_set -> Sheathed.trimmed_sheaths_of_file ~backend
     in
     let format = match options.metrics_format with
       | Latex -> format_latex
@@ -63,14 +63,14 @@ module Cmdline = struct
 
   let list_disasm_methods = [
     "tree_set", Tree_set;
-    "sheered_tree_set" , Sheered_tree_set;
+    "trimmed_tree_set" , Trimmed_tree_set;
   ]
   let list_disasm_methods_doc = sprintf
       "Select of the the following disassembly methods: %s" @@ 
     Arg.doc_alts_enum list_disasm_methods
   let disasm_method = 
     Arg.(required & opt (some (enum list_disasm_methods))
-           (Some Sheered_tree_set) 
+           (Some Trimmed_tree_set) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
   let create content disassembler ground_truth input_kind disasm_method metrics_format = 
@@ -88,9 +88,8 @@ module Cmdline = struct
         Arg.doc_alts_enum backends in
       Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
 
-  (* TODO can probably move this into provider *)
   let program () =
-    let doc = "Extended sheath sheering superset disassembler" in
+    let doc = "Extended superset disassembler for constructing decision trees" in
     let man = [
       `S "SYNOPSIS";
       `Pre "

@@ -28,7 +28,6 @@ type 'a t = {
 module type Provider = sig
   type kind
   val options : kind t
-  (* TODO require program, and provide parse *)
 end
 
 

@@ -153,7 +153,7 @@ let decision_tree_of_entries conflicted_entries tails insn_cfg =
 
 (** Accepts a per instruction control flow graph, and a map from addr *)
 (** to (insn, mem) *)
-let decision_trees_of_shingles insn_cfg insn_map = 
+let decision_trees_of_superset insn_cfg insn_map = 
   (* Here, for each vertex, look up the insn from the map and *)
   (* identify conflicts. *)
   let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
