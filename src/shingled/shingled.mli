@@ -27,10 +27,10 @@ val with_img :  accu:'a -> backend:string -> Image.t ->
   f:(accu:'a -> backend:string -> Bap.Std.arch -> Bap.Std.mem ->
      'a Or_error.t) -> 'a
 
-val superset_cfg_of_img : ?superset_cfg:t -> backend:string -> Image.t ->
+val superset_disasm_of_img : ?superset_cfg:t -> backend:string -> Image.t ->
   Superset.maybe_insn Addr.Map.t * t
 
-val superset_cfg_of_file : backend:string -> Image.path -> 
+val superset_disasm_of_file : backend:string -> Image.path -> 
   (arch * Superset.maybe_insn Addr.Map.t * t)
-val trimmed_cfg_of_file : backend:string -> Image.path -> 
+val trimmed_disasm_of_file : backend:string -> Image.path -> 
   (arch * Superset.maybe_insn Addr.Map.t * t)

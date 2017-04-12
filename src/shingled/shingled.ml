@@ -86,7 +86,6 @@ let rcfg_of_superset ?superset_cfg ?brancher superset gmem arch =
     );
   superset_cfg
 
-  print_endline "Shingled.sheer";
 let trim insn_map superset_cfg arch =
   let bad = bad_of_arch arch in
   (* TODO Probably would do better with to_drop being a list *)
@@ -103,7 +102,6 @@ let trim insn_map superset_cfg arch =
   ) else
     insn_map, superset_cfg
 
-  print_endline "shingled_to_map";
 let superset_to_map superset insn_map insn_cfg = 
   print_endline "superset_to_map";
   List.fold_left ~init:insn_map superset
@@ -144,8 +142,7 @@ let with_img ~accu ~backend img ~f =
       else accu 
     )
 
-  print_endline "shingled_cfg_of_img";
-let superset_cfg_of_img ?superset_cfg ~backend img =
+let superset_disasm_of_img ?superset_cfg ~backend img =
   let superset_cfg = Option.value superset_cfg ~default:(G.create ()) in
   with_img ~accu:(Addr.Map.empty, superset_cfg) ~backend img
     ~f:(fun ~accu ~backend arch mem -> 
@@ -156,7 +153,7 @@ let superset_cfg_of_img ?superset_cfg ~backend img =
 let superset_disasm_of_file ~backend binary = 
   let img  = Common.img_of_filename binary in
   let arch = Image.arch img in
-  let (insn_map, cfg) = superset_cfg_of_img ~backend img in
+  let (insn_map, cfg) = superset_disasm_of_img ~backend img in
   (arch, insn_map, cfg)
 
 let trimmed_disasm_of_file ~backend file =

@@ -19,8 +19,8 @@ module Program(Conf : Provider with type kind = shingled_disasm)  = struct
   let main () =
     let backend = options.disassembler in
     let disasm_with = match options.disasm_method with
-      | Superset_disasm -> Shingled.superset_cfg_of_file ~backend
-      | Trimmed_disasm ->  Shingled.trimmed_cfg_of_file  ~backend
+      | Superset_disasm -> Shingled.superset_disasm_of_file ~backend
+      | Trimmed_disasm ->  Shingled.trimmed_disasm_of_file  ~backend
     in
     let format = match options.metrics_format with
       | Latex -> format_latex
