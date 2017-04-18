@@ -26,7 +26,7 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
       | Latex -> format_latex
       | Standard -> format_standard in
     let collect accu bin =
-      let (insns, cfg, decision_trees) = sheathed bin in
+      let (insn_map, cfg, decision_trees) = sheathed bin in
       (match options.content with
        | Some content -> 
          List.iter content ~f:(function
@@ -36,13 +36,13 @@ module Program(Conf : Provider with type kind = sheathed_disasm)  = struct
                  @@ Addr.Map.sexp_of_t 
                    (Tuple2.sexp_of_t Memory.sexp_of_t
                       (Option.sexp_of_t @@ Disasm_expert.Basic.Insn.sexp_of_t))
-                   insns in
+                   insn_map in
                print_endline map_str
            )
        | None -> ());
       match options.ground_truth with
       | Some ground_truth -> 
-        gather_metrics ~ground_truth cfg accu
+        gather_metrics ~ground_truth insn_map cfg accu
       | None -> accu in
     (* TODO Should explore the possibility to abuse the cmd options
        by passing in the wrong filesystem kinds to the options *)

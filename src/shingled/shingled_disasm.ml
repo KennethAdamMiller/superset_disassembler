@@ -35,7 +35,7 @@ module Program(Conf : Provider with type kind = shingled_disasm)  = struct
        | None -> ());
       match options.ground_truth with
       | Some ground_truth -> 
-        gather_metrics ~ground_truth cfg accu
+        gather_metrics ~ground_truth insn_map cfg accu
       | None -> accu in
     match options.input_kind with
     | Binary bin -> 

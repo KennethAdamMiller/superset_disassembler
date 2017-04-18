@@ -7,11 +7,13 @@ type format_as   = | Latex
 [@@deriving sexp]
 
 type metrics = {
+  name                : string;
   detected_insn_count : int;
   false_negatives     : int;
   false_positives     : int;
   detected_entries    : int;
   actual_entries      : int;
+  trimmed             : int list;
 }
 
 let format_standard metrics =
@@ -23,17 +25,31 @@ let format_standard metrics =
       "False positives: " metrics.false_positives
       "Detected function entrances: " metrics.detected_entries
       "Actual function entrances: " metrics.actual_entries
-  | None -> sprintf "No metrics gathered!"
+  | None -> "No metrics gathered!"
 
-let format_latex metrics = ""
+let format_latex metrics = 
+  match metrics with
+  | Some metrics ->
+    (match metrics.trimmed with
+     | (phase1 :: phase2 :: _) ->
+       sprintf "%s & %d & %d & %d & %d \\\\\n"
+         metrics.name
+         metrics.false_negatives
+         phase1
+         phase2
+         metrics.detected_insn_count;
+     | _ -> "Missing trim phases")
+  | None -> "No metrics gathered!"
 
-let gather_metrics ~ground_truth cfg metrics =
+let gather_metrics ~ground_truth insn_map cfg metrics =
   let metrics = Option.value metrics ~default:{
+      name = ground_truth;
       detected_insn_count = 0;
       false_negatives     = 0;
       false_positives     = 0;
       detected_entries    = 0;
       actual_entries      = 0;
+      trimmed             = [];
     } in
   let function_starts = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
       ground_truth |> ok_exn in
@@ -56,11 +72,14 @@ let gather_metrics ~ground_truth cfg metrics =
     Set.(length (diff detected_insns ground_truth)) in
   let detected_insn_count = G.nb_vertex cfg in
   Some ({
+      name                = metrics.name;
       detected_insn_count = detected_insn_count + metrics.detected_insn_count;
       false_positives     = false_positives + metrics.false_positives;
       false_negatives     = false_negatives + metrics.false_negatives;
       detected_entries    = metrics.detected_entries + detected_entries;
-      actual_entries      = metrics.actual_entries + (Set.length ground_truth);
+      actual_entries      = metrics.actual_entries
+                            + (Set.length ground_truth);
+      trimmed             = metrics.trimmed;
     })
 
 module Opts = struct 
