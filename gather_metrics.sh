@@ -1,0 +1,1 @@
+find ~/workspace/x86_64-binaries/elf/binutils -type f -exec zsh -c 'echo $(basename {}) ; ~/workspace/sheering_disassembler/sheathed_disasm.native --ground_truth {} --target /Users/kennethadammiller/workspace/x86_64-binaries/elf_stripped/binutils/$(basename {})' \;
