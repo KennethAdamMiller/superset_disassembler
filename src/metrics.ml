@@ -63,6 +63,8 @@ let gather_metrics ~ground_truth insn_map cfg metrics =
   if not (Set.length missed_set = 0) then
     printf "Missed function entrances %s\n" 
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
+  printf "Occlusion: %d\n" 
+    (Set.length @@ Insn_cfg.find_all_conflicts insn_map cfg);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in

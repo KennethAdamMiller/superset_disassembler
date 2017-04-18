@@ -97,8 +97,11 @@ let trim insn_map superset_cfg arch =
             G.remove_vertex superset_cfg v;
             Addr.Map.remove insn_map v
           ) in
+    printf "trim removing: %d\n" Hash_set.(length to_drop);
     G.remove_vertex superset_cfg bad;
     Addr.Map.remove insn_map bad, superset_cfg
+    (* TODO: iterate over the cfg, and every vertex not in the map,
+       point bad at it. *)
   ) else
     insn_map, superset_cfg
 
@@ -115,7 +118,7 @@ let superset_to_map superset insn_map insn_cfg =
 (* TODO refactor superset_cfg_of_mem to use with_mem *)
 let superset_cfg_of_mem 
     ?insn_map ?superset_cfg ?brancher ?backend arch mem =
-  print_endline "shingled_cfg_of_mem";
+  printf "superset_cfg_of_mem of size %d \n" Memory.(length mem);
   Superset.disasm ?backend ~accu:[] ~f:List.cons arch mem >>|
   fun insns -> (
     let insn_map = Option.value insn_map ~default:Addr.Map.empty in
