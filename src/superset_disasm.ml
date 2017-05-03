@@ -3,59 +3,81 @@ open Bap.Std
 open Bap_plugins.Std
 open Or_error
 open Format
-open Metrics
 open Cmdoptions
+open Metrics
+open Metrics.Opts
 
 let () = Pervasives.ignore(Plugins.load ())
 
-type shingled_disasm = | Trimmed_disasm
-                       | Superset_disasm
-[@@deriving sexp]
+type superset_disasm =
+  | Superset_disasm
+  | Trimmed_disasm
+  | Tree_set
+  | Trimmed_tree_set 
 
-module Program(Conf : Provider with type kind = shingled_disasm)  = struct
+module Program(Conf : Provider with type kind = superset_disasm)  = struct
   open Conf
-  open Metrics
 
   let main () =
     let backend = options.disassembler in
-    let disasm_with = match options.disasm_method with
-      | Superset_disasm -> Shingled.superset_disasm_of_file ~backend
-      | Trimmed_disasm ->  Shingled.trimmed_disasm_of_file  ~backend
+    let dis_method = match options.disasm_method with
+      | Superset_disasm -> 
+        (fun x -> Superset.superset_disasm_of_file ~backend x, None)
+      | Trimmed_disasm -> (fun x -> Sheathed.trimmed_disasm_of_file ~backend x, None)
+      | Tree_set -> (fun x -> 
+          let superset, trees = 
+            Sheathed.sheaths_of_file ~backend x in 
+          superset, Some(trees))
+      | Trimmed_tree_set -> (fun x -> 
+          let superset, trees = 
+            Sheathed.trimmed_sheaths_of_file ~backend x in
+          superset, Some(trees))
     in
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
     let collect accu bin =
-      let (arch, insn_map, cfg) = disasm_with bin in
+      let open Superset in
+      let (superset, decision_trees) = dis_method bin in
       (match options.content with
        | Some content -> 
          List.iter content ~f:(function
-             | Cfg -> Insn_cfg.Gml.print std_formatter cfg
-             | _ -> ())
+             | Cfg -> Superset_rcfg.Gml.print std_formatter superset.insn_rcfg
+             | Insn_map -> 
+               let map_str = Sexp.to_string
+                 @@ Addr.Map.sexp_of_t 
+                   (Tuple2.sexp_of_t Memory.sexp_of_t
+                      Disasm_expert.Basic.Insn.sexp_of_t)
+                   superset.insn_map in
+               print_endline map_str
+           )
        | None -> ());
       match options.ground_truth with
       | Some ground_truth -> 
-        gather_metrics ~ground_truth insn_map cfg accu
+        gather_metrics ~ground_truth superset.insn_map superset.insn_rcfg accu
       | None -> accu in
+    (* TODO Should explore the possibility to abuse the cmd options
+       by passing in the wrong filesystem kinds to the options *)
     match options.input_kind with
     | Binary bin -> 
-      print_endline @@ format @@ 
-      collect None bin
+      (* Output the results of disassembly *)
+      let metrics = collect None bin in
+      format metrics |> print_endline
     | Corpora_folder corpdir -> 
       print_endline @@ format @@ 
       Common.process_corpora ~corpdir collect
-
 
 end
 
 module Cmdline = struct
   open Cmdliner
-  open Metrics.Opts
   open Insn_disasm_benchmark
 
   let list_disasm_methods = [
     "superset", Superset_disasm;
-    "trimmed" , Trimmed_disasm;
+    "trimmed", Trimmed_disasm;
+    "tree_set", Tree_set;
+    "trimmed_tree_set" , Trimmed_tree_set;
   ]
   let list_disasm_methods_doc = sprintf
       "Select of the the following disassembly methods: %s" @@ 
@@ -65,10 +87,8 @@ module Cmdline = struct
            (Some Trimmed_disasm) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
-  let create disassembler ground_truth input_kind 
-      disasm_method metrics_format content = 
-    Fields.create ~disassembler ~ground_truth ~input_kind ~
-      disasm_method ~metrics_format ~content
+  let create content disassembler ground_truth input_kind disasm_method metrics_format = 
+    Fields.create ~content ~disassembler ~ground_truth ~input_kind ~disasm_method ~metrics_format
 
   (* TODO eliminate this through bap usage *)
   let disassembler () : string Term.t =
@@ -83,31 +103,26 @@ module Cmdline = struct
       Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
 
   let program () =
-    let doc = "Extended shingled sheering superset disassembler" in
+    let doc = "Extended superset disassembler for constructing decision trees" in
     let man = [
       `S "SYNOPSIS";
       `Pre "
- $(b,$mname) [FORMAT/METRICS/BACKEND/DISASM_METHOD OPTION] --target=FILE/DIR ";
+ $(b,$mname) [FORMAT/METRICS/DISASM_METHOD OPTION]
+  [--ground_truth=FILE/DIR] --target=FILE/DIR ";
       `S "DESCRIPTION";
       `P
         "Given a binary, or a corpora folder location, will
     disassemble using the extended sheering techniques according to
-    what is sepecified to construct the output that is desired and
-    release that information to the specified location.";
+    what is sepecified before formatting as requested and finally
+    releasing that information to the specified location.";
       `S "OPTIONS";
     ](* TODO test and curate the following for version, help and other opations
         @ Bap_cmdline_terms.common_loader_options *) 
     in
     Term.(const create 
-          $(disassembler ()) $ground_truth $input_kind $disasm_method
-          $metrics_format $content),
-    Term.info "shingled_disasm" ~doc ~man ~version:Config.version
-
-
-  let print_data_formats t = 
-    match t with
-    | Standard -> printf "Standard: print metrics output to stdout"
-    | Latex -> printf "Latex: metrics output to a latex parsable data file"
+          $content $(disassembler ()) $ground_truth $input_kind $disasm_method
+          $metrics_format),
+    Term.info "superset_disasm" ~doc ~man ~version:Config.version
 
   let parse argv =
     match Term.eval ~argv (program ()) ~catch:false with
@@ -121,8 +136,8 @@ let exitf n =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
 
 let start options = 
-  let module Program = Program(struct 
-      type kind = shingled_disasm
+  let module Program = Program(struct
+      type kind = superset_disasm
       let options = options
     end) in
   return @@ Program.main ()

@@ -21,13 +21,19 @@ module Gml        = Gml.Print(G)(struct
     let edge (label : G.E.label) = [ ]
   end)
 
-let bad_of_arch arch = 
-  G.V.create (Addr.of_int
-                ~width:(Size.in_bits @@ Arch.addr_size arch) 0)
-
-let bad_of_addr addr =
-  G.V.create (Addr.of_int
-                ~width:(Addr.bitwidth addr) 0)
+(* TODO need to test cfg_of_superset in unit tests further *)
+let rcfg_of_raw_superset ?superset_rcfg brancher raw_superset =
+  printf "rcfg_of_raw_superset size %d\n" List.(length raw_superset);
+  let superset_rcfg = Option.value superset_rcfg ~default:(G.create ()) in
+  List.iter raw_superset ~f:(fun (mem, insn) ->
+      let src = Memory.min_addr mem in
+      let bad = Addr.of_int ~width:(Addr.bitwidth src) 0 in
+      match insn with
+      | Some(insn) ->
+        G.add_vertex superset_rcfg src;
+      | None -> G.add_edge superset_rcfg bad src;
+    );
+  superset_rcfg
 
 let conflicts_within_insn_at ?conflicts insn_map addr =
   let conflicts = Option.value conflicts ~default:Addr.Set.empty in
@@ -54,6 +60,7 @@ let conflicts_within_insns insn_map keep =
       )
 
 let find_all_conflicts insn_map insn_cfg =
+  print_endline "find_all_conflicts";
   let addrs = Addr.Set.of_list @@ Addr.Map.keys insn_map in
   conflicts_within_insns insn_map addrs
 

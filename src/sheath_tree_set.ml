@@ -2,12 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Graphlib.Std
 open Sheath
-open Insn_cfg
 open Graph
-
-(* Used for simplifying otherwise complicated cases where the *)
-(* overlapping instructions can have a block within another instruction *)
-module Block = Leaderlist.Make(Insn_cfg.G)
 
 type decision_tree = (sheath Tree.t)
 type decision_tree_set = decision_tree Addr.Map.t
@@ -20,18 +15,17 @@ type decision_tree_set = decision_tree Addr.Map.t
       enclosing decision_tree_set *)
 type t = decision_tree_set
 
-(* TODO need to test each of these functions *)
-
 let mergers_of_cfg insn_cfg = 
-  Insn_cfg.G.fold_vertex (fun addr mergers ->
-      if Insn_cfg.G.out_degree insn_cfg addr > 1 then
+  Superset_rcfg.G.fold_vertex (fun addr mergers ->
+      if Superset_rcfg.G.out_degree insn_cfg addr > 1 then
         Addr.Set.add mergers addr
       else mergers) insn_cfg Addr.Set.empty
 
 let entries_of_cfg insn_cfg = 
-  Insn_cfg.G.fold_vertex (fun addr accu ->
-      if Insn_cfg.G.in_degree insn_cfg addr  = 0 &&
-         Insn_cfg.G.out_degree insn_cfg addr > 0
+  print_endline "entries_of_cfg";
+  Superset_rcfg.G.fold_vertex (fun addr accu ->
+      if Superset_rcfg.G.in_degree insn_cfg addr  = 0 &&
+         Superset_rcfg.G.out_degree insn_cfg addr > 0
       then
         (Hash_set.add accu addr; accu)
       else accu)
@@ -48,7 +42,7 @@ let conflicts_of_entries entries insn_map =
     (fun conflicted_entries entry -> 
        if not (Hash_set.mem visited_entries entry) then (
          let in_entry_conflicts = 
-           Insn_cfg.conflicts_within_insn_at insn_map entry in
+           Superset_rcfg.conflicts_within_insn_at insn_map entry in
          let conflicts = Addr.Hash_set.create () in
          Hash_set.add visited_entries entry;          
          Hash_set.add conflicts entry;
@@ -89,14 +83,14 @@ let tails_of_conflicts conflicts insn_cfg entries =
         let f = (fun sheath poss_conflict -> 
             let is_conflict = Set.mem conflicts poss_conflict in
             let is_connected = 
-              match Insn_cfg.G.find_all_edges
+              match Superset_rcfg.G.find_all_edges
                       insn_cfg possible_tail poss_conflict with
               | [] -> false | _ -> true in
             if is_conflict && is_connected then
               poss_conflict :: sheath
             else sheath) in
         let sheath = List.fold_left
-            (Insn_cfg.G.succ insn_cfg possible_tail) ~init:[] ~f in
+            (Superset_rcfg.G.succ insn_cfg possible_tail) ~init:[] ~f in
         match sheath with
         | [] -> tails
         | sheath -> 
@@ -104,14 +98,15 @@ let tails_of_conflicts conflicts insn_cfg entries =
       ) possible_tails
 
 let decision_tree_of_entries conflicted_entries tails insn_cfg =
+  print_endline "decision_tree_of_entries";
   let visited_choices = Addr.Hash_set.create () in
   List.map conflicted_entries ~f:(fun entries ->
-      let decision_tree = Insn_cfg.G.create () in
+      let decision_tree = Superset_rcfg.G.create () in
       Hash_set.iter entries
         ~f:(fun entry ->
             let width = Addr.bitwidth entry in
             let zero = Addr.(of_int ~width 0) in
-            Insn_cfg.G.add_edge decision_tree zero entry;
+            Superset_rcfg.G.add_edge decision_tree zero entry;
             let add_choices current_vert = 
               let unvisited =
                 not (Hash_set.mem visited_choices current_vert) in
@@ -121,47 +116,49 @@ let decision_tree_of_entries conflicted_entries tails insn_cfg =
                 | Some(sheath) ->
                   List.iter sheath ~f:(fun competitor ->
                       Hash_set.add visited_choices competitor;
-                      Insn_cfg.G.add_edge decision_tree possible_tail
+                      Superset_rcfg.G.add_edge decision_tree possible_tail
                         competitor;
                     );
                 | _ -> ()
               else ();
             in
-            (* TODO need to keep track of egress nodes along the *)
-            (* way by storing them in edges *)
-            Insn_cfg.Dfs.prefix_component add_choices insn_cfg entry;
+            Superset_rcfg.Dfs.prefix_component add_choices insn_cfg entry;
             let width = Addr.bitwidth entry in
             let saved_vert = ref @@
               Addr.of_int ~width 0 in
             let link_choices current_vert = 
-              let contained = Insn_cfg.G.mem_vertex
+              let contained = Superset_rcfg.G.mem_vertex
                   decision_tree current_vert in
               let is_new = not @@ Addr.(current_vert = !saved_vert) in
               if contained && is_new then (
-                if not @@ Insn_cfg.G.mem_edge decision_tree !saved_vert
+                if not @@ Superset_rcfg.G.mem_edge decision_tree !saved_vert
                     current_vert then
-                  Insn_cfg.G.add_edge decision_tree !saved_vert
+                  Superset_rcfg.G.add_edge decision_tree !saved_vert
                     current_vert;
                 saved_vert := current_vert;
               )
             in
             (* Would like to have fold_component; version not available *)
-            Insn_cfg.Dfs.prefix_component link_choices insn_cfg entry;
+            Superset_rcfg.Dfs.prefix_component link_choices insn_cfg entry;
           );
       decision_tree
     )
 
 (** Accepts a per instruction control flow graph, and a map from addr *)
 (** to (insn, mem) *)
-let decision_trees_of_superset insn_cfg insn_map = 
+let decision_trees_of_superset superset = 
+  print_endline "decision_trees_of_superset";
+  let open Superset in
+  let insn_map = superset.insn_map in
+  let insn_rcfg = superset.insn_rcfg in
   (* Here, for each vertex, look up the insn from the map and *)
   (* identify conflicts. *)
-  let conflicts = Insn_cfg.find_all_conflicts insn_map insn_cfg in
+  let conflicts = Superset_rcfg.find_all_conflicts insn_map insn_rcfg in
   (* entries variable:
      We want to know the superset of all nodes that could be the
      terminating point that would otherwise be the return instruction
      of a function. *)
-  let entries = entries_of_cfg insn_cfg in  
+  let entries = entries_of_cfg insn_rcfg in  
   (*
      we need to keep track of the subset of potential choices 
      that fall in line with the normal control flow graph, and
@@ -170,7 +167,7 @@ let decision_trees_of_superset insn_cfg insn_map =
      instructions to check for conflicts, we know which are tails
      in order to properly construct the sheath type.
   *)
-  let tails = tails_of_conflicts conflicts insn_cfg entries in
+  let tails = tails_of_conflicts conflicts insn_rcfg entries in
   (* It may be that some entries are accidental indirections that *)
   (* happen to preside at the intended entry. These must map to to an *)
   (* entirely distinct interpretation. *)
@@ -178,5 +175,5 @@ let decision_trees_of_superset insn_cfg insn_map =
   (* For each of the potentially conflicting entries, construct a *)
   (* decision tree. *)
   let decision_trees = decision_tree_of_entries
-      conflicted_entries tails insn_cfg in
+      conflicted_entries tails insn_rcfg in
   decision_trees

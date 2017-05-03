@@ -1,4 +1,4 @@
-Binary & Function Entrances & False negatives & Phase 1 & Phase 2 & Final Count & Size & Final Occlusion \\ [0.5ex] 
+Binary & Entrances & False negatives & Phase 1 & Phase 2 & Final Count & Size & Final Occlusion \\ [0.5ex] 
  \hline\hline
 gcc\_binutils\_64\_O0\_addr2line & 1676 & 0 & 442343 & 117907 & 533061 & 1093716 & 414407 \\
 gcc\_binutils\_64\_O0\_ar & 1758 & 0 & 457760 & 121089 & 547975 & 1127228 & 426041 \\

@@ -1,14 +1,21 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
-open Or_error.Monad_infix
+open Or_error
 
 module Dis = Disasm_expert.Basic
 
-type maybe_insn = (mem * (Dis.asm, Dis.kinds) Dis.insn option)
-type maybe_full_insn = (mem * Dis.full_insn option)
-type t = maybe_insn list
-type t_full = maybe_full_insn list
+type t = {
+  img       : Image.t;
+  brancher  : Brancher.t;
+  insn_map  : (mem * Dis.full_insn) Addr.Map.t;
+  insn_rcfg : Superset_rcfg.t;
+}
+
+
+(* TODO *)
+(* empty *)
+(* merge_map, merge_rcfg *)
 
 let prev_chunk mem ~addr =
   let prev_addr = Addr.pred addr in
@@ -80,3 +87,65 @@ let barriers_of_dests dests =
         List.iter dsts ~f:(fun (addr,_) -> mark_barrier addr)
       | _ -> ());
   barriers
+
+let raw_superset_to_map ?insn_map raw_superset = 
+  print_endline "superset_to_map";
+  let insn_map = Option.value insn_map ~default:Addr.Map.empty in
+  let insn_map = List.fold_left ~init:insn_map raw_superset
+      ~f:(fun insn_map (mem, insn) ->
+          let addr = (Memory.min_addr mem) in
+          match insn with
+          | Some(insn) -> 
+            Addr.Map.add insn_map addr (mem, insn)
+          | None -> insn_map
+        ) in
+  printf "raw_superset_to_map length %d\n" Addr.Map.(length insn_map);
+  insn_map
+
+(* TODO refactor superset_cfg_of_mem to use with_mem *)
+let update_with_mem ?backend superset mem =
+  printf "superset_cfg_of_mem length %d\n" Memory.(length mem);
+  let arch = Image.arch superset.img in
+  disasm ?backend ~accu:[] ~f:List.cons arch mem >>|
+  fun raw_superset -> (
+    let superset_rcfg = superset.insn_rcfg in
+    let brancher = superset.brancher in
+    let insn_map = superset.insn_map in
+    (* raw_superset has an option because it is fresh out of mem, *)
+    (* insn_map does not because had been filtered before *)
+    let insn_map = raw_superset_to_map ~insn_map raw_superset in
+    let insn_rcfg = Superset_rcfg.rcfg_of_raw_superset
+        ~superset_rcfg brancher raw_superset in
+    { 
+      img       = superset.img;
+      brancher  = superset.brancher;
+      insn_map  = insn_map;
+      insn_rcfg = insn_rcfg;
+    }
+  )
+
+let with_img ~accu ~backend img ~f = 
+  let segments = Table.to_sequence @@ Image.segments img in
+  Seq.fold segments ~init:accu ~f:(fun accu (mem, segment) ->
+      if Image.Segment.is_executable segment then
+        (f ~accu ~backend mem |> ok_exn)
+      else accu 
+    )
+
+let superset_of_img ~backend img =
+  print_endline "superset_of_img";
+  let brancher = Brancher.of_bil @@ Image.arch img in
+  let superset = {
+    img           = img;
+    insn_rcfg     = Superset_rcfg.G.create ();
+    insn_map      = Addr.Map.empty;
+    brancher      = brancher;
+  } in
+  with_img ~accu:superset ~backend img
+    ~f:(fun ~accu ~backend mem -> 
+        update_with_mem ~backend accu mem
+      )
+
+let superset_disasm_of_file ~backend binary = 
+  let img  = Common.img_of_filename binary in
+  superset_of_img ~backend img

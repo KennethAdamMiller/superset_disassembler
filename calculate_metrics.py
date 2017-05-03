@@ -1,12 +1,19 @@
 def read_file(fname):
     with open(fname) as f:
         return [float(x) for x in f.read().splitlines()]
-    
+
 raw_superset = read_file("original_superset.txt")
 total_removed = read_file("total_removed.txt")
 loop_reduction = read_file("loop_removal.txt")
+mem_size = read_file("mem_size.txt")
+occlusion = read_file("occlusion.txt")
+
 assert len(raw_superset)==len(total_removed)
 assert len(raw_superset)==len(loop_reduction)
+print("Total binaries: ", len(mem_size))
+percent_mem=[raw / mem for raw, mem in zip(raw_superset, mem_size)]
+average_percent_mem=sum(percent_mem) / len(percent_mem)
+print("Average percent of memory", average_percent_mem)
 percent_removed = [removed / raw_size for removed, raw_size in zip(total_removed, raw_superset)]
 print("Average total removed (% of superset): ", sum(percent_removed) / len(percent_removed))
 percent_loop_removed_of_total = [ loop_body / raw_size for loop_body, raw_size in zip(loop_reduction, raw_superset)]
@@ -16,7 +23,6 @@ print("Max/Min loop removed (% of superset): ", max(percent_loop_removed_of_tota
 phase1_output = [ raw - total + loop for raw, total, loop in zip(raw_superset, total_removed, loop_reduction)]
 additional_savings = [ loop / phase1 for loop, phase1 in zip(loop_reduction, phase1_output)]
 print("Average additional reduction (% of phase 1 output): ", sum(additional_savings) / len(additional_savings))
-occlusion = read_file("occlusion.txt")
 final_total_instructions = read_file("final_total.txt")
 occlusion_percent = [rate / final_total for rate, final_total in zip(occlusion, final_total_instructions)]
 average_occlusion = sum(occlusion_percent) / len(occlusion_percent)
