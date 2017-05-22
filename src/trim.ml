@@ -2,12 +2,6 @@ open Core_kernel.Std
 open Bap.Std
 open Superset
 
-let bad_of_arch arch = 
-  Addr.of_int ~width:(Size.in_bits @@ Arch.addr_size arch) 0
-
-let bad_of_addr addr =
-  Addr.of_int ~width:(Addr.bitwidth addr) 0
-
 
 let static_successors brancher mem insn =
   try 
@@ -19,7 +13,7 @@ let static_successors brancher mem insn =
     )
 
 let addr_in_mem superset addr =
-  let segments = Table.to_sequence @@ Image.segments superset.img in
+  let segments = Table.to_sequence superset.segments in
   Seq.fold segments ~init:false ~f:(fun status (mem, segment) ->
       status || Memory.contains mem addr)
 
@@ -40,7 +34,7 @@ let find_non_mem_accesses superset =
   end)
 
 let accesses_non_mem superset mem insn = 
-  let arch = Image.arch superset.img in
+  let arch = superset.arch in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
   try
@@ -64,8 +58,7 @@ let tag_with superset ~f =
     )
 
 let tag_invalid_targets superset mem insn targets = 
-  let arch = Image.arch superset.img in
-  let bad  = bad_of_arch arch in
+  let bad  = get_bad superset in
   let src  = Memory.min_addr mem in
   List.iter targets
     ~f:(fun (target,_) ->
@@ -80,8 +73,7 @@ let tag_invalid_targets superset mem insn targets =
   superset
 
 let tag_non_insn superset mem insn targets = 
-  let arch = Image.arch superset.img in
-  let bad  = bad_of_arch arch in
+  let bad  = get_bad superset in
   let src  = Memory.min_addr mem in
   if accesses_non_mem superset mem (Some(insn)) then (
     (* The instruction reads or writes to memory that is not mapped *)
@@ -94,8 +86,7 @@ let tag_non_insn superset mem insn targets =
   superset
 
 let tag_success superset mem insn targets =
-  let arch = Image.arch superset.img in
-  let bad  = bad_of_arch arch in
+  let bad  = get_bad superset in
   let src = Memory.min_addr mem in
   List.iter targets ~f:(fun (target,_) -> 
       match target with
@@ -118,31 +109,22 @@ let tag ?funcs superset =
 
 let trim superset =
   print_endline "Trim.trim";
-  let arch = Image.arch superset.img in
   let insn_map = superset.insn_map in
   let superset_rcfg = superset.insn_rcfg in
-  let bad = bad_of_arch arch in
+  let bad  = get_bad superset in
   let module G = Superset_rcfg.G in
-  (* TODO Probably would do better with to_drop being a list *)
-  let to_drop = Addr.Hash_set.create () in
   if G.mem_vertex superset_rcfg bad then (
-    Superset_rcfg.Dfs.prefix_component (Hash_set.add to_drop) superset_rcfg bad;
-    let insn_map = Hash_set.fold to_drop ~init:insn_map 
-        ~f:(fun insn_map v -> 
-            G.remove_vertex superset_rcfg v;
-            Addr.Map.remove insn_map v
-          ) in
+    let f = G.remove_vertex superset_rcfg in
+    let orig_size = (G.nb_vertex superset_rcfg) in
+    Superset_rcfg.Dfs.postfix_component f superset_rcfg bad;
     G.remove_vertex superset_rcfg bad;
+    let trimmed_size = (G.nb_vertex superset_rcfg) in
+    let num_removed = orig_size - trimmed_size in
     printf "%d vertices after trimming, removing %d\n" 
-      (G.nb_vertex superset_rcfg)
-      (Hash_set.length to_drop);
-    let insn_map = Addr.Map.remove insn_map bad in
-    {
-      insn_rcfg = superset_rcfg;
-      img = superset.img;
-      insn_map = insn_map;
-      brancher = superset.brancher;
-    }
+      trimmed_size num_removed;
+    let insn_map = Addr.Map.filter_keys
+        insn_map ~f:(fun v -> (Superset_rcfg.G.(mem_vertex superset_rcfg v))) in
+    rebuild ~insn_map superset
   ) else
     superset
 

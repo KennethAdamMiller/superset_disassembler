@@ -9,7 +9,9 @@ open Superset
 
 let () = Pervasives.ignore(Plugins.load ())
 
-let arch = Option.value ~default:`x86 @@ Arch.of_string "x86_64";;
+let arch = Option.value ~default:`x86_64 @@ Arch.of_string "x86_64";;
+
+let segments = Table.empty
 
 let width = 8*(Arch.size_in_bytes arch);;
 
@@ -27,7 +29,6 @@ let make_params ?(min_addr=0) bytes =
 
 let check_results sizes expected_results = 
   let sizes = Seq.to_list sizes in
-  (* print_endline (List.to_string sizes ~f:string_of_int);*)
   List.iter2_exn sizes expected_results
     ~f:(fun actual_size expected_size ->
         assert_equal ~msg:((List.to_string ~f:string_of_int sizes)
@@ -35,8 +36,8 @@ let check_results sizes expected_results =
                                 expected_results)) actual_size
           expected_size)  
 
-let shingles_to_length_list shingles = 
-  Seq.of_list [G.nb_vertex shingles]
+let rcfg_to_length_list rcfg = 
+  Seq.of_list [G.nb_vertex rcfg]
 
 let superset_to_length_list superset =
   List.map superset ~f:(fun (mem, insn) -> (Memory.length mem))
@@ -45,64 +46,44 @@ let superset_to_length_list superset =
    will be interpreted appropriately by the superset conservative disassembler *)
 let test_hits_every_byte test_ctxt =
   let memory, arch = make_params "\x2d\xdd\xc3\x54\x55" in
-  let shingled_disassembly = Superset.disasm
+  let raw_superset = Superset.disasm
       ~accu:[] ~f:List.cons arch memory |> ok_exn in
-  let sizes = superset_to_length_list shingled_disassembly in
-  let expected_results = [ 5; 2; 1; 1; 1; ] in
+  let sizes = superset_to_length_list raw_superset in
+  let expected_results = List.rev [ 5; 2; 1; 1; 1; ] in
   check_results (Seq.of_list sizes) expected_results
 
 let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let memory, arch = make_params bytes in
   let brancher = Brancher.of_bil arch in
-  let img, _ = Image.of_string ~backend:"llvm" bytes |> ok_exn in
-  Pervasives.ignore (Superset.disasm
-                       ~accu:[] ~f:List.cons arch memory >>| fun insns ->
-                     let superset_rcfg = Superset_rcfg.rcfg_of_raw_superset
-                         brancher insns in
-                     let insn_map = Superset.raw_superset_to_map insns in
-                     let superset = Superset.{
-                         insn_map = insn_map;
-                         insn_rcfg = superset_rcfg;
-                         brancher = brancher;
-                         img = img;
-                       } in
-                     let superset = Trim.trim superset in
-                     (* the above is a byte sequence no compiler would produce. The
-                        sheering algorithm would therefore wipe all
-                        clean  *)
-                     let msg = G.fold_vertex
-                         (fun vert  accu -> 
-                            accu ^ "\n" ^ (Addr.to_string vert))
-                         superset.insn_rcfg "" in
-                     assert_equal ~msg 0
-                     @@ G.nb_vertex superset.insn_rcfg)
-
-let test_retain_valid_jump test_ctxt = ()
+  let insns = 
+    Superset.disasm ~accu:[] ~f:List.cons arch memory |> ok_exn in
+  let superset_rcfg = Superset_rcfg.rcfg_of_raw_superset
+      brancher insns in
+  let insn_map = Superset.raw_superset_to_map insns in
+  let superset = Superset.Fields.create
+      ~insn_map ~insn_rcfg:superset_rcfg ~brancher ~arch ~segments in
+  let superset = Trim.tag superset in 
+  let superset = Trim.trim superset in
+  (* Only the return opcode ( 0xc3 ) can survive trimming *)
+  let msg = Superset.cfg_to_string superset in
+  assert_equal ~msg 1 @@ G.nb_vertex superset.insn_rcfg
 
 let test_trims_invalid_jump test_ctxt =
   let bytes = "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
   let memory, arch = make_params bytes in
-  let img, _ = Image.of_string bytes |> ok_exn in
   let raw_superset =
     Superset.disasm ~accu:[] ~f:List.cons arch memory |> ok_exn in
   let insn_map = Superset.raw_superset_to_map raw_superset in
   let brancher = Brancher.of_bil arch in
   let superset_rcfg = Superset_rcfg.rcfg_of_raw_superset brancher raw_superset in
-  let superset = Superset.{
-      insn_map = insn_map;
-      img = img;
-      brancher = brancher;
-      insn_rcfg = superset_rcfg;
-    } in
+  let superset = Superset.Fields.create
+      ~insn_map ~insn_rcfg:superset_rcfg ~brancher ~arch ~segments in
+  let superset = Trim.tag superset in
   let superset = Trim.trim superset in
   let expected_results = [ ] in
   assert_equal ~msg:"lengths unequal" (G.nb_vertex superset.insn_rcfg)
     (List.length expected_results)
-
-let test_shingles_to_map test_ctxt = ()
-
-let test_cfg_of_shingles test_ctxt = ()
 
 let test_addr_map test_ctxt =
   let addr_size = Size.in_bits @@ Arch.addr_size Arch.(`x86_64) in
@@ -122,7 +103,7 @@ let test_insn_cfg test_ctxt =
   let msg = "expected length to be one" in
   assert_bool msg ((Superset_rcfg.G.nb_vertex insn_cfg) = 1)  
 
-let test_shingled_of_superset test_ctxt = 
+let test_consistent_superset test_ctxt = 
   let memory, arch = make_params "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
   let brancher = Brancher.of_bil arch in
   let insns = Superset.disasm ~accu:[] ~f:List.cons arch memory
@@ -138,13 +119,6 @@ let test_shingled_of_superset test_ctxt =
   Addr.Map.iteri insn_map (fun ~key ~data -> 
       assert_bool msg 
         (Superset_rcfg.G.mem_vertex insn_cfg key))
-
-let test_conflicts_within_insn test_ctxt = ()
-
-let test_find_all_conflicts test_ctxt = ()
-
-let test_retain_cross_segment_references test_ctxt = ()
-
 
 let construct_loop insn_map insn_cfg start finish = 
   if Addr.(finish > start) then (
@@ -186,7 +160,6 @@ let construct_loop insn_map insn_cfg start finish =
     construct_loop_body insn_map start finish
   ) else insn_map, insn_cfg
 
-(* TODO this needs to rejoin at a common address *)
 let construct_branch insn_cfg branch_at left right = 
   Superset_rcfg.G.add_edge insn_cfg left branch_at;
   Superset_rcfg.G.add_edge insn_cfg right branch_at
@@ -238,8 +211,8 @@ let test_construct_entry_conflict test_ctxt =
       let insn_map, insn_cfg =
         construct_entry_conflict insn_map insn_cfg 
           entry conflict_len in
-      let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
-      let conflicts = Sheath_tree_set.conflicts_of_entries
+      let entries = Decision_tree_set.entries_of_cfg insn_cfg in
+      let conflicts = Decision_tree_set.conflicts_of_entries
           entries insn_map in
       (match conflicts with
        | conflict_set :: nil -> 
@@ -271,9 +244,9 @@ let test_tail_construction test_ctxt =
       Superset_rcfg.G.iter_vertex (fun vert -> 
           assert_equal true @@ Map.mem insn_map vert;
         ) insn_cfg;
-      let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+      let entries = Decision_tree_set.entries_of_cfg insn_cfg in
       let conflicts = Superset_rcfg.find_all_conflicts insn_map insn_cfg in
-      let tails = Sheath_tree_set.tails_of_conflicts
+      let tails = Decision_tree_set.tails_of_conflicts
           conflicts insn_cfg entries in
       let num_tails = Addr.Map.length tails in
       let msg = "There should be exactly one tail; there was "
@@ -302,12 +275,11 @@ let test_tails_of_conflicts test_ctxt =
   let insn_map, insn_cfg = 
     construct_tail_conflict insn_map insn_cfg tail 4 in
   let conflicts = Superset_rcfg.find_all_conflicts insn_map insn_cfg in
-  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
-  let tails = Sheath_tree_set.tails_of_conflicts
+  let entries = Decision_tree_set.entries_of_cfg insn_cfg in
+  let tails = Decision_tree_set.tails_of_conflicts
       conflicts insn_cfg entries in
   assert_equal true (Addr.Map.length tails = 1)
     ~msg:"There should be exactly one tail" 
-
 
 (* This should test that, for each possible number of conflicts, *)
 (* there is always as many tails as were created *)
@@ -322,9 +294,9 @@ let test_extenuating_tail_competitors test_ctxt =
   let insn_map, insn_cfg = 
     construct_tail_conflict 
       insn_map insn_cfg extenuation_addr conflict_len in  
-  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+  let entries = Decision_tree_set.entries_of_cfg insn_cfg in
   let conflicts = Superset_rcfg.find_all_conflicts insn_map insn_cfg in
-  let tails = Sheath_tree_set.tails_of_conflicts
+  let tails = Decision_tree_set.tails_of_conflicts
       conflicts insn_cfg entries in
   assert_equal true @@ Addr.Map.mem tails tail;
   assert_equal true @@ Addr.Map.mem tails extenuation_addr;
@@ -342,7 +314,7 @@ let test_decision_tree_of_entries test_ctxt =
   let msg = sprintf "expected entry %s to be in cfg" 
       (Addr.to_string entry) in
   assert_equal ~msg true (Superset_rcfg.G.mem_vertex insn_cfg entry);
-  let entries = Sheath_tree_set.entries_of_cfg insn_cfg in
+  let entries = Decision_tree_set.entries_of_cfg insn_cfg in
   let msg = sprintf "expected entry %s to be in entries" 
       (Addr.to_string entry) in
   assert_equal ~msg true (Hash_set.mem entries entry);
@@ -350,11 +322,11 @@ let test_decision_tree_of_entries test_ctxt =
       Addr.(to_string @@ succ entry) in
   assert_equal ~msg true (Hash_set.mem entries Addr.(succ entry));
   let conflicts = Superset_rcfg.find_all_conflicts insn_map insn_cfg in
-  let tails = Sheath_tree_set.tails_of_conflicts
+  let tails = Decision_tree_set.tails_of_conflicts
       conflicts insn_cfg entries in
-  let conflicted_entries = Sheath_tree_set.conflicts_of_entries
+  let conflicted_entries = Decision_tree_set.conflicts_of_entries
       entries insn_map in
-  let decision_trees = Sheath_tree_set.decision_tree_of_entries
+  let decision_trees = Decision_tree_set.decision_tree_of_entries
       conflicted_entries tails insn_cfg in
   let expect_entry_msg = "Expect entry in decision_tree" in
   let expect_zero_msg = "Expect zero node in decision tree" in
@@ -368,11 +340,6 @@ let test_decision_tree_of_entries test_ctxt =
       assert_equal ~msg:expect_zero_msg 
         true @@ (Superset_rcfg.G.mem_vertex decision_tree zero);
     )
-
-(* This test is intended to be only slightly different from the entry *)
-(* conflict test, differing by the fact that it will occur inline of *)
-(* the insn_cfg. *)
-let test_overlay_construction test_ctxt = ()
 
 let test_loop_scc test_ctxt = 
   let insn_map, insn_cfg = init () in
@@ -427,16 +394,14 @@ let test_find_conflicts test_ctxt =
 
 let test_trim_scc test_ctxt = 
   let insn_map, insn_cfg = init () in
-  let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
-  let img, _ = Image.of_string "" |> ok_exn in
   let brancher = Brancher.of_bil arch in
   let insn_map, insn_cfg = 
     construct_loop insn_map insn_cfg entry Addr.(entry ++ 20) in
   let in_loop_addr = Addr.(of_int ~width 0x10) in
   let loop_points = Addr.Hash_set.create () in
   Superset_rcfg.G.iter_vertex (Hash_set.add loop_points) insn_cfg;
-  let insn_map, insn_cfg =
+  let insn_map, insn_rcfg =
     construct_tail_conflict insn_map insn_cfg in_loop_addr 6 in
   let insns = Addr.Map.data insn_map in
   let insn_map = Superset.raw_superset_to_map insns in
@@ -444,45 +409,60 @@ let test_trim_scc test_ctxt =
   Superset_rcfg.G.iter_vertex (fun vert -> 
       if not (Hash_set.mem loop_points vert) then 
         Hash_set.add conflicts_added vert) insn_cfg;
-  let superset = {
-    insn_map = insn_map;
-    insn_rcfg = insn_cfg;
-    brancher = brancher;
-    img = img;
-  } in
+  let superset = Superset.Fields.create 
+      ~insn_map ~insn_rcfg ~arch ~segments ~brancher in
+  let superset = Trim.tag superset in
+  let superset = Sheathed.tag_loop_contradictions ~min_size:0 superset in
   let superset = Trim.trim superset in
   let insn_map = superset.insn_map in
   let insn_cfg = superset.insn_rcfg in
   let conflicts_added_str = List.to_string ~f:Addr.to_string @@ 
     Hash_set.to_list conflicts_added in
   let removed_msg = "of conflicts " ^ conflicts_added_str 
-                    ^ ", residual conflict present within" in
-  Hash_set.iter conflicts_added ~f:(fun addr -> 
-      let removed_cfg = removed_msg ^ " cfg at " ^ Addr.to_string addr in
-      assert_equal ~msg:removed_cfg true
-      @@ not (Superset_rcfg.G.mem_vertex insn_cfg addr);
+                    ^ ", residual conflict present within " in
+  Hash_set.iter conflicts_added ~f:(fun addr ->
       let removed_map = removed_msg ^ " insn_map at " ^ Addr.to_string addr in
       assert_equal ~msg:removed_map true
       @@ not (Addr.Map.mem insn_map addr);
+      let removed_cfg = removed_msg ^ " cfg at " ^ Addr.to_string addr in
+      assert_equal ~msg:removed_cfg true
+      @@ not (Superset_rcfg.G.mem_vertex insn_cfg addr);
     );
   let loop_msg = "loop addr should remain during tail trim" in
   Hash_set.iter loop_points ~f:(fun addr -> 
-      assert_equal ~msg:loop_msg true @@ Superset_rcfg.G.mem_vertex insn_cfg addr);
-  let map_non_subset = "addr in map but not in graph" in
-  Addr.Map.iteri insn_map ~f:(fun ~key ~data -> 
-      assert_equal ~msg:map_non_subset true @@
-      Superset_rcfg.G.mem_vertex insn_cfg key
-    );
-  let graph_non_subset = "addr in graph but not in map, " in
-  Superset_rcfg.G.iter_vertex 
-    (fun addr -> 
-       if not (Addr.equal addr zero) then
-         assert_equal ~msg:(graph_non_subset ^ Addr.to_string addr) true
-         @@ Addr.Map.mem insn_map addr
-    ) insn_cfg
+      assert_equal ~msg:loop_msg true @@ Superset_rcfg.G.mem_vertex insn_cfg addr)
+
+(* Establishes, in the case of if structures, how topological *)
+(* tranversal works - one time visit only *)
+let test_topological_revisit ctxt = 
+  let _, insn_rcfg = init () in
+  let width = 32 in
+  let start = Addr.of_int 0 ~width in
+  let stop = Addr.of_int 2 ~width in
+  let rec make_if current stop =
+    if not (current = stop) then
+      let next = Addr.succ current in
+      Superset_rcfg.G.add_edge insn_rcfg current next;
+      make_if next stop in
+  make_if start stop;
+  Superset_rcfg.G.add_edge insn_rcfg start stop;
+  let update_count addr visit_count = 
+    match Map.find visit_count addr with
+    | Some (count) -> 
+      let visit_count = Map.remove visit_count addr in
+      Map.add visit_count addr (count+1)
+    | None -> Map.add visit_count addr 1 in
+  let visit_count = Topological.fold 
+      update_count insn_rcfg Addr.Map.empty in
+  Map.iteri visit_count (fun ~key ~data -> assert_equal ~ctxt data 1)
 
 
-(* This is an extension of the sheering test wherein a double *)
+(* This test is intended to be very much alike the entry *)
+(* conflict test, differing by the fact that it will occur inline of *)
+(* the insn_cfg. *)
+let test_overlay_construction test_ctxt = ()
+
+(* This is an extension of the trimming test wherein a double *)
 (* interpretation within a strongly connected component has ancestors. *)
 let test_extenuating_scc test_ctxt = ()
 
@@ -493,15 +473,18 @@ let test_decision_construction_combinatorics test_ctxt = ()
 (* decision tree construction algorithm. *)
 let test_decision_sets_of_discrete_components test_ctxt = ()
 
+let test_conflicts_within_insn test_ctxt = ()
+
+let test_find_all_conflicts test_ctxt = ()
 
 let () =
   let suite = 
     "suite">:::
     [
+      "test_topological_revisit" >:: test_topological_revisit;
       "test_hits_every_byte">:: test_hits_every_byte;
       "test_trim" >:: test_trim;
       "test_trims_invalid_jump" >:: test_trims_invalid_jump;
-      "test_shingled_of_superset" >:: test_shingled_of_superset;
       "test_addr_map" >:: test_addr_map;
       "test_construct_entry_conflict"
       >:: test_construct_entry_conflict;

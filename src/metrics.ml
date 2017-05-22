@@ -41,7 +41,7 @@ let format_latex metrics =
      | _ -> "Missing trim phases")
   | None -> "No metrics gathered!"
 
-let gather_metrics ~ground_truth insn_map cfg metrics =
+let gather_metrics ~ground_truth insn_map insn_rcfg metrics =
   let metrics = Option.value metrics ~default:{
       name = ground_truth;
       detected_insn_count = 0;
@@ -55,16 +55,27 @@ let gather_metrics ~ground_truth insn_map cfg metrics =
       ground_truth |> ok_exn in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
+  let reduced_occlusion = Addr.Hash_set.create () in
+  let insn_cfg = Superset_rcfg.Oper.mirror insn_rcfg in
+  let dfs_find_conflicts addr = 
+    let add_conflicts addr = 
+      Seq.iter (Superset_rcfg.conflict_seq_at insn_map addr)
+        ~f:(fun x -> if Superset_rcfg.G.mem_vertex insn_cfg x then
+               Hash_set.add reduced_occlusion x) in
+    Superset_rcfg.Dfs.prefix_component add_conflicts insn_cfg addr;
+  in
+  Seq.iter function_starts ~f:dfs_find_conflicts;
+  printf "Reduced occlusion: %d\n" Hash_set.(length reduced_occlusion);
   let detected_insns = 
     G.fold_vertex 
       (fun vert detected_insns -> Set.add detected_insns vert) 
-      cfg Addr.Set.empty in
+      insn_rcfg Addr.Set.empty in
   let missed_set = Set.diff ground_truth detected_insns in
   if not (Set.length missed_set = 0) then
     printf "Missed function entrances %s\n" 
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   printf "Occlusion: %d\n" 
-    (Set.length @@ Superset_rcfg.find_all_conflicts insn_map cfg);
+    (Set.length @@ Superset_rcfg.find_all_conflicts insn_map insn_rcfg);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in
@@ -72,7 +83,7 @@ let gather_metrics ~ground_truth insn_map cfg metrics =
     Set.(length (missed_entrances)) in
   let false_positives =
     Set.(length (diff detected_insns ground_truth)) in
-  let detected_insn_count = G.nb_vertex cfg in
+  let detected_insn_count = G.nb_vertex insn_rcfg in
   Some ({
       name                = metrics.name;
       detected_insn_count = detected_insn_count + metrics.detected_insn_count;

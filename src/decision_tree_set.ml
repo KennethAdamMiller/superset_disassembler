@@ -7,6 +7,9 @@ open Graph
 type decision_tree = (sheath Tree.t)
 type decision_tree_set = decision_tree Addr.Map.t
 
+(* TODO: revise the tree construction to explore by means of a *)
+(* topological ordering *)
+
 (** The choice set represents a set of potentially inter-dependent
       decision trees and potential requirements of selection at each
       node. Although a graph is used, the actual structure is acyclic.
@@ -31,11 +34,8 @@ let entries_of_cfg insn_cfg =
       else accu)
     insn_cfg (Addr.Hash_set.create ())
 
-(* TODO: 
-   2) Cases where chance-orderings of entry iteration may cause one
-   entry to be within another, but get skipped due to the way that
-   conflicts_within_insn_at function works.
-*)
+(* TODO this could be simplified as entries_of_cfg, applied to *)
+(* conflicts within insn at *)
 let conflicts_of_entries entries insn_map =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
@@ -62,6 +62,7 @@ let conflicts_of_entries entries insn_map =
        ) else conflicted_entries
     ) 
 
+(* TODO tails_of_conflicts could be just tails *)
 let tails_of_conflicts conflicts insn_cfg entries = 
   print_endline "tails_of_conflicts";
   let possible_tails = mergers_of_cfg insn_cfg in

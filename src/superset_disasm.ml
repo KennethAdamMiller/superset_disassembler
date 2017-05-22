@@ -14,6 +14,7 @@ type superset_disasm =
   | Trimmed_disasm
   | Tree_set
   | Trimmed_tree_set 
+  | Grammar_convergent
 
 module Program(Conf : Provider with type kind = superset_disasm)  = struct
   open Conf
@@ -32,6 +33,11 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
           let superset, trees = 
             Sheathed.trimmed_sheaths_of_file ~backend x in
           superset, Some(trees))
+      | Grammar_convergent ->
+        (fun x -> 
+           let superset, trees = 
+             Grammar.trimmed_disasm_of_file ~backend x in
+           superset, Some(trees))
     in
     let format = match options.metrics_format with
       | Latex -> format_latex
@@ -42,14 +48,10 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
       (match options.content with
        | Some content -> 
          List.iter content ~f:(function
-             | Cfg -> Superset_rcfg.Gml.print std_formatter superset.insn_rcfg
+             | Cfg -> 
+               Superset.format_cfg ~format:Format.std_formatter superset
              | Insn_map -> 
-               let map_str = Sexp.to_string
-                 @@ Addr.Map.sexp_of_t 
-                   (Tuple2.sexp_of_t Memory.sexp_of_t
-                      Disasm_expert.Basic.Insn.sexp_of_t)
-                   superset.insn_map in
-               print_endline map_str
+               print_endline Superset.(insns_to_string superset)
            )
        | None -> ());
       match options.ground_truth with
@@ -58,14 +60,9 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
       | None -> accu in
     (* TODO Should explore the possibility to abuse the cmd options
        by passing in the wrong filesystem kinds to the options *)
-    match options.input_kind with
-    | Binary bin -> 
-      (* Output the results of disassembly *)
-      let metrics = collect None bin in
-      format metrics |> print_endline
-    | Corpora_folder corpdir -> 
-      print_endline @@ format @@ 
-      Common.process_corpora ~corpdir collect
+    (* Output the results of disassembly *)
+    let metrics = collect None options.target in
+    format metrics |> print_endline
 
 end
 
@@ -78,6 +75,7 @@ module Cmdline = struct
     "trimmed", Trimmed_disasm;
     "tree_set", Tree_set;
     "trimmed_tree_set" , Trimmed_tree_set;
+    "grammar", Grammar_convergent;
   ]
   let list_disasm_methods_doc = sprintf
       "Select of the the following disassembly methods: %s" @@ 
@@ -87,10 +85,12 @@ module Cmdline = struct
            (Some Trimmed_disasm) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
-  let create content disassembler ground_truth input_kind disasm_method metrics_format = 
-    Fields.create ~content ~disassembler ~ground_truth ~input_kind ~disasm_method ~metrics_format
+  let create 
+      content disassembler ground_truth target disasm_method
+      metrics_format phases = 
+    Fields.create ~content ~disassembler ~ground_truth ~target 
+      ~disasm_method ~metrics_format ~phases
 
-  (* TODO eliminate this through bap usage *)
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
     List.map ~f:(fun x -> x,x) |> function
@@ -106,22 +106,19 @@ module Cmdline = struct
     let doc = "Extended superset disassembler for constructing decision trees" in
     let man = [
       `S "SYNOPSIS";
-      `Pre "
- $(b,$mname) [FORMAT/METRICS/DISASM_METHOD OPTION]
-  [--ground_truth=FILE/DIR] --target=FILE/DIR ";
+      `Pre "$(b,$mname) [FORMAT/METRICS/DISASM_METHOD OPTION]
+           [--ground_truth=FILE] [--phases=TRIM_PHASES] --target=FILE ";
       `S "DESCRIPTION";
       `P
-        "Given a binary, or a corpora folder location, will
+        "Given a binary, this utility will
     disassemble using the extended sheering techniques according to
     what is sepecified before formatting as requested and finally
     releasing that information to the specified location.";
       `S "OPTIONS";
-    ](* TODO test and curate the following for version, help and other opations
-        @ Bap_cmdline_terms.common_loader_options *) 
-    in
+    ] in
     Term.(const create 
-          $content $(disassembler ()) $ground_truth $input_kind $disasm_method
-          $metrics_format),
+          $content $(disassembler ()) $ground_truth $target $disasm_method
+          $metrics_format $phases),
     Term.info "superset_disasm" ~doc ~man ~version:Config.version
 
   let parse argv =
@@ -143,7 +140,6 @@ let start options =
   return @@ Program.main ()
 
 let _main = 
-  (* TODO correct let argv = Bap_plugin_loader.run Sys.argv in*)
   try match Cmdline.parse Sys.argv >>= start with
     | Ok _ -> exit 0
     | Error err -> exitf (-1) "%s\n" Error.(to_string_hum err)

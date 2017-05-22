@@ -10,6 +10,8 @@ module G = Imperative.Digraph.ConcreteBidirectional(struct
   end)
 type t = G.t
 
+module Topological = Topological.Make(G)
+module Dominator = Dominator.Make(G)
 module Oper = Oper.I(G)
 module StrongComponents = Components.Make(G)
 module DiscreteComponents = Components.Undirected(G)
@@ -21,7 +23,6 @@ module Gml        = Gml.Print(G)(struct
     let edge (label : G.E.label) = [ ]
   end)
 
-(* TODO need to test cfg_of_superset in unit tests further *)
 let rcfg_of_raw_superset ?superset_rcfg brancher raw_superset =
   printf "rcfg_of_raw_superset size %d\n" List.(length raw_superset);
   let superset_rcfg = Option.value superset_rcfg ~default:(G.create ()) in
@@ -73,10 +74,10 @@ let seq_of_addr_range addr len =
       yield cur_addr >>=  fun () -> 
       let next_addr = Addr.succ cur_addr in
       gen_next_addr next_addr
-  in run (gen_next_addr addr)
+  in run (gen_next_addr Addr.(succ addr))
 
 let range_seq_of_conflicts insn_map addr len = 
-  let range_seq = seq_of_addr_range Addr.(succ addr) len in
+  let range_seq = seq_of_addr_range addr len in
   Seq.filter range_seq ~f:Addr.Map.(mem insn_map)
 
 let seq_of_all_conflicts insn_map insn_cfg = 
@@ -84,3 +85,10 @@ let seq_of_all_conflicts insn_map insn_cfg =
   Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 
       range_seq_of_conflicts insn_map addr (Memory.length mem)
     )
+
+let conflict_seq_at insn_map addr = 
+  match Map.find insn_map addr with
+  | Some(mem, _) -> 
+    let len = Memory.length mem  in
+    range_seq_of_conflicts insn_map addr len
+  | None -> Seq.empty

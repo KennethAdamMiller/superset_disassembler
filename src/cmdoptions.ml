@@ -6,11 +6,6 @@ exception Bad_user_input
 exception Unknown_arch
 exception No_input
 
-type disasmarg   = 
-  | Corpora_folder of string
-  | Binary of string
-[@@deriving sexp]
-
 type content =
   | Cfg
   | Insn_map
@@ -20,9 +15,10 @@ type 'a t = {
   content        : content list option;
   disassembler   : string;
   ground_truth   : string option;
-  input_kind     : disasmarg;
+  target         : string;
   disasm_method  : 'a;
   metrics_format : format_as;
+  phases         : string list option;
 } [@@deriving sexp, fields]
 
 module type Provider = sig
@@ -49,21 +45,30 @@ let content =
   let doc =
     "The analysis output desired; one of cfg/insn map/decision tree"
   in
-  Cmdliner.Arg.(value & opt (some (list (enum possible_content))) (None)
+  Cmdliner.Arg.(value & opt (some (list (enum possible_content))) None
                 & info ["output"] ~docv:"" ~doc)
 
 let parse_input f = 
   if Sys.file_exists f then (
-    if Sys.is_directory f then
-      `Ok (Corpora_folder f)
-    else 
-      `Ok (Binary f)
+    `Ok (f)
   ) else `Error "does not exist"
 let input_type_printer p
-  = function | Binary f | Corpora_folder f -> Format.fprintf p "%s" f
-let input_kind = 
+  = Format.fprintf p "%s"
+let target = 
   let doc = "Specify target binary or corpora folder." in
   Cmdliner.Arg.(
     required & opt (some (parse_input, input_type_printer)) None
     & info ["target"] ~docv:"Target" ~doc
+  )
+
+
+let list_phases = [
+]
+let phases_doc = sprintf "Select from the following trim phase(s): %s"
+    List.(to_string ~f:ident list_phases)
+let phases =
+  let doc = "Specify the desired trim phases to run." in
+  Cmdliner.Arg.(
+    value & opt (some (list string)) None
+    & info ["phases"] ~docv:phases_doc ~doc
   )
