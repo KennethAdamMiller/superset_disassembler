@@ -6,13 +6,18 @@ open Format
 
 module Dis = Disasm_expert.Basic
 
-type t = {
+type 'a t = {
   arch      : arch;
   segments  : Image.segment Table.t;
   brancher  : Brancher.t;
-  insn_map  : (mem * Dis.full_insn) Addr.Map.t;
+  data      : 'a;
   insn_rcfg : Superset_rcfg.t;
 } [@@deriving fields]
+
+let contains_addr superset addr = 
+  let segments = Table.to_sequence superset.segments in
+  Seq.fold segments ~init:false ~f:(fun status (mem, segment) ->
+      status || Memory.contains mem addr)
 
 let bad_of_arch arch = 
   Addr.of_int ~width:(Size.in_bits @@ Arch.addr_size arch) 0
@@ -23,30 +28,44 @@ let bad_of_addr addr =
 let get_bad superset = 
   bad_of_arch superset.arch
 
-let find superset addr = 
-  Map.find superset.insn_map addr
+let mark_bad superset addr = 
+  Superset_rcfg.G.add_edge superset.insn_rcfg (get_bad superset) addr
 
-let rebuild ?insn_map ?insn_rcfg superset =
-  let insn_map = Option.value insn_map ~default:superset.insn_map in
+let get_data superset = superset.data
+
+let create ?insn_rcfg arch data =
+  let insn_rcfg = Option.value insn_rcfg 
+      ~default:(Superset_rcfg.G.create ()) in
+  {
+    arch = arch;
+    segments = Table.empty;
+    brancher = Brancher.of_bil arch;
+    data = data;
+    insn_rcfg = insn_rcfg;
+  }
+
+let rebuild ?data ?insn_rcfg superset =
+  let data = Option.value data ~default:superset.data in
   let insn_rcfg = Option.value insn_rcfg ~default:superset.insn_rcfg in
   {
     arch      = superset.arch;
     brancher  = superset.brancher;
     segments  = superset.segments;
-    insn_map  = insn_map;
+    data      = data;
     insn_rcfg = insn_rcfg;
   }
 
+let drop superset =
+  rebuild ~data:() superset
+
 let remove superset addr = 
-  let insn_map = Map.remove superset.insn_map addr in
   Superset_rcfg.G.remove_vertex superset.insn_rcfg addr;
-  rebuild ~insn_map superset
+  rebuild superset
 
 let add superset mem insn =
   let addr = Memory.min_addr mem in
   Superset_rcfg.G.add_vertex superset.insn_rcfg addr;
-  let insn_map = Map.add superset.insn_map ~key:addr ~data:(mem, insn) in
-  rebuild ~insn_map superset
+  rebuild superset
 
 let replace superset mem insn = 
   let addr = Memory.min_addr mem in
@@ -57,17 +76,10 @@ let format_cfg ?format superset =
   let format = Option.value format ~default:Format.std_formatter in
   Superset_rcfg.Gml.print format superset.insn_rcfg
 
-(* TODO iter, fold, format to_string *)
 let cfg_to_string superset = 
   let format = Format.str_formatter in
   format_cfg ~format superset;
   Format.flush_str_formatter ()
-
-let insns_to_string superset = 
-  Sexp.to_string @@ Addr.Map.sexp_of_t 
-    (Tuple2.sexp_of_t Memory.sexp_of_t
-       Dis.Insn.sexp_of_t)
-    superset.insn_map
 
 let next_chunk leftovers mem ~addr =
   let next_addr = Addr.succ addr in
@@ -122,7 +134,7 @@ let lift arch insns =
 
 module With_exn = struct
   let disasm ?backend ~accu ~f arch mem = 
-    disasm ?backend ~accu ~f arch mem
+    disasm ?backend ~accu ~f arch mem |> ok_exn
 end
 
 let memmap_all ?backend arch mem =
@@ -132,34 +144,57 @@ let memmap_all ?backend arch mem =
       ~f:(Memmap.add memmap mem) in
   With_exn.disasm ?backend ~accu:Memmap.empty ~f:filter_add arch mem
 
+let add_to_map insn_map (mem, insn) =
+  let addr = (Memory.min_addr mem) in
+  Addr.Map.add insn_map addr (mem, insn)
+
+let sexp_of_mem mem = 
+  let endianness = Memory.endian mem in
+  let maddr = Memory.min_addr mem in
+  let bstr_mem = Memory.to_string mem in
+  Tuple3.sexp_of_t 
+    Addr.sexp_of_endian
+    Addr.sexp_of_t
+    String.sexp_of_t (endianness, maddr, bstr_mem)
+
+let mem_of_sexp sexp_mem =
+  let (endianness, maddr, mem) = 
+    Tuple3.t_of_sexp
+      Addr.endian_of_sexp
+      Addr.t_of_sexp
+      String.t_of_sexp sexp_mem in
+  let mem = Bigstring.of_string mem in
+  Memory.create endianness maddr mem |> ok_exn
+
+let insn_map_to_string insn_map =
+  Sexp.to_string @@ Addr.Map.sexp_of_t 
+    (fun (mem, _) -> sexp_of_mem mem) insn_map
+
+let insn_map_of_string map_str = 
+  let map_sexp = Sexp.of_string map_str in
+  Addr.Map.t_of_sexp (fun m -> mem_of_sexp m, None) map_sexp
+
+let meta_of_string meta_str = 
+  let sexp_meta = Sexp.of_string meta_str in
+  Arch.t_of_sexp sexp_meta
+
+let meta_to_string superset = 
+  Sexp.to_string (Arch.sexp_of_t superset.arch)
+
 let raw_superset_to_map ?insn_map raw_superset = 
-  print_endline "superset_to_map";
   let insn_map = Option.value insn_map ~default:Addr.Map.empty in
   let insn_map = List.fold_left ~init:insn_map raw_superset
-      ~f:(fun insn_map (mem, insn) ->
-          let addr = (Memory.min_addr mem) in
-          match insn with
-          | Some(insn) -> 
-            Addr.Map.add insn_map addr (mem, insn)
-          | None -> insn_map
-        ) in
-  printf "raw_superset_to_map length %d\n" Addr.Map.(length insn_map);
+      ~f:add_to_map in
   insn_map
 
-let update_with_mem ?backend superset mem =
+let update_with_mem ?backend ?f superset mem =
   printf "superset_cfg_of_mem length %d\n" Memory.(length mem);
-  disasm ?backend ~accu:[] ~f:List.cons superset.arch mem >>|
-  fun raw_superset -> (
-    let superset_rcfg = superset.insn_rcfg in
-    let brancher = superset.brancher in
-    let insn_map = superset.insn_map in
-    (* raw_superset has an option because it is fresh out of mem, *)
-    (* insn_map does not because had been filtered before *)
-    let insn_map = raw_superset_to_map ~insn_map raw_superset in
-    let insn_rcfg = Superset_rcfg.rcfg_of_raw_superset
-        ~superset_rcfg brancher raw_superset in
-    rebuild ~insn_map ~insn_rcfg superset
-  )
+  let superset_rcfg = superset.insn_rcfg in
+  let update = Option.value f ~default:(fun (m, i) a -> a) in
+  let f (mem, insn) accu =
+    Superset_rcfg.add ~superset_rcfg mem insn;
+    update (mem, insn) accu in
+  disasm ?backend ~accu:superset ~f superset.arch mem
 
 let with_img ~accu ~backend img ~f = 
   let segments = Table.to_sequence @@ Image.segments img in
@@ -169,22 +204,21 @@ let with_img ~accu ~backend img ~f =
       else accu 
     )
 
-let superset_of_img ~backend img =
-  print_endline "superset_of_img";
+let superset_of_img ~data ?f ~backend img =
   let arch = Image.arch img in
   let brancher = Brancher.of_bil arch in
   let superset = {
+    data          = data;
     arch          = arch;
     insn_rcfg     = Superset_rcfg.G.create ();
-    insn_map      = Addr.Map.empty;
     brancher      = brancher;
     segments      = Image.segments img;
   } in
   with_img ~accu:superset ~backend img
     ~f:(fun ~accu ~backend mem -> 
-        update_with_mem ~backend accu mem
+        update_with_mem ~backend accu mem ?f
       )
 
-let superset_disasm_of_file ~backend binary = 
+let superset_disasm_of_file ~backend ~data ?f binary = 
   let img  = Common.img_of_filename binary in
-  superset_of_img ~backend img
+  superset_of_img ~data ~backend img ?f

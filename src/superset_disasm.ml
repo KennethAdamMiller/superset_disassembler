@@ -16,15 +16,42 @@ type superset_disasm =
   | Trimmed_tree_set 
   | Grammar_convergent
 
+let import bin = 
+  let graph_str = In_channel.read_all (bin ^ ".graph") in
+  let insn_rcfg = Superset_rcfg.Gml.parse graph_str in
+  let map_str   = In_channel.read_all (bin ^ ".map") in
+  let insn_map  = Superset.insn_map_of_string map_str in
+  let meta_str  = In_channel.read_all (bin ^ ".meta") in
+  let arch      = Superset.meta_of_string meta_str in
+  let superset  = Superset.create ~insn_rcfg arch insn_map in
+  superset, Decision_tree_set.(decision_trees_of_superset superset)
+
+let export bin superset trees = 
+  let graph_f   = Out_channel.create (bin ^ ".graph") in
+  let formatter = Format.formatter_of_out_channel graph_f in
+  let open Superset in
+  let () = Superset_rcfg.Gml.print formatter superset.insn_rcfg in
+  let () = Out_channel.close graph_f in
+  let insn_map = Superset.get_data superset in
+  let map_str  = Superset.insn_map_to_string insn_map in
+  Out_channel.write_all (bin ^ ".map") ~data:map_str;
+  let meta_str  = Superset.meta_to_string superset in
+  Out_channel.write_all (bin ^ ".meta") ~data:meta_str;
+
 module Program(Conf : Provider with type kind = superset_disasm)  = struct
   open Conf
 
   let main () =
     let backend = options.disassembler in
-    let dis_method = match options.disasm_method with
+    let checkpoint = options.checkpoint in
+    let dis_method =
+      match options.disasm_method with
       | Superset_disasm -> 
-        (fun x -> Superset.superset_disasm_of_file ~backend x, None)
-      | Trimmed_disasm -> (fun x -> Sheathed.trimmed_disasm_of_file ~backend x, None)
+        (fun x -> Superset.superset_disasm_of_file 
+            ~data:Addr.Map.empty ~f:(fun (mem, insn) superset ->
+                Trim.add_to_map superset mem insn []) ~backend x, None)
+      | Trimmed_disasm -> (fun x -> 
+          Sheathed.trimmed_disasm_of_file ~backend x, None)
       | Tree_set -> (fun x -> 
           let superset, trees = 
             Sheathed.sheaths_of_file ~backend x in 
@@ -39,30 +66,46 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
              Grammar.trimmed_disasm_of_file ~backend x in
            superset, Some(trees))
     in
+    let dis_method bin = 
+      match checkpoint with
+      | Some Import -> 
+        let superset, trees = import bin in
+        superset, Some(trees)
+      | Some Export -> 
+        let superset, trees = dis_method bin in
+        export bin superset trees;
+        superset, trees
+      | None -> 
+        dis_method bin 
+    in
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
-    let collect accu bin =
-      let open Superset in
-      let (superset, decision_trees) = dis_method bin in
-      (match options.content with
-       | Some content -> 
-         List.iter content ~f:(function
-             | Cfg -> 
-               Superset.format_cfg ~format:Format.std_formatter superset
-             | Insn_map -> 
-               print_endline Superset.(insns_to_string superset)
-           )
-       | None -> ());
-      match options.ground_truth with
-      | Some ground_truth -> 
-        gather_metrics ~ground_truth superset.insn_map superset.insn_rcfg accu
-      | None -> accu in
-    (* TODO Should explore the possibility to abuse the cmd options
-       by passing in the wrong filesystem kinds to the options *)
-    (* Output the results of disassembly *)
-    let metrics = collect None options.target in
-    format metrics |> print_endline
+    let (superset, decision_trees) = dis_method options.target in
+    (* Need to have options for specifying where the output goes *)
+    let open Superset in
+    let insn_map = Map.filteri ~f:(fun ~key ~data -> 
+        let vert = key in
+        let (mem, insn) = data in
+        Option.is_some insn && 
+        Superset_rcfg.G.(mem_vertex superset.insn_rcfg vert)) 
+        (get_data superset) in
+    let superset = Superset.rebuild ~data:insn_map superset in
+    (match options.content with
+     | Some content -> 
+       List.iter content ~f:(function
+           | Cfg -> 
+             Superset.format_cfg ~format:Format.std_formatter superset
+           | Insn_map -> 
+             print_endline 
+               Superset.(insn_map_to_string (get_data superset)))
+     | None -> ());
+    (match options.ground_truth with
+     | Some bin -> 
+       gather_metrics ~bin superset |> format |> print_endline
+     | None -> ());
+    printf "superset_map length %d graph size: %d\n\n" 
+      Addr.Map.(length insn_map) (Superset_rcfg.G.nb_vertex superset.insn_rcfg)
 
 end
 
@@ -82,13 +125,13 @@ module Cmdline = struct
     Arg.doc_alts_enum list_disasm_methods
   let disasm_method = 
     Arg.(required & opt (some (enum list_disasm_methods))
-           (Some Trimmed_disasm) 
+           (Some Trimmed_tree_set) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
   let create 
-      content disassembler ground_truth target disasm_method
-      metrics_format phases = 
-    Fields.create ~content ~disassembler ~ground_truth ~target 
+      checkpoint content disassembler ground_truth target
+      disasm_method metrics_format phases = 
+    Fields.create ~checkpoint ~content ~disassembler ~ground_truth ~target 
       ~disasm_method ~metrics_format ~phases
 
   let disassembler () : string Term.t =
@@ -117,7 +160,7 @@ module Cmdline = struct
       `S "OPTIONS";
     ] in
     Term.(const create 
-          $content $(disassembler ()) $ground_truth $target $disasm_method
+          $checkpoint $content $(disassembler ()) $ground_truth $target $disasm_method
           $metrics_format $phases),
     Term.info "superset_disasm" ~doc ~man ~version:Config.version
 

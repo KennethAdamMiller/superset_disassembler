@@ -23,7 +23,7 @@ let parents_of_insns insn_cfg component =
         ) insn_cfg addr potential_parents
     )
 
-let filter_components ?(min_size=20) insn_cfg components = 
+let filter_components ?(min_size=20) components = 
   List.fold_left components ~init:Addr.Set.empty
     ~f:(fun keep  component ->
         let component = Addr.Set.of_list component in
@@ -34,27 +34,32 @@ let filter_components ?(min_size=20) insn_cfg components =
       )
 
 let tag_loop_contradictions ?(min_size=20) superset = 
-  print_endline "Sheathed.tag";
   let open Superset in
   let insn_rcfg = superset.insn_rcfg in
-  let insn_map = superset.insn_map in
-  let keep = filter_components insn_rcfg @@ 
+  let insn_map = Superset.get_data superset in
+  let keep = filter_components ~min_size @@ 
     StrongComponents.scc_list insn_rcfg in
   (* Here we have to be careful; we only want to find instructions
      that occur within a loop that produce a self-contradiction *)
   let parents = parents_of_insns insn_rcfg keep in
-  let to_remove = Superset_rcfg.conflicts_within_insns insn_map keep in
+  let to_remove = 
+    Superset_rcfg.conflicts_within_insns insn_map keep in
   let to_remove = Set.inter to_remove parents in
   let to_remove = Set.diff to_remove keep in
-  printf "tagged %d contradictions to remove\n" Set.(length to_remove);
+  printf "tagged %d contradictions of %d parents of %d to keep\n" 
+    Set.(length to_remove)
+    Set.(length parents)
+    Set.(length keep);
   let bad = get_bad superset in
   Set.iter to_remove ~f:(G.add_edge insn_rcfg bad);
-  rebuild ~insn_map ~insn_rcfg superset
+  rebuild ~data:insn_map ~insn_rcfg superset
 
 let default_tags = [tag_loop_contradictions]
 
 let tagged_disasm_of_file ?(backend="llvm") bin =
-  let superset = Trim.tagged_disasm_of_file ~backend bin in
+  let data = Addr.Map.empty in
+  let superset = Trim.tagged_disasm_of_file 
+      ~f:[Trim.add_to_map] ~data ~backend bin in
   tag_loop_contradictions superset
 
 let trimmed_disasm_of_file ?(backend="llvm") bin =

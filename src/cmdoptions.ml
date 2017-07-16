@@ -6,12 +6,25 @@ exception Bad_user_input
 exception Unknown_arch
 exception No_input
 
+type phases = 
+  | Insn_invariants
+  | Invalid_memory_access
+  | Non_instruction
+  | Cross_layer_invalidation
+  | Component_body
+
 type content =
   | Cfg
   | Insn_map
 [@@deriving sexp]
 
+type checkpoint = 
+  | Import
+  | Export
+[@@deriving sexp]
+
 type 'a t = {
+  checkpoint     : checkpoint option;
   content        : content list option;
   disassembler   : string;
   ground_truth   : string option;
@@ -40,13 +53,22 @@ let possible_content = [
 let possible_content_doc = sprintf
     "Select of the the following disassembly methods: %s" @@ 
   Cmdliner.Arg.doc_alts_enum possible_content
-
 let content = 
   let doc =
     "The analysis output desired; one of cfg/insn map/decision tree"
   in
   Cmdliner.Arg.(value & opt (some (list (enum possible_content))) None
                 & info ["output"] ~docv:"" ~doc)
+
+let list_checkpoints = [
+  "Import", Import;
+  "Export", Export;
+]
+let checkpoint = 
+  let doc = "Import or Export the disassembly graph and map." in
+  Cmdliner.Arg.(
+    value & opt (some (enum list_checkpoints)) None & info ["checkpoint"] ~doc
+  )
 
 let parse_input f = 
   if Sys.file_exists f then (
@@ -63,9 +85,14 @@ let target =
 
 
 let list_phases = [
+  "All Instruction invariants", Insn_invariants;
+  "Invalid memory accesses", Invalid_memory_access;
+  "Non instruction opcode", Non_instruction;
+  "Cross Layer Invalidation", Cross_layer_invalidation;
+  "Strongly Connected Component Data", Component_body;
 ]
 let phases_doc = sprintf "Select from the following trim phase(s): %s"
-    List.(to_string ~f:ident list_phases)
+    List.(to_string ~f:fst list_phases)
 let phases =
   let doc = "Specify the desired trim phases to run." in
   Cmdliner.Arg.(

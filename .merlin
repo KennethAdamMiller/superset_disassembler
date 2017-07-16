@@ -7,10 +7,6 @@ PKG logs
 PKG fmt
 
 S src/
-S src/shingled/
-S src/sheathed/
 
 B _build/
 B _build/src
-B _build/src/shingled/
-B _build/src/sheathed/

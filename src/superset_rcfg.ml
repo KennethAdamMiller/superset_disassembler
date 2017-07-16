@@ -10,6 +10,18 @@ module G = Imperative.Digraph.ConcreteBidirectional(struct
   end)
 type t = G.t
 
+module P = Persistent.Digraph.ConcreteBidirectional(struct
+    type t = Addr.t
+    let compare = Addr.compare
+    let hash = Addr.hash
+    let equal = Addr.equal
+  end)
+
+module Kruskal = Kruskal.Make(G)(struct
+    type t = G.E.label
+    let compare _ _ = 0
+  end)
+
 module Topological = Topological.Make(G)
 module Dominator = Dominator.Make(G)
 module Oper = Oper.I(G)
@@ -17,22 +29,66 @@ module StrongComponents = Components.Make(G)
 module DiscreteComponents = Components.Undirected(G)
 module Dfs        = Traverse.Dfs(G)
 module Path       = Path.Check(G)
-module Gml        = Gml.Print(G)(struct 
+module GmlOut     = Gml.Print(G)(struct 
     let node (label : G.V.label) = 
       [ "addr", Gml.String (Addr.to_string label)  ]
     let edge (label : G.E.label) = [ ]
   end)
+module B = struct
+  module G = struct
+    include P
+  end
+  include P
+  let copy g = g
+  let empty () = P.empty
+end
+module GmlIn      = Gml.Parse(B)(struct
+    let node (labels : Gml.value_list) = 
+      match List.hd labels with
+      | None -> assert false
+      | Some(_, gmlval) -> 
+        match gmlval with
+        | Gml.String(addr) -> 
+          B.G.V.label Addr.(of_string addr)
+        | _ -> assert false
 
-let rcfg_of_raw_superset ?superset_rcfg brancher raw_superset =
-  printf "rcfg_of_raw_superset size %d\n" List.(length raw_superset);
+    let edge (labels : Gml.value_list) = 
+      match labels with
+      | [ (_, Gml.String source) ; (_, Gml.String target); _ ] ->
+        let source = Addr.of_string source in
+        let target = Addr.of_string target in
+        B.G.E.label (source, target)
+      | _ -> assert false
+  end)
+module Gml = struct
+  include GmlIn
+  include GmlOut
+  let parse gmlstr = 
+    let pgraph = parse gmlstr in
+    let igraph = G.create () in
+    P.iter_edges (fun src target -> 
+        G.add_edge igraph src target;
+      ) pgraph;
+    igraph
+end
+
+
+
+let add ?superset_rcfg mem insn =
+  let superset_rcfg =
+    Option.value superset_rcfg ~default:(G.create ()) in
+  let src = Memory.min_addr mem in
+  let bad = Addr.of_int ~width:(Addr.bitwidth src) 0 in
+  match insn with
+  | Some(insn) ->
+    G.add_vertex superset_rcfg src;
+  | None -> G.add_edge superset_rcfg bad src
+
+
+let rcfg_of_raw_superset ?superset_rcfg raw_superset =
   let superset_rcfg = Option.value superset_rcfg ~default:(G.create ()) in
   List.iter raw_superset ~f:(fun (mem, insn) ->
-      let src = Memory.min_addr mem in
-      let bad = Addr.of_int ~width:(Addr.bitwidth src) 0 in
-      match insn with
-      | Some(insn) ->
-        G.add_vertex superset_rcfg src;
-      | None -> G.add_edge superset_rcfg bad src;
+      add ~superset_rcfg mem insn
     );
   superset_rcfg
 
@@ -43,6 +99,7 @@ let conflicts_within_insn_at ?conflicts insn_map addr =
       conflicts
     else
       let conflicts = if Map.mem insn_map cur_addr then
+          let conflicts = Set.add conflicts addr in
           Set.add conflicts cur_addr
         else conflicts in 
       within_insn conflicts insn_map Addr.(cur_addr ++ 1) len in
@@ -60,8 +117,7 @@ let conflicts_within_insns insn_map keep =
           ~conflicts:to_remove insn_map addr
       )
 
-let find_all_conflicts insn_map insn_cfg =
-  print_endline "find_all_conflicts";
+let find_all_conflicts insn_map =
   let addrs = Addr.Set.of_list @@ Addr.Map.keys insn_map in
   conflicts_within_insns insn_map addrs
 
@@ -75,6 +131,12 @@ let seq_of_addr_range addr len =
       let next_addr = Addr.succ cur_addr in
       gen_next_addr next_addr
   in run (gen_next_addr Addr.(succ addr))
+
+let range_seq insn_map =
+  let map_seq = Addr.Map.to_sequence insn_map in
+  Seq.bind map_seq (fun (addr, (mem, _)) -> 
+      seq_of_addr_range addr (Memory.length mem)
+    )
 
 let range_seq_of_conflicts insn_map addr len = 
   let range_seq = seq_of_addr_range addr len in

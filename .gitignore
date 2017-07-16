@@ -3,3 +3,8 @@ _build/**
 /setup.log
 /setup.ml
 /setup.data
+/reduced_occlusion.txt
+/superset_disasm.tar
+/graphs.zip
+*.zip
+*.graph

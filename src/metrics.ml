@@ -19,7 +19,7 @@ type metrics = {
 let format_standard metrics =
   match metrics with 
   | Some metrics -> 
-    sprintf "%s%d\n%s%d\n%s%d\n%s%d\n%s%d\n" 
+    sprintf "%s%d\n%s%d\n%s%d\n%s%d\n%s%d" 
       "Total instructions recovered: " metrics.detected_insn_count
       "False negatives: " metrics.false_negatives
       "False positives: " metrics.false_positives
@@ -41,31 +41,37 @@ let format_latex metrics =
      | _ -> "Missing trim phases")
   | None -> "No metrics gathered!"
 
-let gather_metrics ~ground_truth insn_map insn_rcfg metrics =
-  let metrics = Option.value metrics ~default:{
-      name = ground_truth;
-      detected_insn_count = 0;
-      false_negatives     = 0;
-      false_positives     = 0;
-      detected_entries    = 0;
-      actual_entries      = 0;
-      trimmed             = [];
-    } in
+let gather_metrics ~bin superset =
+  let insn_map = Superset.get_data superset in
+  let open Superset in
+  let insn_rcfg = superset.insn_rcfg in
   let function_starts = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
-      ground_truth |> ok_exn in
+      bin |> ok_exn in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let reduced_occlusion = Addr.Hash_set.create () in
+  let true_positives = Addr.Hash_set.create () in
   let insn_cfg = Superset_rcfg.Oper.mirror insn_rcfg in
+  let data_bytes = Addr.Hash_set.create () in
   let dfs_find_conflicts addr = 
-    let add_conflicts addr = 
+    let add_conflicts addr =
+      Hash_set.add true_positives addr;
+      let len = match Addr.Map.find insn_map addr with 
+        | Some (mem, _) -> 
+          Memory.length mem
+        | None -> 0 in
+      Seq.iter (Superset_rcfg.seq_of_addr_range addr len) 
+        ~f:(fun x -> Hash_set.add data_bytes x);
       Seq.iter (Superset_rcfg.conflict_seq_at insn_map addr)
-        ~f:(fun x -> if Superset_rcfg.G.mem_vertex insn_cfg x then
-               Hash_set.add reduced_occlusion x) in
+        ~f:(fun x -> 
+            Hash_set.add reduced_occlusion x) in
     Superset_rcfg.Dfs.prefix_component add_conflicts insn_cfg addr;
   in
-  Seq.iter function_starts ~f:dfs_find_conflicts;
+  Set.iter ground_truth ~f:dfs_find_conflicts;
+  printf "Number of possible reduced false positives: %d\n" 
+    Hash_set.(length data_bytes);
   printf "Reduced occlusion: %d\n" Hash_set.(length reduced_occlusion);
+  printf "True positives: %d\n" Hash_set.(length true_positives);
   let detected_insns = 
     G.fold_vertex 
       (fun vert detected_insns -> Set.add detected_insns vert) 
@@ -75,7 +81,7 @@ let gather_metrics ~ground_truth insn_map insn_rcfg metrics =
     printf "Missed function entrances %s\n" 
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   printf "Occlusion: %d\n" 
-    (Set.length @@ Superset_rcfg.find_all_conflicts insn_map insn_rcfg);
+    (Set.length @@ Superset_rcfg.find_all_conflicts insn_map);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in
@@ -85,14 +91,13 @@ let gather_metrics ~ground_truth insn_map insn_rcfg metrics =
     Set.(length (diff detected_insns ground_truth)) in
   let detected_insn_count = G.nb_vertex insn_rcfg in
   Some ({
-      name                = metrics.name;
-      detected_insn_count = detected_insn_count + metrics.detected_insn_count;
-      false_positives     = false_positives + metrics.false_positives;
-      false_negatives     = false_negatives + metrics.false_negatives;
-      detected_entries    = metrics.detected_entries + detected_entries;
-      actual_entries      = metrics.actual_entries
-                            + (Set.length ground_truth);
-      trimmed             = metrics.trimmed;
+      name                = bin;
+      detected_insn_count = detected_insn_count;
+      false_positives     = false_positives;
+      false_negatives     = false_negatives;
+      detected_entries    = detected_entries;
+      actual_entries      = (Set.length ground_truth);
+      trimmed             = [];
     })
 
 module Opts = struct 
