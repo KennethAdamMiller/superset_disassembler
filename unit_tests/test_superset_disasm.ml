@@ -171,7 +171,14 @@ let construct_entry_conflict insn_map insn_cfg at conflict_len =
       ~data:(create_memory arch Addr.(at ++ 1) junk_data |> ok_exn, None) in
   insn_map, insn_cfg
 
-let construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
+let construct_tail_conflict 
+    insn_map insn_cfg tail_addr conflict_count =
+  let orig = 
+    if Superset_rcfg.G.mem_vertex insn_cfg tail_addr &&
+       Superset_rcfg.G.out_degree insn_cfg tail_addr > 0 then
+      let orig = Superset_rcfg.G.succ insn_cfg tail_addr in
+      let orig = Addr.Set.of_list orig in orig
+    else Addr.Set.empty in
   let insn_map, tail_len = match Addr.Map.find insn_map tail_addr with
     | Some (mem, _) -> insn_map, Memory.length mem
     | None -> 
@@ -192,7 +199,16 @@ let construct_tail_conflict insn_map insn_cfg tail_addr conflict_count =
       make_tail_options insn_map (conflict_count - 1)
     else 
       insn_map, insn_cfg in
-  make_tail_options insn_map conflict_count
+  let insn_map, insn_cfg = 
+    make_tail_options insn_map conflict_count in
+  let opts = Superset_rcfg.G.succ insn_cfg tail_addr in
+  let opts = Addr.Set.of_list opts in
+  let opts = Set.diff opts orig in
+  let msg = sprintf
+      "expected %d, got %d" conflict_count Set.(length opts) in
+  assert_equal ~msg true (Set.(length opts) = conflict_count);
+  insn_map, insn_cfg
+
 
 let test_construct_entry_conflict test_ctxt = 
   let rec test_entry_conflict_of_len entry conflict_len = 
@@ -222,7 +238,6 @@ let test_construct_entry_conflict test_ctxt =
 
 (* len tests variations on the tail location and range of total *)
 (* conflicts for a given tail can still be found by the algorithm *)
-(* TODO Should move assertions about conflicts detected to here *)
 let test_tail_construction test_ctxt =
   let rec test_tail_construction_with entry tail conflict_len =
     if conflict_len <= 1 then
@@ -367,23 +382,12 @@ let test_scc test_ctxt =
 
 let test_find_conflicts test_ctxt = 
   let insn_map, insn_cfg = init () in
-  let entry = Addr.(of_int ~width 1) in
-  let insn_map, insn_cfg = 
-    construct_loop insn_map insn_cfg entry Addr.(entry ++ 20) in
   let in_loop_addr = Addr.(of_int ~width 0x10) in
-  let loop_points = Addr.Hash_set.create () in
-  Superset_rcfg.G.iter_vertex (Hash_set.add loop_points) insn_cfg;
+  let num_conflicts = 6 in
   let insn_map, insn_cfg =
-    construct_tail_conflict insn_map insn_cfg in_loop_addr 6 in
-  let conflicts_added = Addr.Hash_set.create () in
-  Superset_rcfg.G.iter_vertex (fun vert -> 
-      if not (Hash_set.mem loop_points vert) then 
-        Hash_set.add conflicts_added vert) insn_cfg;
+    construct_tail_conflict insn_map insn_cfg in_loop_addr num_conflicts in
   let conflicts = Superset_rcfg.find_all_conflicts insn_map in 
-  Hash_set.iter conflicts_added ~f:(fun addr -> 
-      let msg = sprintf "Expected %s to be found" (Addr.to_string addr) in 
-      assert_equal ~msg (Set.mem conflicts addr) true
-    )
+  assert_equal Set.(length conflicts) num_conflicts
 
 let test_trim_scc test_ctxt = 
   let insn_map, insn_cfg = init () in
@@ -469,7 +473,6 @@ let test_topological_revisit ctxt =
       update_count insn_rcfg Addr.Map.empty in
   Map.iteri visit_count (fun ~key ~data -> assert_equal ~ctxt data 1)
 
-
 let test_cross_layer_pruning test_ctxt = 
   let insn_map, insn_rcfg = init () in
   let arch = Arch.(`x86) in
@@ -520,18 +523,35 @@ let test_cross_layer_pruning test_ctxt =
   assert_bool "Expected one of the admissible to have been removed" 
     (num_decisions < 2)
 
+let rec extend_back insn_map insn_cfg ?(step=1) addr num =
+  let make_link len =
+    let dest = Addr.(addr -- len) in
+    Superset_rcfg.G.add_edge insn_cfg addr dest;
+    let junk_data = String.create len in
+    let mem = create_memory arch dest junk_data |> ok_exn in
+    let insn_map = Map.add insn_map dest (mem, None) in
+    (insn_map, insn_cfg) in
+  if not (num = 0) then 
+    let (insn_map, insn_cfg) = make_link step in
+    extend_back insn_map insn_cfg Addr.(addr -- step) (num - 1) ~step
+  else
+    insn_map, insn_cfg
 
 let test_extended_cross_layer_pruning test_ctxt = 
   let insn_map, insn_rcfg = init () in
-  let arch = Arch.(`x86) in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
   let insn_map, insn_rcfg =
     construct_tail_conflict insn_map insn_rcfg tail_addr 2 in
   let layer_options = Superset_rcfg.G.(succ insn_rcfg tail_addr) in
-  (* TODO extend each layer_option, then  *)
-  assert_equal true (List.(length layer_options) >= 1);
-  let _ = List.fold ~init:None layer_options 
+  let insn_map, insn_rcfg = List.fold ~init:(insn_map, insn_rcfg)
+      layer_options ~f:(fun (insn_map, insn_rcfg) opt -> 
+          extend_back insn_map insn_rcfg opt 1 ~step:2
+        ) in
+  let extended_points = 
+    Decision_tree_set.entries_of_cfg 
+      (Superset_rcfg.Oper.mirror insn_rcfg) in
+  let _ = Hash_set.fold ~init:None extended_points
       ~f:(fun current next -> 
           let _ = Option.map current ~f:(fun current -> 
               Superset_rcfg.G.add_edge insn_rcfg current next
@@ -555,6 +575,13 @@ let test_extended_cross_layer_pruning test_ctxt =
   assert_bool "Expected one of the admissible to have been removed" 
     (num_decisions < 2)
 
+(* TODO Establish that if there are more than one separate components, we *)
+(* get back a single list of edges that includes both. *)
+let test_spanning_tree_behavior test_ctxt = ()
+
+(* TODO  *)
+let test_spanning_tree_deltas test_ctxt = ()
+
 
 (* TODO This should check that edges from one lineage to members of it's *)
 (* data set are detected. *)
@@ -568,14 +595,15 @@ let test_layer_delta_calculation test_ctxt = ()
 let test_dfs_iter_order test_ctxt = 
   let _, insn_rcfg = init () in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
-  let start = Addr.of_int addr_size 50 in
+  let start = Addr.of_int addr_size 40 in
   Superset_rcfg.G.add_edge insn_rcfg start Addr.(succ start);
   let visit_order = ref [] in
   Superset_rcfg.Dfs.iter 
     ~pre:(fun v -> visit_order := v :: !visit_order) 
     ~post:(fun v -> ()) insn_rcfg;
   visit_order := List.rev !visit_order;
-  let msg = sprintf "expected addr 50 to be first, was %s" 
+  let msg = sprintf "expected addr %s to be first, was %s" 
+      Addr.(to_string start)
       (List.to_string ~f:Addr.to_string !visit_order) in
   match !visit_order with 
   | first :: _ -> 
@@ -589,15 +617,10 @@ let test_dfs_iter_order test_ctxt =
 (* the decision tree set incorporates considerations for picking the  *)
 let test_overlay_construction test_ctxt = ()
 
-let test_decision_construction_combinatorics test_ctxt = ()
-
 (* Add two completely discrete cfg to the graph, and assert that two *)
 (* decision sets, which are identical in structure are found by the *)
 (* decision tree construction algorithm. *)
 let test_decision_sets_of_discrete_components test_ctxt = ()
-
-let test_conflicts_within_insn test_ctxt = ()
-
 
 (* conflicts should include both the instruction at a data address *)
 (* and the instruction whose body it is inside. *)
@@ -627,14 +650,6 @@ let test_graph_edge_behavior test_ctxt =
   let msg = "expect single edge between nodes" in
   assert_equal ~msg List.(length edges) 1
 
-
-(* TODO Establish that if there are more than one separate components, we *)
-(* get back a single list of edges that includes both. *)
-let test_spanning_tree_behavior test_ctxt = ()
-
-(* TODO  *)
-let test_spanning_tree_deltas test_ctxt = ()
-
 let () =
   let suite = 
     "suite">:::
@@ -662,8 +677,6 @@ let () =
       "test_find_conflicts" >:: test_find_conflicts;
       "test_scc" >:: test_scc;
       "test_trim_scc" >:: test_trim_scc;
-      "test_decision_construction_combinatorics"
-      >:: test_decision_construction_combinatorics;
       "test_dfs_iter_order" >:: test_dfs_iter_order;
       "test_graph_edge_behavior" >:: test_graph_edge_behavior;
       "test_extended_cross_layer_pruning"
