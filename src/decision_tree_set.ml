@@ -8,10 +8,7 @@ type 'a decision =
   | One of 'a
   | Several of 'a list
 
-(* TODO: revise the tree construction to explore by means of a *)
-(* topological ordering *)
-
-(** The choice set represents a set of potentially inter-dependent
+(** The decision set represents a set of potentially inter-dependent
       decision trees and potential requirements of selection at each
       node. Although a graph is used, the actual structure is acyclic.
       The addr -> terminal map expresses relationships between the
@@ -33,8 +30,6 @@ let entries_of_cfg insn_cfg =
       else accu)
     insn_cfg (Addr.Hash_set.create ())
 
-(* TODO this could be simplified as entries_of_cfg, applied to *)
-(* conflicts within insn at *)
 let conflicts_of_entries entries insn_map =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
@@ -61,7 +56,6 @@ let conflicts_of_entries entries insn_map =
        ) else conflicted_entries
     )
 
-(* TODO tails_of_conflicts could be just tails *)
 let tails_of_conflicts conflicts insn_cfg entries = 
   let possible_tails = mergers_of_cfg insn_cfg in
   (* we iterate over the basic blocks, reversing them in order to
@@ -205,20 +199,53 @@ let decision_trees_of_superset superset =
   decision_trees
 
 
-let min_spanning_trees superset = 
-  let edges = Superset_rcfg.Kruskal.spanningtree superset in
+let min_spanning_tree superset = 
+  let open Superset in
+  let edges = Superset_rcfg.Kruskal.spanningtree superset.insn_rcfg in
   let trees = Superset_rcfg.G.create () in
   List.iter edges ~f:(fun edge -> 
       Superset_rcfg.G.add_edge_e trees edge;
     );
   trees
 
-(* TODO this needs to be updated to maintain the delta of each *)
-(* decision, and run in two iterations, one in which the delta of *)
-(* each decision is calculated.  *)
-let visit_all insn_rcfg decision_trees ~pre ~post =
-  List.iter decision_trees ~f:(fun decision_tree -> 
-      let pre = pre decision_tree in
-      let post = post decision_tree in
-      Superset_rcfg.Dfs.iter ~pre ~post insn_rcfg
+let visit_with_deltas superset decision_tree ~pre =
+  let open Superset in
+  let insn_map = Superset.get_data superset in
+  let with_data_of_insn at ~f =
+    let len = match Map.find insn_map at with
+      | Some(mem, _) -> Memory.length mem 
+      | None -> 0 in
+    let opt_data_addrs = Superset_rcfg.seq_of_addr_range 
+        at len in
+    let () = Seq.iter
+        ~f opt_data_addrs in () in
+  let add_data_of_insn dataset at = 
+    with_data_of_insn at ~f:(Hash_set.add dataset)
+  in
+  let deltas = ref Addr.Map.empty in
+  let delta = ref None in
+  let make_deltas decision_tree addr =
+    let insns, datas = 
+      match !delta with
+      | Some (insns, datas) -> (insns, datas) 
+      | None ->     
+        let insns = Addr.Hash_set.create () in
+        let datas = Addr.Hash_set.create () in
+        delta := Some(insns, datas);
+        insns, datas in
+    add_data_of_insn datas addr;
+    Hash_set.add insns addr;
+    if Superset_rcfg.G.mem_vertex decision_tree addr then (
+      deltas := Addr.Map.add !deltas addr (insns, datas);
+      delta := None
     )
+  in
+  let insn_rcfg = superset.insn_rcfg in
+  let tree_entries = entries_of_cfg decision_tree in 
+  Hash_set.iter tree_entries 
+    ~f:(Superset_rcfg.Dfs.postfix_component 
+          (make_deltas decision_tree) insn_rcfg);
+  let pre addr = 
+    pre !deltas addr in
+  Hash_set.iter tree_entries 
+    ~f:(Superset_rcfg.Dfs.prefix_component pre insn_rcfg)

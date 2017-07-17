@@ -537,10 +537,8 @@ let rec extend_back insn_map insn_cfg ?(step=1) addr num =
   else
     insn_map, insn_cfg
 
-let test_extended_cross_layer_pruning test_ctxt = 
+let make_extended_cross tail_addr =
   let insn_map, insn_rcfg = init () in
-  let addr_size= Size.in_bits @@ Arch.addr_size arch in
-  let tail_addr = Addr.of_int addr_size 50 in
   let insn_map, insn_rcfg =
     construct_tail_conflict insn_map insn_rcfg tail_addr 2 in
   let layer_options = Superset_rcfg.G.(succ insn_rcfg tail_addr) in
@@ -558,6 +556,12 @@ let test_extended_cross_layer_pruning test_ctxt =
             ) in
           Some(next)
         ) in
+  insn_map, insn_rcfg
+
+let test_extended_cross_layer_pruning test_ctxt =
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
+  let tail_addr = Addr.of_int addr_size 50 in
+  let insn_map, insn_rcfg = make_extended_cross tail_addr in
   let superset = Superset.create ~insn_rcfg arch insn_map in
   let decision_trees = Decision_tree_set.decision_trees_of_superset
       superset in
@@ -577,11 +581,19 @@ let test_extended_cross_layer_pruning test_ctxt =
 
 (* TODO Establish that if there are more than one separate components, we *)
 (* get back a single list of edges that includes both. *)
-let test_spanning_tree_behavior test_ctxt = ()
+let test_spanning_tree_behavior test_ctxt =
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
+  let tail_addr = Addr.of_int addr_size 50 in
+  let insn_map, insn_rcfg = make_extended_cross tail_addr in
+  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let decision_tree = Decision_tree_set.min_spanning_tree superset in
+  ()
+(*Invariants.tag_tree_layer_violations superset *)
 
 (* TODO  *)
 let test_spanning_tree_deltas test_ctxt = ()
 
+let test_spanning_tree_loop test_ctxt = ()
 
 (* TODO This should check that edges from one lineage to members of it's *)
 (* data set are detected. *)
@@ -597,10 +609,11 @@ let test_dfs_iter_order test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let start = Addr.of_int addr_size 40 in
   Superset_rcfg.G.add_edge insn_rcfg start Addr.(succ start);
+  Superset_rcfg.G.add_edge insn_rcfg start Addr.(start ++ 2);
   let visit_order = ref [] in
-  Superset_rcfg.Dfs.iter 
-    ~pre:(fun v -> visit_order := v :: !visit_order) 
-    ~post:(fun v -> ()) insn_rcfg;
+  Superset_rcfg.Dfs.prefix_component
+    (fun v -> visit_order := v :: !visit_order) 
+    insn_rcfg start;
   visit_order := List.rev !visit_order;
   let msg = sprintf "expected addr %s to be first, was %s" 
       Addr.(to_string start)
