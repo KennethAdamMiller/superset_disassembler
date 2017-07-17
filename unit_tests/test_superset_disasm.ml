@@ -209,7 +209,6 @@ let construct_tail_conflict
   assert_equal ~msg true (Set.(length opts) = conflict_count);
   insn_map, insn_cfg
 
-
 let test_construct_entry_conflict test_ctxt = 
   let rec test_entry_conflict_of_len entry conflict_len = 
     if conflict_len < 2 then
@@ -579,16 +578,22 @@ let test_extended_cross_layer_pruning test_ctxt =
   assert_bool "Expected one of the admissible to have been removed" 
     (num_decisions < 2)
 
-(* TODO Establish that if there are more than one separate components, we *)
-(* get back a single list of edges that includes both. *)
 let test_spanning_tree_behavior test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
   let insn_map, insn_rcfg = make_extended_cross tail_addr in
   let superset = Superset.create ~insn_rcfg arch insn_map in
-  let decision_tree = Decision_tree_set.min_spanning_tree superset in
-  ()
-(*Invariants.tag_tree_layer_violations superset *)
+  let min_tree = Decision_tree_set.min_spanning_tree superset in
+  assert_bool "should have a min tree should not be empty" 
+    (Superset_rcfg.G.(nb_vertex min_tree) > 0);
+  Invariants.tag_min_tree_violations superset min_tree;
+  let superset = Trim.trim superset in
+  let extended_points = 
+    Decision_tree_set.entries_of_cfg 
+      (Superset_rcfg.Oper.mirror superset.insn_rcfg) in
+  let num_decisions = Hash_set.length extended_points in
+  assert_bool "Expected one of the admissible to have been removed" 
+    (num_decisions < 2)
 
 (* TODO  *)
 let test_spanning_tree_deltas test_ctxt = ()
@@ -627,7 +632,8 @@ let test_dfs_iter_order test_ctxt =
 (* conflict test, differing by the fact that it will occur inline of *)
 (* the insn_cfg. The overlay is a scenario in which a discrete *)
 (* control flow appears within another. We want to be certain that *)
-(* the decision tree set incorporates considerations for picking the  *)
+(* the decision tree set incorporates considerations for picking *)
+(* the  *)
 let test_overlay_construction test_ctxt = ()
 
 (* Add two completely discrete cfg to the graph, and assert that two *)
@@ -663,37 +669,40 @@ let test_graph_edge_behavior test_ctxt =
   let msg = "expect single edge between nodes" in
   assert_equal ~msg List.(length edges) 1
 
+
+
 let () =
   let suite = 
     "suite">:::
     [
-      "test_topological_revisit" >:: test_topological_revisit;
-      "test_hits_every_byte">:: test_hits_every_byte;
+      "test_hits_every_byte" >:: test_hits_every_byte;
       "test_trim" >:: test_trim;
       "test_trims_invalid_jump" >:: test_trims_invalid_jump;
       "test_addr_map" >:: test_addr_map;
-      "test_construct_entry_conflict"
-      >:: test_construct_entry_conflict;
-      "test_decision_tree_of_entries"
-      >:: test_decision_tree_of_entries;
+      "test_insn_cfg" >:: test_insn_cfg;
+      "test_consistent_superset" >:: test_consistent_superset;
+      "test_construct_entry_conflict" >:: test_construct_entry_conflict;
+      "test_tail_construction" >:: test_tail_construction;
       "test_tails_of_conflicts" >:: test_tails_of_conflicts;
-      "test_tail_construction">:: test_tail_construction;
-      "test_extenuating_tail_competitors"
-      >::test_extenuating_tail_competitors;
-      "test_cross_layer_pruning" >:: test_cross_layer_pruning;
-      "test_layer_downstream_invalidation"
-      >:: test_layer_downstream_invalidation;
-      "test_overlay_construction">:: test_overlay_construction;
-      "test_decision_sets_of_discrete_components"
-      >:: test_decision_sets_of_discrete_components;
+      "test_extenuating_tail_competitors" >:: test_extenuating_tail_competitors;
+      "test_decision_tree_of_entries" >:: test_decision_tree_of_entries;
       "test_loop_scc" >:: test_loop_scc;
-      "test_find_conflicts" >:: test_find_conflicts;
       "test_scc" >:: test_scc;
+      "test_find_conflicts" >:: test_find_conflicts;
       "test_trim_scc" >:: test_trim_scc;
+      "test_topological_revisit" >:: test_topological_revisit;
+      "test_cross_layer_pruning" >:: test_cross_layer_pruning;
+      "test_extended_cross_layer_pruning" >:: test_extended_cross_layer_pruning;
+      "test_spanning_tree_behavior" >:: test_spanning_tree_behavior;
+      "test_spanning_tree_deltas" >:: test_spanning_tree_deltas;
+      "test_spanning_tree_loop" >:: test_spanning_tree_loop;
+      "test_layer_downstream_invalidation" >:: test_layer_downstream_invalidation;
+      "test_layer_delta_calculation" >:: test_layer_delta_calculation;
       "test_dfs_iter_order" >:: test_dfs_iter_order;
+      "test_overlay_construction" >:: test_overlay_construction;
+      "test_decision_sets_of_discrete_components" >:: test_decision_sets_of_discrete_components;
+      "test_find_all_conflicts" >:: test_find_all_conflicts;
       "test_graph_edge_behavior" >:: test_graph_edge_behavior;
-      "test_extended_cross_layer_pruning"
-      >:: test_extended_cross_layer_pruning;
     ] in
   run_test_tt_main suite
 ;;
