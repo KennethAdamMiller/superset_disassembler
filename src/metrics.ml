@@ -2,6 +2,7 @@ open Bap.Std
 open Core_kernel.Std
 open Superset_rcfg
 
+
 type format_as   = | Latex
                    | Standard
 [@@deriving sexp]
@@ -45,8 +46,8 @@ let gather_metrics ~bin superset =
   let insn_map = Superset.get_data superset in
   let open Superset in
   let insn_rcfg = superset.insn_rcfg in
-  let function_starts = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
-      bin |> ok_exn in
+  let function_starts =
+    Insn_disasm_benchmark.ground_truth_of_unstripped_bin bin |> ok_exn in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let reduced_occlusion = Addr.Hash_set.create () in
@@ -63,9 +64,9 @@ let gather_metrics ~bin superset =
       Seq.iter (Superset_rcfg.seq_of_addr_range addr len) 
         ~f:(fun x -> Hash_set.add data_bytes x);
       Seq.iter (Superset_rcfg.conflict_seq_at insn_map addr)
-        ~f:(fun x -> 
-            Hash_set.add reduced_occlusion x) in
-    Superset_rcfg.Dfs.prefix_component add_conflicts insn_cfg addr;
+        ~f:(fun x -> Hash_set.add reduced_occlusion x) in
+    if Superset_rcfg.G.mem_vertex insn_cfg addr then
+      Superset_rcfg.Dfs.prefix_component add_conflicts insn_cfg addr;
   in
   Set.iter ground_truth ~f:dfs_find_conflicts;
   printf "Number of possible reduced false positives: %d\n" 
@@ -82,6 +83,9 @@ let gather_metrics ~bin superset =
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   printf "Occlusion: %d\n" 
     (Set.length @@ Superset_rcfg.find_all_conflicts insn_map);
+  printf "superset_map length %d graph size: %d\n" 
+    Addr.Map.(length insn_map) 
+    (Superset_rcfg.G.nb_vertex superset.insn_rcfg);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in

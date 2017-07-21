@@ -54,7 +54,6 @@ let tag_loop_entries superset =
 (* point, expressing a path by which they can finally rejoin. *)
 let tag superset = 
   let loop_exits = tag_loop_exits superset in
-  printf "loop_exits size: %d\n" Set.(length loop_exits);
   let loop_entries = tag_loop_entries superset in
   let insn_map = Superset.get_data superset in
   let num_components, discrete_components =
@@ -100,6 +99,45 @@ let tag superset =
   printf "Total added by grammar: %d\n" !total;
   superset
 
+
+let tag_by_traversal superset min_tree =
+  let deferred = Addr.Hash_set.create () in
+  let insn_rcfg = superset.insn_rcfg in
+  let insn_map = Superset.get_data superset in
+  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+  let entries = Decision_tree_set.entries_of_cfg insn_rcfg in
+  let tails = Decision_tree_set.tails_of_conflicts
+      conflicts insn_rcfg entries in
+  let options = Map.fold tails ~init:Addr.Set.empty ~f:
+      (fun ~key ~data options -> 
+         List.fold ~init:options data ~f:Set.add) in
+  let is_option addr = 
+    Set.mem options addr in
+  (* need to create a sequence of non-fall through edges *)
+  let insns = Addr.Hash_set.create () in
+  let pre deltas addr = 
+    Hash_set.add insns addr  in  
+  let post deltas addr =
+    Hash_set.remove insns addr in
+  let tag_violators deltas addr = 
+    match Map.find deltas addr with
+    | Some (insn_delta, data_delta) -> 
+      (* look for edges between insns that  *)
+      Hash_set.iter insn_delta ~f:(fun insn -> 
+          let inbound = Superset_rcfg.G.pred insn_rcfg insn in
+          List.iter inbound ~f:(fun src -> 
+              (* are there edges that are in insns, 
+                 but not in the insn_delta? *)
+              ()
+            );
+        );
+    | None -> ();
+  in
+  let post deltas addr = 
+    tag_violators deltas addr;
+    post deltas addr in
+  Decision_tree_set.visit_with_deltas 
+    ~is_option ~pre ~post superset min_tree
 
 let trimmed_disasm_of_file ?(backend="llvm") bin =
   let superset, trees = Sheathed.sheaths_of_file ~backend bin in

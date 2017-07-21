@@ -514,7 +514,7 @@ let test_cross_layer_pruning test_ctxt =
       assert_bool "at least one decision available!" 
         (Superset_rcfg.G.(nb_vertex dtree) > 0)
     );
-  let () = Invariants.tag_cross_layer_jmps superset decision_trees in
+  let () = Invariants.tag_layer_violations superset in
   let superset = Trim.trim superset in
   let insn_rcfg = superset.insn_rcfg in
   let num_decisions = List.length 
@@ -557,6 +557,44 @@ let make_extended_cross tail_addr =
         ) in
   insn_map, insn_rcfg
 
+let test_calculate_delta test_ctxt = 
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
+  let tail_addr = Addr.of_int addr_size 50 in
+  let insn_map, insn_rcfg = make_extended_cross tail_addr in
+  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let entries = Decision_tree_set.entries_of_cfg insn_rcfg in
+  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+  let tails = Decision_tree_set.tails_of_conflicts
+      conflicts insn_rcfg entries in
+  let option_set = List.fold ~init:Addr.Set.empty (Map.data tails)
+      ~f:(fun option_set options -> 
+          List.fold ~init:option_set options ~f:Addr.Set.add) in
+  let is_option = Set.mem option_set in
+  let deltas = Decision_tree_set.calculate_deltas 
+      superset entries is_option in
+  let expected_deltas = Superset_rcfg.G.succ insn_rcfg tail_addr in
+  let num_expected = List.(length expected_deltas) in
+  let actual = Map.(length deltas) in
+  let msg = sprintf "expected %d deltas, got %d" 
+      num_expected actual in
+  assert_bool msg (actual = num_expected);
+  Map.iteri deltas ~f:(fun ~key ~data -> 
+      let addr = key in
+      let (insn_delta, data_delta) = data in
+      let (data_violators, insn_violators) =
+        Invariants.enforce_exclusivity insn_delta data_delta in
+      let msg = sprintf "expected deltas at %s to be exclusive"
+          Addr.(to_string addr) in
+      let exclusive = List.(length data_violators) = 0 &&
+                      List.(length insn_violators) = 0 in
+      assert_bool msg exclusive;
+    );
+  List.iter expected_deltas ~f:(fun d_addr ->
+      let msg = sprintf "expected %s" Addr.(to_string d_addr) in
+      assert_bool msg Map.(mem deltas d_addr);
+    )
+
+
 let test_extended_cross_layer_pruning test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
@@ -570,13 +608,14 @@ let test_extended_cross_layer_pruning test_ctxt =
       assert_bool "at least one decision available!" 
         (Superset_rcfg.G.(nb_vertex dtree) > 0)
     );
-  let () = Invariants.tag_cross_layer_jmps superset decision_trees in
+  let () = Invariants.tag_layer_violations superset in
   let superset = Trim.trim superset in
   let insn_rcfg = superset.insn_rcfg in
   let num_decisions = List.length 
       (Superset_rcfg.G.succ insn_rcfg tail_addr) in
-  assert_bool "Expected one of the admissible to have been removed" 
-    (num_decisions < 2)
+  (* TODO make sure that the extensions were removed *)
+  assert_bool "Should still have decision accessible" 
+    (num_decisions = 2)
 
 let test_spanning_tree_behavior test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
@@ -584,16 +623,23 @@ let test_spanning_tree_behavior test_ctxt =
   let insn_map, insn_rcfg = make_extended_cross tail_addr in
   let superset = Superset.create ~insn_rcfg arch insn_map in
   let min_tree = Decision_tree_set.min_spanning_tree superset in
-  assert_bool "should have a min tree should not be empty" 
-    (Superset_rcfg.G.(nb_vertex min_tree) > 0);
-  Invariants.tag_min_tree_violations superset min_tree;
-  let superset = Trim.trim superset in
-  let extended_points = 
+  let termination_points = 
     Decision_tree_set.entries_of_cfg 
       (Superset_rcfg.Oper.mirror superset.insn_rcfg) in
-  let num_decisions = Hash_set.length extended_points in
-  assert_bool "Expected one of the admissible to have been removed" 
-    (num_decisions < 2)
+  assert_bool "should have a min tree should not be empty" 
+    (Superset_rcfg.G.(nb_vertex min_tree) > 0);
+  Invariants.tag_layer_violations superset;
+  let bad =  get_bad superset in
+  assert_bool "Should have marked one" 
+    Superset_rcfg.G.(mem_vertex superset.insn_rcfg bad);
+  let superset = Trim.trim superset in
+  let insn_rcfg = superset.insn_rcfg in
+  let status = Hash_set.fold termination_points ~init:true 
+      ~f:(fun status addr -> 
+          status && Superset_rcfg.G.mem_vertex insn_rcfg addr) in
+  let status = not status in
+  let msg = sprintf "Expected one of the termination_points to have been removed" in
+  assert_bool msg status
 
 (* TODO  *)
 let test_spanning_tree_deltas test_ctxt = ()
@@ -692,6 +738,7 @@ let () =
       "test_trim_scc" >:: test_trim_scc;
       "test_topological_revisit" >:: test_topological_revisit;
       "test_cross_layer_pruning" >:: test_cross_layer_pruning;
+      "test_calculate_delta" >:: test_calculate_delta;
       "test_extended_cross_layer_pruning" >:: test_extended_cross_layer_pruning;
       "test_spanning_tree_behavior" >:: test_spanning_tree_behavior;
       "test_spanning_tree_deltas" >:: test_spanning_tree_deltas;

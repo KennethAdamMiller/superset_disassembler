@@ -35,10 +35,10 @@ let conflicts_of_entries entries insn_map =
   Hash_set.fold entries ~init:[] ~f:
     (fun conflicted_entries entry -> 
        if not (Hash_set.mem visited_entries entry) then (
+         Hash_set.add visited_entries entry;
          let in_entry_conflicts = 
            Superset_rcfg.conflicts_within_insn_at insn_map entry in
          let conflicts = Addr.Hash_set.create () in
-         Hash_set.add visited_entries entry;          
          Hash_set.add conflicts entry;
          Set.iter in_entry_conflicts 
            ~f:(fun conflict ->
@@ -49,7 +49,6 @@ let conflicts_of_entries entries insn_map =
                  Hash_set.add conflicts conflict;
                )
              );
-         Hash_set.add conflicts entry;
          if (Hash_set.length conflicts) > 1 then (
            conflicts :: conflicted_entries
          ) else conflicted_entries
@@ -147,8 +146,9 @@ let decision_tree_of_entries conflicted_entries entries tails insn_cfg =
         if Hash_set.length conflicted > 0 then
           let decision_tree = Superset_rcfg.G.create () in
           let f entry = 
-            link_zero decision_tree entry;
-            f decision_tree entry in
+            if not (Hash_set.mem visited entry) then (
+              link_zero decision_tree entry;
+              f decision_tree entry) in
           Hash_set.iter conflicted ~f;
           Some(decision_tree)
         else None
@@ -208,7 +208,7 @@ let min_spanning_tree superset =
     );
   trees
 
-let visit_with_deltas superset decision_tree ~pre =
+let calculate_deltas superset entries is_option = 
   let open Superset in
   let insn_map = Superset.get_data superset in
   let with_data_of_insn at ~f =
@@ -224,7 +224,7 @@ let visit_with_deltas superset decision_tree ~pre =
   in
   let deltas = ref Addr.Map.empty in
   let delta = ref None in
-  let make_deltas decision_tree addr =
+  let make_deltas addr =
     let insns, datas = 
       match !delta with
       | Some (insns, datas) -> (insns, datas) 
@@ -233,19 +233,34 @@ let visit_with_deltas superset decision_tree ~pre =
         let datas = Addr.Hash_set.create () in
         delta := Some(insns, datas);
         insns, datas in
-    add_data_of_insn datas addr;
-    Hash_set.add insns addr;
-    if Superset_rcfg.G.mem_vertex decision_tree addr then (
+    if is_option addr then (
       deltas := Addr.Map.add !deltas addr (insns, datas);
       delta := None
+    ) else (
+      add_data_of_insn datas addr;
+      Hash_set.add insns addr;
     )
+    (* else if is in entries then store the delta in the deltas map *)
   in
   let insn_rcfg = superset.insn_rcfg in
-  let tree_entries = entries_of_cfg decision_tree in 
-  Hash_set.iter tree_entries 
+  Hash_set.iter entries 
     ~f:(Superset_rcfg.Dfs.postfix_component 
-          (make_deltas decision_tree) insn_rcfg);
+          make_deltas insn_rcfg);
+  !deltas
+
+let visit_with_deltas ?pre ?post ~is_option superset entries =
+  let open Superset in
+  let visited = Addr.Hash_set.create () in
+  let insn_rcfg = superset.insn_rcfg in
+  let pre = Option.value pre ~default:(fun _ _ -> ()) in
+  let post = Option.value post ~default:(fun _ _ -> ()) in
+  let deltas = calculate_deltas superset entries is_option in
   let pre addr = 
-    pre !deltas addr in
-  Hash_set.iter tree_entries 
-    ~f:(Superset_rcfg.Dfs.prefix_component pre insn_rcfg)
+    Hash_set.add visited addr;
+    pre deltas addr in
+  let post addr = 
+    post deltas addr in
+  Hash_set.iter entries ~f:(fun addr -> 
+      if not (Hash_set.mem visited addr) then
+        Superset_rcfg.Dfs.iter_component ~pre ~post insn_rcfg addr
+    )

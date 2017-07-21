@@ -13,7 +13,8 @@ type superset_disasm =
   | Superset_disasm
   | Trimmed_disasm
   | Tree_set
-  | Trimmed_tree_set 
+  | Trimmed_tree_set
+  | Trimmed_min_tree
   | Grammar_convergent
 
 let import bin = 
@@ -27,6 +28,7 @@ let import bin =
   superset, Decision_tree_set.(decision_trees_of_superset superset)
 
 let export bin superset trees = 
+  printf "exporting %s to file\n" bin;
   let graph_f   = Out_channel.create (bin ^ ".graph") in
   let formatter = Format.formatter_of_out_channel graph_f in
   let open Superset in
@@ -60,6 +62,12 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
           let superset, trees = 
             Sheathed.trimmed_sheaths_of_file ~backend x in
           superset, Some(trees))
+      | Trimmed_min_tree -> (fun x ->
+          let superset = 
+            Sheathed.trimmed_disasm_of_file ~backend x in
+          Invariants.tag_layer_violations superset;
+          Trim.trim superset, None
+        )
       | Grammar_convergent ->
         (fun x -> 
            let superset, trees = 
@@ -78,6 +86,8 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
       | None -> 
         dis_method bin 
     in
+    (* TODO add a mechanism to operate by phase *)
+    (* how to reconcile disasm_method with phase list? *)
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
@@ -104,8 +114,6 @@ module Program(Conf : Provider with type kind = superset_disasm)  = struct
      | Some bin -> 
        gather_metrics ~bin superset |> format |> print_endline
      | None -> ());
-    printf "superset_map length %d graph size: %d\n\n" 
-      Addr.Map.(length insn_map) (Superset_rcfg.G.nb_vertex superset.insn_rcfg)
 
 end
 
@@ -118,6 +126,7 @@ module Cmdline = struct
     "trimmed", Trimmed_disasm;
     "tree_set", Tree_set;
     "trimmed_tree_set" , Trimmed_tree_set;
+    "trimmed_min_tree", Trimmed_min_tree;
     "grammar", Grammar_convergent;
   ]
   let list_disasm_methods_doc = sprintf
@@ -125,7 +134,7 @@ module Cmdline = struct
     Arg.doc_alts_enum list_disasm_methods
   let disasm_method = 
     Arg.(required & opt (some (enum list_disasm_methods))
-           (Some Trimmed_tree_set) 
+           (Some Trimmed_disasm) 
          & info ["method"] ~doc:list_disasm_methods_doc)
 
   let create 

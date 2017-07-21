@@ -81,32 +81,73 @@ let cfg_to_string superset =
   format_cfg ~format superset;
   Format.flush_str_formatter ()
 
-let next_chunk leftovers mem ~addr =
+
+type op_trie = 
+  | Finish of bil
+  | Continue of op_trie Op.Table.t
+
+let lifted_map = Int.Table.create ()
+let is_pc_relevant insn = 
+  Dis.Insn.is insn Kind.(`May_affect_control_flow)
+
+let find_cached insn = 
+  match Hashtbl.find lifted_map (Dis.Insn.code insn) with
+  | None -> None
+  | Some optrie -> 
+    let ops = (Dis.Insn.ops insn) in
+    let rec find_bil idx optrie = 
+      let op =  Array.get ops idx in
+      match Hashtbl.find optrie op with
+      | Some(Finish(cached_bil)) -> Some(cached_bil)
+      | Some (Continue (optrie)) ->
+        find_bil (idx+1) optrie
+      | None -> None in
+    find_bil 0 optrie
+
+let trie_of_op_array ?op_tbl ops bil = 
+  let op_tbl = Option.value op_tbl ~default:(Op.Table.create ()) in
+  let _ = Array.foldi ~init:op_tbl ops ~f:(fun idx cur_tbl op -> 
+      if idx < Array.(length ops) then (
+        let new_tbl = Op.Table.create () in
+        Pervasives.ignore 
+          (Op.Table.add cur_tbl ~key:op ~data:(Continue(new_tbl)));
+        new_tbl
+      ) else (
+        Pervasives.ignore 
+          (Op.Table.add cur_tbl ~key:op ~data:(Finish(bil)));
+        cur_tbl
+      )
+    ) in
+  op_tbl
+
+let store_lifted insn bil = 
+  if not (is_pc_relevant insn) then (
+    Hashtbl.change lifted_map (Dis.Insn.code insn) 
+      ~f:(fun t ->
+          let ops = Dis.Insn.ops insn in
+          match t with
+          | None -> 
+            Some(trie_of_op_array ops bil)
+          | Some(op_tbl) ->
+            Some(trie_of_op_array ~op_tbl ops bil)
+        )
+  )
+
+let next_chunk mem ~addr =
   let next_addr = Addr.succ addr in
-  match Map.find leftovers next_addr with
-  | Some(view) -> Ok(view)
-  | None -> Memory.view ~from:next_addr mem
+  Memory.view ~from:next_addr mem
 
 let run_seq dis mem = 
   let open Seq.Generator in 
-  let leftovers = Addr.Map.empty in
-  let rec disasm leftovers cur_mem = 
-    let elem, leftovers = match Dis.insn_of_mem dis cur_mem with
-      | Ok (m, insn, lo) ->
-        (match lo with
-         | `finished -> (m, insn), leftovers
-         | `left (lo_mem) -> 
-           let leftovers = Map.remove leftovers 
-               Memory.(min_addr cur_mem) in
-           let leftovers = Map.add leftovers 
-               Memory.(min_addr lo_mem) lo_mem in
-           (m, insn), leftovers)
-      | Error _ -> (cur_mem, None), leftovers in
+  let rec disasm cur_mem = 
+    let elem = match Dis.insn_of_mem dis cur_mem with
+      | Ok (m, insn, _) -> (m, insn)
+      | Error _ -> (cur_mem, None) in
     yield elem >>= fun () ->
-    match next_chunk leftovers mem ~addr:(Memory.min_addr cur_mem) with
-    | Ok next -> disasm leftovers next
+    match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
+    | Ok next -> disasm next
     | Error _ -> return () in
-  run (disasm leftovers mem)
+  run (disasm mem)
 
 let run dis ~accu ~f mem =
   Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
@@ -114,10 +155,20 @@ let run dis ~accu ~f mem =
 let disasm ?(backend="llvm") ~accu ~f arch mem =
   Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun d -> Ok(run d ~accu ~f mem))
 
+
 let lift_insn lift_fn (mem,insn) =
-  let lift_fn = lift_fn mem in
-  let insn = Option.map insn ~f:lift_fn in
-  Option.map insn ~f:(fun bil -> (mem, bil |> ok_exn))
+  match insn with
+  | None -> None
+  | Some(insn) -> 
+    match find_cached insn with
+    | Some cached_bil -> 
+      Some(mem, cached_bil)
+    | None -> 
+      match lift_fn mem insn with 
+      | Ok(lifted) -> 
+        store_lifted insn lifted;
+        Some(mem, lifted)
+      | _ -> None 
 
 let lift arch insns =
   let module Target = (val target_of_arch arch) in
