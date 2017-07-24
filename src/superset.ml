@@ -159,7 +159,8 @@ let run dis ~accu ~f mem =
   Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
 let disasm ?(backend="llvm") ~accu ~f arch mem =
-  Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun d -> Ok(run d ~accu ~f mem))
+  Dis.with_disasm ~backend (Arch.to_string arch)
+    ~f:(fun d -> Ok(run d ~accu ~f mem))
 
 let lift_insn lift_fn (mem,insn) =
   match insn with
@@ -276,4 +277,6 @@ let superset_of_img ~data ?f ~backend img =
 
 let superset_disasm_of_file ~backend ~data ?f binary = 
   let img  = Common.img_of_filename binary in
-  superset_of_img ~data ~backend img ?f
+  let r = superset_of_img ~data ~backend img ?f in
+  Int.Table.clear lifted_map;
+  r
