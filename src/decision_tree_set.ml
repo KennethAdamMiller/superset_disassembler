@@ -254,12 +254,13 @@ let visit_with_deltas ?pre ?post ~is_option superset entries =
   let insn_rcfg = superset.insn_rcfg in
   let pre = Option.value pre ~default:(fun _ _ -> ()) in
   let post = Option.value post ~default:(fun _ _ -> ()) in
-  let deltas = calculate_deltas superset entries is_option in
+  let deltas = ref (calculate_deltas superset entries is_option) in
   let pre addr = 
-    Hash_set.add visited addr;
     pre deltas addr in
   let post addr = 
-    post deltas addr in
+    post !deltas addr;
+    deltas := Map.remove !deltas addr
+  in
   Hash_set.iter entries ~f:(fun addr -> 
       if not (Hash_set.mem visited addr) then
         Superset_rcfg.Dfs.iter_component ~pre ~post insn_rcfg addr

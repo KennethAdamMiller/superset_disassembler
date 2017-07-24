@@ -73,11 +73,13 @@ let tag_layer_violations superset =
           List.iter inbound ~f:(fun src -> 
               if Hash_set.mem data_delta src then (
                 Superset.mark_bad superset insn;
+              ) else if Hash_set.mem datas src then (
+                Superset.mark_bad superset insn;
               )
             );
         );
       mark_nonexclusive superset insn_delta data_delta
-        ~mark:(Superset.mark_bad superset);
+        ~mark:(Superset.mark_bad superset)
     | None -> ();
   in
   let post deltas addr = 
