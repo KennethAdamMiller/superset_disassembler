@@ -155,7 +155,6 @@ let run dis ~accu ~f mem =
 let disasm ?(backend="llvm") ~accu ~f arch mem =
   Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun d -> Ok(run d ~accu ~f mem))
 
-
 let lift_insn lift_fn (mem,insn) =
   match insn with
   | None -> None
@@ -239,7 +238,6 @@ let raw_superset_to_map ?insn_map raw_superset =
   insn_map
 
 let update_with_mem ?backend ?f superset mem =
-  printf "superset_cfg_of_mem length %d\n" Memory.(length mem);
   let superset_rcfg = superset.insn_rcfg in
   let update = Option.value f ~default:(fun (m, i) a -> a) in
   let f (mem, insn) accu =

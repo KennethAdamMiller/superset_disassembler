@@ -42,6 +42,8 @@ let format_latex metrics =
      | _ -> "Missing trim phases")
   | None -> "No metrics gathered!"
 
+(* adjust this to collect metrics into the metrics field, and then *)
+(* split the printing out into a separate function *)
 let gather_metrics ~bin superset =
   let insn_map = Superset.get_data superset in
   let open Superset in
@@ -68,6 +70,14 @@ let gather_metrics ~bin superset =
     if Superset_rcfg.G.mem_vertex insn_cfg addr then
       Superset_rcfg.Dfs.prefix_component add_conflicts insn_cfg addr;
   in
+  let num_bytes =
+    let segments = Table.to_sequence superset.segments in
+    Seq.fold segments ~init:0 ~f:(fun len (mem, segment) ->
+        if Image.Segment.is_executable segment then
+          len + (Memory.length mem)
+        else len
+      ) in
+  printf "superset_cfg_of_mem length %d\n" num_bytes;
   Set.iter ground_truth ~f:dfs_find_conflicts;
   printf "Number of possible reduced false positives: %d\n" 
     Hash_set.(length data_bytes);
