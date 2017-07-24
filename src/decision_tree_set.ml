@@ -256,7 +256,7 @@ let visit_with_deltas ?pre ?post ~is_option superset entries =
   let post = Option.value post ~default:(fun _ _ -> ()) in
   let deltas = ref (calculate_deltas superset entries is_option) in
   let pre addr = 
-    pre deltas addr in
+    pre !deltas addr in
   let post addr = 
     post !deltas addr;
     deltas := Map.remove !deltas addr

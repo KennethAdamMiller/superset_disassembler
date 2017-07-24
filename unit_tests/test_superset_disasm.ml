@@ -152,10 +152,6 @@ let construct_loop insn_map insn_cfg start finish =
     construct_loop_body insn_map start finish
   ) else insn_map, insn_cfg
 
-let construct_branch insn_cfg branch_at left right = 
-  Superset_rcfg.G.add_edge insn_cfg left branch_at;
-  Superset_rcfg.G.add_edge insn_cfg right branch_at
-
 let construct_entry_conflict insn_map insn_cfg at conflict_len = 
   let junk_data = String.create conflict_len in
   let conflict = Addr.(at ++ conflict_len) in
@@ -641,19 +637,53 @@ let test_spanning_tree_behavior test_ctxt =
   let msg = sprintf "Expected one of the termination_points to have been removed" in
   assert_bool msg status
 
-(* TODO  *)
-let test_spanning_tree_deltas test_ctxt = ()
+let construct_branch insn_map insn_rcfg branch_at incr = 
+  let left = Addr.(branch_at ++ incr) in
+  let junk_data = String.create incr in
+  let left_mem = create_memory arch left junk_data |> ok_exn in
+  let insn_map = Map.add insn_map left (left_mem, None) in
+  let right = Addr.(left ++ incr) in
+  let right_mem = create_memory arch right junk_data |> ok_exn in
+  let insn_map = Map.add insn_map right (right_mem, None) in
+  let rejoin = Addr.(right ++ incr) in
+  let rejoin_mem = create_memory arch rejoin junk_data |> ok_exn in
+  let insn_map = Map.add insn_map rejoin (rejoin_mem, None) in
+  Superset_rcfg.G.add_edge insn_rcfg left branch_at;
+  Superset_rcfg.G.add_edge insn_rcfg right branch_at;
+  Superset_rcfg.G.add_edge insn_rcfg right rejoin;
+  Superset_rcfg.G.add_edge insn_rcfg left rejoin;
+  insn_map, insn_rcfg
 
-let test_spanning_tree_loop test_ctxt = ()
+let test_branch_recognition test_ctxt =
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
+  let tail_addr = Addr.of_int addr_size 50 in
+  let insn_map, insn_rcfg = init () in
+  let insn_map, insn_rcfg = 
+    construct_branch insn_map insn_rcfg tail_addr 2 in
+  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let branches = Grammar.tag_by_traversal superset in
+  let msg = sprintf 
+      "expect two branches to be detected! was %d"
+      Hash_set.(length branches) in
+  assert_bool msg (Hash_set.(length branches) = 2);
+  let msg = "expect each branch to be detected!" in
+  assert_bool msg (Hash_set.(length branches) = 2);
+  ()
 
-(* TODO This should check that edges from one lineage to members of it's *)
-(* data set are detected. *)
-let test_layer_downstream_invalidation test_ctxt = ()
-
+(* TODO *)
 (* Suppose a layer is multiple instructions long. Between a choice *)
 (* and the next ancestor tail, all instructions up and including the *)
 (* tail should be in the delta *)
 let test_layer_delta_calculation test_ctxt = ()
+
+(* TODO *)
+(* A graph that is not strictly a tree has two explorations from a *)
+(* given node in order to strike all nodes. There are two entries, *)
+(* but the second entry to be explored has a few edges before *)
+(* rejoining with the other path. At each node, check to know that a *)
+(* node hasn't already been visited in the pre function. If so, then *)
+(* remove the edge between those two. *)
+let test_dfs_redundancy_elimination test_ctxt = ()
 
 let test_dfs_iter_order test_ctxt = 
   let _, insn_rcfg = init () in
@@ -674,18 +704,14 @@ let test_dfs_iter_order test_ctxt =
     assert_equal ~msg first start
   | _ -> assert_bool msg false 
 
+(* TODO *)
 (* This test is intended to be very much alike the entry *)
 (* conflict test, differing by the fact that it will occur inline of *)
 (* the insn_cfg. The overlay is a scenario in which a discrete *)
 (* control flow appears within another. We want to be certain that *)
 (* the decision tree set incorporates considerations for picking *)
-(* the  *)
+(* the overlay control flow *)
 let test_overlay_construction test_ctxt = ()
-
-(* Add two completely discrete cfg to the graph, and assert that two *)
-(* decision sets, which are identical in structure are found by the *)
-(* decision tree construction algorithm. *)
-let test_decision_sets_of_discrete_components test_ctxt = ()
 
 (* conflicts should include both the instruction at a data address *)
 (* and the instruction whose body it is inside. *)
@@ -741,13 +767,10 @@ let () =
       "test_calculate_delta" >:: test_calculate_delta;
       "test_extended_cross_layer_pruning" >:: test_extended_cross_layer_pruning;
       "test_spanning_tree_behavior" >:: test_spanning_tree_behavior;
-      "test_spanning_tree_deltas" >:: test_spanning_tree_deltas;
-      "test_spanning_tree_loop" >:: test_spanning_tree_loop;
-      "test_layer_downstream_invalidation" >:: test_layer_downstream_invalidation;
+      "test_branch_recognition" >:: test_branch_recognition;
       "test_layer_delta_calculation" >:: test_layer_delta_calculation;
       "test_dfs_iter_order" >:: test_dfs_iter_order;
       "test_overlay_construction" >:: test_overlay_construction;
-      "test_decision_sets_of_discrete_components" >:: test_decision_sets_of_discrete_components;
       "test_find_all_conflicts" >:: test_find_all_conflicts;
       "test_graph_edge_behavior" >:: test_graph_edge_behavior;
     ] in

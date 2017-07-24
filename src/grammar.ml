@@ -99,8 +99,12 @@ let tag superset =
   printf "Total added by grammar: %d\n" !total;
   superset
 
+let is_fall_through superset parent child = 
+  let len = Superset.len_at superset parent in
+  Addr.(child = (parent ++ len))
 
-let tag_by_traversal superset min_tree =
+let tag_by_traversal superset =
+  let open Superset in
   let deferred = Addr.Hash_set.create () in
   let insn_rcfg = superset.insn_rcfg in
   let insn_map = Superset.get_data superset in
@@ -115,29 +119,36 @@ let tag_by_traversal superset min_tree =
     Set.mem options addr in
   (* need to create a sequence of non-fall through edges *)
   let insns = Addr.Hash_set.create () in
-  let pre deltas addr = 
-    Hash_set.add insns addr  in  
-  let post deltas addr =
-    Hash_set.remove insns addr in
-  let tag_violators deltas addr = 
+  let tag_branches deltas addr =
+    let check_insn insn_delta insn =
+      let inbound = Superset_rcfg.G.pred insn_rcfg insn in
+      List.iter inbound ~f:(fun child -> 
+          (* check for edges between instructions that are not
+             fall through, but for which  *)
+          if not (is_fall_through superset insn child) then
+            if Hash_set.mem insn_delta child || 
+               Hash_set.mem insns child then
+              Hash_set.add deferred insn
+        ) in
+    check_insn insns addr;
     match Map.find deltas addr with
     | Some (insn_delta, data_delta) -> 
       (* look for edges between insns that  *)
       Hash_set.iter insn_delta ~f:(fun insn -> 
-          let inbound = Superset_rcfg.G.pred insn_rcfg insn in
-          List.iter inbound ~f:(fun src -> 
-              (* are there edges that are in insns, 
-                 but not in the insn_delta? *)
-              ()
-            );
+          check_insn insn_delta insn
         );
     | None -> ();
   in
+  let pre deltas addr = 
+    Hash_set.add insns addr;
+    tag_branches deltas addr
+  in
   let post deltas addr = 
-    tag_violators deltas addr;
-    post deltas addr in
+    Hash_set.remove insns addr in
   Decision_tree_set.visit_with_deltas 
-    ~is_option ~pre ~post superset min_tree
+    ~is_option ~pre ~post superset entries;
+  printf "found %d if structures\n" Hash_set.(length deferred);
+  deferred
 
 let trimmed_disasm_of_file ?(backend="llvm") bin =
   let superset, trees = Sheathed.sheaths_of_file ~backend bin in

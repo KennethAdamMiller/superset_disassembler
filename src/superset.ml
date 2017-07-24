@@ -33,6 +33,12 @@ let mark_bad superset addr =
 
 let get_data superset = superset.data
 
+let len_at superset at = 
+  let insn_map = get_data superset in
+  match Map.find insn_map at with
+  | None -> 0
+  | Some(mem, _) -> Memory.length mem
+
 let create ?insn_rcfg arch data =
   let insn_rcfg = Option.value insn_rcfg 
       ~default:(Superset_rcfg.G.create ()) in
