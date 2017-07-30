@@ -6,37 +6,35 @@ exception Bad_user_input
 exception Unknown_arch
 exception No_input
 
-type phases = 
-  | Insn_invariants
+type phase = 
+  | Default
+  | Target_not_in_memory
+  | Target_within_body
   | Invalid_memory_access
   | Non_instruction
-  | Cross_layer_invalidation
   | Component_body
-
-type content =
-  | Cfg
-  | Insn_map
+  | Cross_layer_invalidation
+  | Grammar_convergent
+  | Tree_set
 [@@deriving sexp]
 
 type checkpoint = 
   | Import
   | Export
+  | Update
 [@@deriving sexp]
 
-type 'a t = {
+type t = {
   checkpoint     : checkpoint option;
-  content        : content list option;
   disassembler   : string;
   ground_truth   : string option;
   target         : string;
-  disasm_method  : 'a;
   metrics_format : format_as;
-  phases         : string list option;
+  phases         : phase list option;
 } [@@deriving sexp, fields]
 
 module type Provider = sig
-  type kind
-  val options : kind t
+  val options : t
 end
 
 
@@ -45,24 +43,10 @@ let backend =
   Cmdliner.Arg.(value & opt string "llvm"
                 & info ["backend"] ~docv:"Disassembler" ~doc)
 
-
-let possible_content = [
-  "Cfg", Cfg;
-  "Insn_map" , Insn_map;
-]
-let possible_content_doc = sprintf
-    "Select of the the following disassembly methods: %s" @@ 
-  Cmdliner.Arg.doc_alts_enum possible_content
-let content = 
-  let doc =
-    "The analysis output desired; one of cfg/insn map/decision tree"
-  in
-  Cmdliner.Arg.(value & opt (some (list (enum possible_content))) None
-                & info ["output"] ~docv:"" ~doc)
-
 let list_checkpoints = [
   "Import", Import;
   "Export", Export;
+  "Update", Update;
 ]
 let checkpoint = 
   let doc = "Import or Export the disassembly graph and map." in
@@ -85,17 +69,20 @@ let target =
 
 
 let list_phases = [
-  "All Instruction invariants", Insn_invariants;
+  "All Instruction invariants", Default;
+  "Target_out_of_bounds", Target_not_in_memory;
   "Invalid memory accesses", Invalid_memory_access;
+  "Target_within_body", Target_within_body;
   "Non instruction opcode", Non_instruction;
-  "Cross Layer Invalidation", Cross_layer_invalidation;
   "Strongly Connected Component Data", Component_body;
+  "Cross Layer Invalidation", Cross_layer_invalidation;
+  "Grammar convergent", Grammar_convergent;
 ]
 let phases_doc = sprintf "Select from the following trim phase(s): %s"
     List.(to_string ~f:fst list_phases)
 let phases =
   let doc = "Specify the desired trim phases to run." in
   Cmdliner.Arg.(
-    value & opt (some (list string)) None
+    value & opt (some (list (enum list_phases))) (Some([Default]))
     & info ["phases"] ~docv:phases_doc ~doc
   )

@@ -31,8 +31,8 @@ module Dfs        = Traverse.Dfs(G)
 module Path       = Path.Check(G)
 module GmlOut     = Gml.Print(G)(struct 
     let node (label : G.V.label) = 
-      [ "addr", Gml.String (Addr.to_string label)  ]
-    let edge (label : G.E.label) = [ ]
+      [ "addr", Gml.String (Addr.to_string label) ]
+    let edge _ = []
   end)
 module B = struct
   module G = struct
@@ -44,21 +44,16 @@ module B = struct
 end
 module GmlIn      = Gml.Parse(B)(struct
     let node (labels : Gml.value_list) = 
-      match List.hd labels with
-      | None -> assert false
-      | Some(_, gmlval) -> 
-        match gmlval with
-        | Gml.String(addr) -> 
+      match labels with
+      | [] -> assert false
+      | fail :: [] -> assert false
+      | (id, idval) :: (s, gmlval) :: _ -> 
+        match idval, gmlval with
+        | Gml.Int(idval), Gml.String(addr) -> 
           B.G.V.label Addr.(of_string addr)
         | _ -> assert false
 
-    let edge (labels : Gml.value_list) = 
-      match labels with
-      | [ (_, Gml.String source) ; (_, Gml.String target); _ ] ->
-        let source = Addr.of_string source in
-        let target = Addr.of_string target in
-        B.G.E.label (source, target)
-      | _ -> assert false
+    let edge (labels : Gml.value_list) = ()
   end)
 module Gml = struct
   include GmlIn
@@ -67,12 +62,12 @@ module Gml = struct
     let pgraph = parse gmlstr in
     let igraph = G.create () in
     P.iter_edges (fun src target -> 
+        let src    = B.G.V.create src in
+        let target = B.G.V.create target in
         G.add_edge igraph src target;
       ) pgraph;
     igraph
 end
-
-
 
 let add ?superset_rcfg mem insn =
   let superset_rcfg =

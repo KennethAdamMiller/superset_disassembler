@@ -15,10 +15,6 @@ let static_successors brancher mem insn =
         [None, `Fall]
       )
 
-let tag_bad superset addr =
-  let bad = Superset.get_bad superset in
-  Superset_rcfg.G.add_edge superset.insn_rcfg bad addr
-
 let find_non_mem_accesses superset = 
   let check_return_addr r addr = 
     match addr with
@@ -35,7 +31,7 @@ let find_non_mem_accesses superset =
       check_return_addr r addr
   end)
 
-let accesses_non_mem superset mem insn = 
+let accesses_non_mem superset mem insn _ = 
   let arch = superset.arch in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
@@ -52,36 +48,72 @@ let accesses_non_mem superset mem insn =
     Option.value status ~default:false
   with _ -> false 
 
+(* TODO Does this belong in Superset? *)
 let tag_with ~f (mem, insn) superset = 
   let targets = static_successors superset.brancher mem insn in
   f superset mem insn targets
 
-let tag_invalid_targets superset mem insn targets = 
-  let bad  = get_bad superset in
+let tag_target_not_in_mem superset mem insn targets =
   List.iter targets
     ~f:(fun (target,_) ->
         match target with 
         | Some(target) -> 
           if not (Superset.contains_addr superset target) then
-            Superset_rcfg.G.add_edge superset.insn_rcfg bad target
-          else if Addr.(target = bad) then
-            Superset_rcfg.G.add_edge superset.insn_rcfg bad target
+            Superset.mark_bad superset target
         | None -> ()
       );
   superset
 
-let tag_non_insn superset mem insn targets = 
-  let bad  = get_bad superset in
+let tag_target_is_bad superset mem insn targets =
+  let bad = get_bad superset in
+  List.iter targets
+    ~f:(fun (target,_) ->
+        match target with 
+        | Some(target) -> 
+          if Addr.(target = bad) then
+            Superset.mark_bad superset target
+        | None -> ()
+      );
+  superset
+
+(* TODO need to add a unit test *)
+let tag_target_in_body superset mem insn targets =
+  let src = Memory.min_addr mem in
+  List.iter targets
+    ~f:(fun (target,_) ->
+        match target with 
+        | Some(target) -> 
+          if (Memory.contains mem target) && 
+             not Addr.(src = target) then
+            Superset.mark_bad superset src
+        | None -> ()
+      );
+  superset
+
+let tag_invalid_targets superset mem insn targets = 
+  let superset = tag_target_not_in_mem superset mem insn targets in
+  let superset = tag_target_is_bad superset mem insn targets in
+  let superset = tag_target_in_body superset mem insn targets in
+  superset
+
+let tag_non_mem_access superset mem insn targets = 
   let src  = Memory.min_addr mem in
-  if accesses_non_mem superset mem insn then (
+  if accesses_non_mem superset mem insn targets then (
     (* The instruction reads or writes to memory that is not mapped *)
-    Superset_rcfg.G.add_edge superset.insn_rcfg bad src
-  ) else if Option.is_none insn then (
-    (* Wasn't a parseable instruction *)
-    Superset_rcfg.G.add_edge superset.insn_rcfg bad src
+    Superset.mark_bad superset src
   );
   superset
 
+let tag_non_insn superset mem insn targets = 
+  let src  = Memory.min_addr mem in
+  if Option.is_none insn then (
+    (* Wasn't a parseable instruction *)
+    Superset.mark_bad superset src
+  );
+  superset
+
+
+(* TODO This belongs in Superset *)
 let tag_success superset mem insn targets =
   let src = Memory.min_addr mem in
   Superset_rcfg.G.add_vertex superset.insn_rcfg src;
@@ -92,13 +124,17 @@ let tag_success superset mem insn targets =
       | None -> ());
   superset
 
+(* pretty sure this belongs in superset *)
 let add_to_map superset mem insn _ = 
   let insn_map = Superset.get_data superset in
   let insn_map = Superset.add_to_map insn_map (mem, insn) in
   Superset.rebuild ~data:insn_map superset
 
 let default_tags = [tag_non_insn;
-                    tag_invalid_targets;
+                    tag_non_mem_access;
+                    tag_target_not_in_mem;
+                    tag_target_is_bad;
+                    tag_target_in_body;
                     tag_success]
 
 let tag ?invariants =
@@ -112,6 +148,11 @@ let trim superset =
   let superset_rcfg = superset.insn_rcfg in
   let bad  = get_bad superset in
   let module G = Superset_rcfg.G in
+  let insn_map = Superset.get_data superset in
+  Superset_rcfg.G.iter_vertex (fun vert ->
+      if not Map.(mem insn_map vert) then
+        Superset.mark_bad superset vert;
+    ) superset_rcfg;
   if G.mem_vertex superset_rcfg bad then (
     let f = G.remove_vertex superset_rcfg in
     let orig_size = (G.nb_vertex superset_rcfg) in
@@ -121,9 +162,25 @@ let trim superset =
     let num_removed = orig_size - trimmed_size in
     printf "%d vertices after trimming, removing %d\n" 
       trimmed_size num_removed;
-    rebuild ~insn_rcfg:superset_rcfg superset
+    let insn_map = Map.filteri ~f:(fun ~key ~data -> 
+        let vert = key in
+        (*let (mem, insn) = data in
+          Option.is_some insn && *)
+        Superset_rcfg.G.(mem_vertex superset.insn_rcfg vert)
+      ) (get_data superset) in
+    rebuild ~insn_rcfg:superset_rcfg ~data:insn_map superset
   ) else
     superset
+
+let tag_superset ?invariants superset = 
+  let invariants = Option.value invariants ~default:default_tags in
+  let insn_map = Superset.get_data superset in
+  Addr.Map.fold ~init:superset insn_map ~f:(fun ~key ~data superset -> 
+      let mem, insn = data in
+      List.fold ~init:superset invariants ~f:(fun superset f -> 
+          tag_with ~f (mem, insn) superset
+        )
+    )
 
 let tagged_disasm_of_file ~data ?f ?invariants ~backend file =
   let invariants = Option.value invariants ~default:default_tags in

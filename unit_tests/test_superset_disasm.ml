@@ -384,6 +384,22 @@ let test_find_conflicts test_ctxt =
   let conflicts = Superset_rcfg.find_all_conflicts insn_map in 
   assert_equal Set.(length conflicts) num_conflicts
 
+let test_is_option test_ctxt = 
+  let insn_map, insn_cfg = init () in
+  let in_loop_addr = Addr.(of_int ~width 0x10) in
+  let num_conflicts = 6 in
+  let insn_map, insn_rcfg =
+    construct_tail_conflict insn_map insn_cfg in_loop_addr
+      num_conflicts in
+  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let is_option = (Decision_tree_set.insn_is_option superset) in
+  let deltas = Decision_tree_set.calculate_deltas superset
+      is_option in
+  let msg = sprintf
+      "expected 6 options to be identified, saw %d" 
+      Map.(length deltas) in
+  assert_bool msg (Map.(length deltas) = num_conflicts)
+
 let test_trim_scc test_ctxt = 
   let insn_map, insn_cfg = init () in
   let entry = Addr.(of_int ~width 1) in
@@ -510,7 +526,7 @@ let test_cross_layer_pruning test_ctxt =
       assert_bool "at least one decision available!" 
         (Superset_rcfg.G.(nb_vertex dtree) > 0)
     );
-  let () = Invariants.tag_layer_violations superset in
+  let superset = Invariants.tag_layer_violations superset in
   let superset = Trim.trim superset in
   let insn_rcfg = superset.insn_rcfg in
   let num_decisions = List.length 
@@ -567,7 +583,7 @@ let test_calculate_delta test_ctxt =
           List.fold ~init:option_set options ~f:Addr.Set.add) in
   let is_option = Set.mem option_set in
   let deltas = Decision_tree_set.calculate_deltas 
-      superset entries is_option in
+      superset ~entries is_option in
   let expected_deltas = Superset_rcfg.G.succ insn_rcfg tail_addr in
   let num_expected = List.(length expected_deltas) in
   let actual = Map.(length deltas) in
@@ -604,7 +620,7 @@ let test_extended_cross_layer_pruning test_ctxt =
       assert_bool "at least one decision available!" 
         (Superset_rcfg.G.(nb_vertex dtree) > 0)
     );
-  let () = Invariants.tag_layer_violations superset in
+  let superset = Invariants.tag_layer_violations superset in
   let superset = Trim.trim superset in
   let insn_rcfg = superset.insn_rcfg in
   let num_decisions = List.length 
@@ -624,7 +640,7 @@ let test_spanning_tree_behavior test_ctxt =
       (Superset_rcfg.Oper.mirror superset.insn_rcfg) in
   assert_bool "should have a min tree should not be empty" 
     (Superset_rcfg.G.(nb_vertex min_tree) > 0);
-  Invariants.tag_layer_violations superset;
+  let superset = Invariants.tag_layer_violations superset in
   let bad =  get_bad superset in
   assert_bool "Should have marked one" 
     Superset_rcfg.G.(mem_vertex superset.insn_rcfg bad);
@@ -650,8 +666,8 @@ let construct_branch insn_map insn_rcfg branch_at incr =
   let insn_map = Map.add insn_map rejoin (rejoin_mem, None) in
   Superset_rcfg.G.add_edge insn_rcfg left branch_at;
   Superset_rcfg.G.add_edge insn_rcfg right branch_at;
-  Superset_rcfg.G.add_edge insn_rcfg right rejoin;
-  Superset_rcfg.G.add_edge insn_rcfg left rejoin;
+  Superset_rcfg.G.add_edge insn_rcfg rejoin right;
+  Superset_rcfg.G.add_edge insn_rcfg rejoin left;
   insn_map, insn_rcfg
 
 let test_branch_recognition test_ctxt =
@@ -661,7 +677,7 @@ let test_branch_recognition test_ctxt =
   let insn_map, insn_rcfg = 
     construct_branch insn_map insn_rcfg tail_addr 2 in
   let superset = Superset.create ~insn_rcfg arch insn_map in
-  let branches = Grammar.tag_by_traversal superset in
+  let branches = Grammar.identify_branches superset in
   let msg = sprintf 
       "expect two branches to be detected! was %d"
       Hash_set.(length branches) in
@@ -761,6 +777,7 @@ let () =
       "test_loop_scc" >:: test_loop_scc;
       "test_scc" >:: test_scc;
       "test_find_conflicts" >:: test_find_conflicts;
+      "test_is_option" >:: test_is_option;
       "test_trim_scc" >:: test_trim_scc;
       "test_topological_revisit" >:: test_topological_revisit;
       "test_cross_layer_pruning" >:: test_cross_layer_pruning;

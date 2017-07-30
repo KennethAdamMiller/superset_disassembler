@@ -8,7 +8,7 @@ all:
 	$(SETUP) -build -cflag -annot -cflag -bin-annot
 
 profile:
-	ocaml setup.ml -build -cflag -annot -cflag -bin-annot -tag profile
+	ocaml setup.ml -build -cflag -annot -cflag -bin-annot -tag profile -tag debug
 
 install:
 	$(SETUP) -install

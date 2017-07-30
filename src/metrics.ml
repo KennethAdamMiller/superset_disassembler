@@ -93,9 +93,10 @@ let gather_metrics ~bin superset =
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   printf "Occlusion: %d\n" 
     (Set.length @@ Superset_rcfg.find_all_conflicts insn_map);
-  printf "superset_map length %d graph size: %d\n" 
+  printf "superset_map length %d graph size: %d num edges %d\n" 
     Addr.Map.(length insn_map) 
-    (Superset_rcfg.G.nb_vertex superset.insn_rcfg);
+    (Superset_rcfg.G.nb_vertex superset.insn_rcfg)
+    (Superset_rcfg.G.nb_edges superset.insn_rcfg);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in

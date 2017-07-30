@@ -208,19 +208,12 @@ let min_spanning_tree superset =
     );
   trees
 
-let calculate_deltas superset entries is_option = 
+let calculate_deltas superset ?entries is_option = 
   let open Superset in
-  let insn_map = Superset.get_data superset in
-  let with_data_of_insn at ~f =
-    let len = match Map.find insn_map at with
-      | Some(mem, _) -> Memory.length mem 
-      | None -> 0 in
-    let opt_data_addrs = Superset_rcfg.seq_of_addr_range 
-        at len in
-    let () = Seq.iter
-        ~f opt_data_addrs in () in
+  let entries = Option.value entries 
+      ~default:(entries_of_cfg superset.insn_rcfg) in
   let add_data_of_insn dataset at = 
-    with_data_of_insn at ~f:(Hash_set.add dataset)
+    with_data_of_insn superset at ~f:(Hash_set.add dataset)
   in
   let deltas = ref Addr.Map.empty in
   let delta = ref None in
@@ -243,25 +236,69 @@ let calculate_deltas superset entries is_option =
     (* else if is in entries then store the delta in the deltas map *)
   in
   let insn_rcfg = superset.insn_rcfg in
+  (* TOOD should be able to refactor this to use common hash set *)
   Hash_set.iter entries 
     ~f:(Superset_rcfg.Dfs.postfix_component 
           make_deltas insn_rcfg);
   !deltas
 
-let visit_with_deltas ?pre ?post ~is_option superset entries =
+(* TODO Need to find some way to cache results *)
+(* TODO could split this into tail_options *)
+let insn_is_option superset addr = 
   let open Superset in
-  let visited = Addr.Hash_set.create () in
+  let len = Superset.len_at superset addr in
+  let bound = Addr.(addr ++ len) in
   let insn_rcfg = superset.insn_rcfg in
+  let previous = Superset_rcfg.G.pred insn_rcfg addr in
+  List.fold ~init:false previous ~f:(fun current descedant -> 
+      if not current then
+        let further = Superset_rcfg.G.succ insn_rcfg descedant in
+        List.fold ~init:current further ~f:(fun current opt -> 
+            if not current then
+              if Addr.(addr <= opt) && Addr.(opt < bound) then
+                true
+              else false
+            else current
+          )
+      else current
+    )
+
+let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
+  let visited = Option.value visited 
+      ~default:(Addr.Hash_set.create ()) in
+  let rec visit v =
+    if not (Hash_set.mem visited v) then (
+      Hash_set.add visited v;
+      pre v;
+      Superset_rcfg.G.iter_succ visit g v;
+      post v
+    ) in visit v
+
+let visit ?pre ?post superset entries =
+  let open Superset in
+  let pre = Option.value pre ~default:(fun _ -> ()) in
+  let post = Option.value post ~default:(fun _ -> ()) in
+  let visited = Addr.Hash_set.create () in
+  let pre addr = 
+    Hash_set.add visited addr;
+    pre addr in
+  let insn_rcfg = superset.insn_rcfg in
+  Hash_set.iter entries ~f:(fun addr -> 
+      if not (Hash_set.mem visited addr) then
+        Superset_rcfg.Dfs.iter_component ~pre ~post insn_rcfg addr
+    )
+
+let visit_with_deltas ?pre ?post ~is_option superset entries =
   let pre = Option.value pre ~default:(fun _ _ -> ()) in
   let post = Option.value post ~default:(fun _ _ -> ()) in
-  let deltas = ref (calculate_deltas superset entries is_option) in
+  let deltas = ref (calculate_deltas superset ~entries is_option) in
   let pre addr = 
     pre !deltas addr in
   let post addr = 
     post !deltas addr;
     deltas := Map.remove !deltas addr
   in
-  Hash_set.iter entries ~f:(fun addr -> 
-      if not (Hash_set.mem visited addr) then
-        Superset_rcfg.Dfs.iter_component ~pre ~post insn_rcfg addr
-    )
+  visit ~pre ~post superset entries
+
+(* TODO visit_cumulatively *)
+

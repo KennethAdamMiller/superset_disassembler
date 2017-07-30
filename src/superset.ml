@@ -39,6 +39,11 @@ let len_at superset at =
   | None -> 0
   | Some(mem, _) -> Memory.length mem
 
+let with_data_of_insn superset at ~f =
+  let len = len_at superset at in
+  let body = Superset_rcfg.seq_of_addr_range at len in
+  Seq.iter body ~f
+
 let create ?insn_rcfg arch data =
   let insn_rcfg = Option.value insn_rcfg 
       ~default:(Superset_rcfg.G.create ()) in

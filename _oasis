@@ -18,7 +18,7 @@ BuildDepends:
 Library superset
   Path:                 src/
   Install:		false
-  Modules:		Metrics, Common, Cmdoptions, Superset_rcfg, Superset, Trim, Invariants, Insn_disasm_benchmark, Sheathed, Decision_tree_set
+  Modules:		Metrics, Common, Cmdoptions, Superset_rcfg, Superset, Trim, Invariants, Grammar, Insn_disasm_benchmark, Sheathed, Decision_tree_set
   CompiledObject:	best
   BuildDepends:		fmt, bap, core_kernel, cmdliner, ocamlgraph, logs
 

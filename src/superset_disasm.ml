@@ -9,26 +9,16 @@ open Metrics.Opts
 
 let () = Pervasives.ignore(Plugins.load ())
 
-type superset_disasm =
-  | Superset_disasm
-  | Trimmed_disasm
-  | Tree_set
-  | Trimmed_tree_set
-  | Trimmed_min_tree
-  | Grammar_convergent
-
-let import bin = 
-  let graph_str = In_channel.read_all (bin ^ ".graph") in
-  let insn_rcfg = Superset_rcfg.Gml.parse graph_str in
+let import bin =
+  let insn_rcfg = Superset_rcfg.Gml.parse (bin ^ ".graph") in
   let map_str   = In_channel.read_all (bin ^ ".map") in
   let insn_map  = Superset.insn_map_of_string map_str in
   let meta_str  = In_channel.read_all (bin ^ ".meta") in
   let arch      = Superset.meta_of_string meta_str in
   let superset  = Superset.create ~insn_rcfg arch insn_map in
-  superset, Decision_tree_set.(decision_trees_of_superset superset)
+  superset
 
 let export bin superset trees = 
-  printf "exporting %s to file\n" bin;
   let graph_f   = Out_channel.create (bin ^ ".graph") in
   let formatter = Format.formatter_of_out_channel graph_f in
   let open Superset in
@@ -40,76 +30,122 @@ let export bin superset trees =
   let meta_str  = Superset.meta_to_string superset in
   Out_channel.write_all (bin ^ ".meta") ~data:meta_str;
 
-module Program(Conf : Provider with type kind = superset_disasm)  = struct
+module Program(Conf : Provider)  = struct
   open Conf
 
   let main () =
+    let analyses = Int.Map.empty in
+    let phases = Option.value options.phases ~default:[] in
     let backend = options.disassembler in
     let checkpoint = options.checkpoint in
-    let dis_method =
-      match options.disasm_method with
-      | Superset_disasm -> 
-        (fun x -> Superset.superset_disasm_of_file 
-            ~data:Addr.Map.empty ~f:(fun (mem, insn) superset ->
-                Trim.add_to_map superset mem insn []) ~backend x, None)
-      | Trimmed_disasm -> (fun x -> 
-          Sheathed.trimmed_disasm_of_file ~backend x, None)
-      | Tree_set -> (fun x -> 
-          let superset, trees = 
-            Sheathed.sheaths_of_file ~backend x in 
-          superset, Some(trees))
-      | Trimmed_tree_set -> (fun x -> 
-          let superset, trees = 
-            Sheathed.trimmed_sheaths_of_file ~backend x in
-          superset, Some(trees))
-      | Trimmed_min_tree -> (fun x ->
-          let superset = 
-            Sheathed.trimmed_disasm_of_file ~backend x in
-          Invariants.tag_layer_violations superset;
-          Trim.trim superset, None
-        )
-      | Grammar_convergent ->
-        (fun x -> 
-           let superset, trees = 
-             Grammar.trimmed_disasm_of_file ~backend x in
-           superset, Some(trees))
-    in
-    let dis_method bin = 
-      match checkpoint with
-      | Some Import -> 
-        let superset, trees = import bin in
-        superset, Some(trees)
-      | Some Export -> 
-        let superset, trees = dis_method bin in
-        export bin superset trees;
-        superset, trees
-      | None -> 
-        dis_method bin 
-    in
-    (* TODO add a mechanism to operate by phase *)
-    (* how to reconcile disasm_method with phase list? *)
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
-    let (superset, decision_trees) = dis_method options.target in
-    (* Need to have options for specifying where the output goes *)
-    let open Superset in
-    let insn_map = Map.filteri ~f:(fun ~key ~data -> 
-        let vert = key in
-        let (mem, insn) = data in
-        Option.is_some insn && 
-        Superset_rcfg.G.(mem_vertex superset.insn_rcfg vert)) 
-        (get_data superset) in
-    let superset = Superset.rebuild ~data:insn_map superset in
-    (match options.content with
-     | Some content -> 
-       List.iter content ~f:(function
-           | Cfg -> 
-             Superset.format_cfg ~format:Format.std_formatter superset
-           | Insn_map -> 
-             print_endline 
-               Superset.(insn_map_to_string (get_data superset)))
-     | None -> ());
+    let non_insn_idx = 4 in
+    let analyses = 
+      List.fold ~init:analyses phases ~f:(fun analyses phase -> 
+          match phase with
+          | Default -> 
+            let analyses = 
+              List.foldi ~init:analyses Trim.default_tags
+                ~f:(fun idx analyses tag_func ->
+                    Map.add analyses idx (Some(tag_func), None, None))
+            in
+            let analyses = 
+              Map.add analyses (Map.length analyses)
+                (None, Some(Sheathed.tag_loop_contradictions), None)
+            in
+            let tag_grammar ?min_size =
+              Grammar.tag_by_traversal in
+            Map.add analyses (Map.length analyses)
+              (None, Some(tag_grammar), None)
+          | Target_not_in_memory -> 
+            Map.add analyses 1 
+              (Some(Trim.tag_target_not_in_mem), None, None)
+          | Target_within_body -> 
+            Map.add analyses 2 (Some(Trim.tag_target_in_body), None, None)
+          | Invalid_memory_access -> 
+            Map.add analyses 3 (Some(Trim.tag_non_mem_access), None, None)
+          | Non_instruction ->
+            Map.add analyses non_insn_idx (Some(Trim.tag_non_insn), None, None)
+          | Component_body -> 
+            Map.add analyses 5 
+              (None, Some(Sheathed.tag_loop_contradictions), None)
+          | Cross_layer_invalidation ->
+            let discard_arg ?min_size = 
+              Invariants.tag_layer_violations in
+            Map.add analyses 6
+              (None, Some(discard_arg), None)
+          | Grammar_convergent -> 
+            let discard_arg ?min_size =
+              Grammar.tag_by_traversal in
+            Map.add analyses 7
+              (None, Some(discard_arg), None)
+          | Tree_set -> 
+            Map.add analyses 8
+              (None, None, Some(Decision_tree_set.decision_trees_of_superset))
+        ) in
+    let collect_analyses analyses = 
+      Map.fold ~init:([], [], []) analyses 
+        ~f:(fun ~key ~data (tag_funcs, analysis_funcs, dset) -> 
+            let (tag_func, analysis_func, make_tree) = data in
+            let tag_func = Option.value tag_func 
+                ~default:(fun superset _ _ _ -> superset) in
+            let make_tree = Option.value make_tree ~default:(fun _ -> []) in
+            let analysis_func = 
+              Option.value analysis_func 
+                ~default:(fun ?min_size -> ident) in
+            (tag_func :: tag_funcs),
+            (analysis_func :: analysis_funcs),
+            make_tree :: dset
+          ) in
+    (* Instructions cannot be saved, so we skip the process of both
+       lifting them and therefore of removing them, since it is
+       assumed that there isn't a need to. Possible that a graph may
+       arise where the non insn points were trimmed and then wouldn't
+       be *)
+    let apply_analyses analyses superset =
+      let (tag_funcs, analysis_funcs, make_tree) =
+        collect_analyses analyses in
+      let superset = 
+        Trim.tag_superset superset ~invariants:tag_funcs in
+      List.fold ~init:superset analysis_funcs 
+        ~f:(fun superset analyze -> analyze superset) in
+    let checkpoint dis_method bin = 
+      match checkpoint with
+      | Some Import -> 
+        let superset = import bin in
+        let analyses = Map.remove analyses non_insn_idx in
+        apply_analyses analyses superset
+      | Some Export ->
+        let (tag_funcs, analysis_funcs, make_tree) =
+          collect_analyses analyses in
+        let superset = dis_method tag_funcs bin in
+        let superset = List.fold ~init:superset analysis_funcs 
+            ~f:(fun superset analyze -> analyze superset) in
+        export bin superset None;
+        superset
+      | Some Update ->
+        let superset = import bin in
+        let analyses = Map.remove analyses non_insn_idx in
+        let superset = apply_analyses analyses superset in
+        export bin superset None;
+        superset
+      | None ->
+        let (tag_funcs, analysis_funcs, make_tree) =
+          collect_analyses analyses in
+        let superset = dis_method tag_funcs bin in
+        List.fold ~init:superset analysis_funcs 
+          ~f:(fun superset analyze -> analyze superset)
+    in
+    let dis_method tag_funcs x =
+      Trim.tagged_disasm_of_file 
+        ~invariants:tag_funcs
+        ~data:Addr.Map.empty ~f:[Trim.add_to_map] ~backend x
+    in
+    let superset = 
+      checkpoint dis_method options.target in
+    let superset = Trim.trim superset in
     (match options.ground_truth with
      | Some bin -> 
        gather_metrics ~bin superset |> format |> print_endline
@@ -121,27 +157,11 @@ module Cmdline = struct
   open Cmdliner
   open Insn_disasm_benchmark
 
-  let list_disasm_methods = [
-    "superset", Superset_disasm;
-    "trimmed", Trimmed_disasm;
-    "tree_set", Tree_set;
-    "trimmed_tree_set" , Trimmed_tree_set;
-    "trimmed_min_tree", Trimmed_min_tree;
-    "grammar", Grammar_convergent;
-  ]
-  let list_disasm_methods_doc = sprintf
-      "Select of the the following disassembly methods: %s" @@ 
-    Arg.doc_alts_enum list_disasm_methods
-  let disasm_method = 
-    Arg.(required & opt (some (enum list_disasm_methods))
-           (Some Trimmed_disasm) 
-         & info ["method"] ~doc:list_disasm_methods_doc)
-
   let create 
-      checkpoint content disassembler ground_truth target
-      disasm_method metrics_format phases = 
-    Fields.create ~checkpoint ~content ~disassembler ~ground_truth ~target 
-      ~disasm_method ~metrics_format ~phases
+      checkpoint disassembler ground_truth target
+      metrics_format phases = 
+    Fields.create ~checkpoint ~disassembler ~ground_truth ~target 
+      ~metrics_format ~phases
 
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
@@ -169,7 +189,7 @@ module Cmdline = struct
       `S "OPTIONS";
     ] in
     Term.(const create 
-          $checkpoint $content $(disassembler ()) $ground_truth $target $disasm_method
+          $checkpoint $(disassembler ()) $ground_truth $target
           $metrics_format $phases),
     Term.info "superset_disasm" ~doc ~man ~version:Config.version
 
@@ -186,7 +206,6 @@ let exitf n =
 
 let start options = 
   let module Program = Program(struct
-      type kind = superset_disasm
       let options = options
     end) in
   return @@ Program.main ()

@@ -29,23 +29,12 @@ let tag_layer_violations superset =
   let open Superset in
   let insn_rcfg = superset.insn_rcfg in
   let insn_map = Superset.get_data superset in
-  (* TODO below, this should be migrated to superset or superset_rcfg *)
-  let with_data_of_insn at ~f =
-    let len = match Map.find insn_map at with
-      | Some(mem, _) -> Memory.length mem 
-      | None -> 0 in
-    let opt_data_addrs = Superset_rcfg.seq_of_addr_range 
-        at len in
-    let () = Seq.iter
-        ~f opt_data_addrs in () in
   let add_data_of_insn dataset at = 
-    with_data_of_insn at ~f:(Hash_set.add dataset)
+    with_data_of_insn superset at ~f:(Hash_set.add dataset)
   in
   let remove_data_of_insn dataset at =
-    with_data_of_insn at ~f:(Hash_set.remove dataset)
+    with_data_of_insn superset at ~f:(Hash_set.remove dataset)
   in
-  (* TODO above, this should be migrated to superset or
-     superset_rcfg *)
   let conflicts = Superset_rcfg.find_all_conflicts insn_map in
   let entries = Decision_tree_set.entries_of_cfg insn_rcfg in
   let tails = Decision_tree_set.tails_of_conflicts
@@ -86,4 +75,5 @@ let tag_layer_violations superset =
     tag_violators deltas addr;
     post deltas addr in
   Decision_tree_set.visit_with_deltas 
-    ~is_option ~pre ~post superset entries
+    ~is_option ~pre ~post superset entries;
+  superset
