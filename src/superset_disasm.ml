@@ -28,7 +28,13 @@ let export bin superset trees =
   let map_str  = Superset.insn_map_to_string insn_map in
   Out_channel.write_all (bin ^ ".map") ~data:map_str;
   let meta_str  = Superset.meta_to_string superset in
-  Out_channel.write_all (bin ^ ".meta") ~data:meta_str;
+  Out_channel.write_all (bin ^ ".meta") ~data:meta_str
+
+let time ?(name="") f x =
+  let t = Sys.time() in
+  let fx = f x in
+  Printf.printf "%s execution time: %fs\n" name (Sys.time() -. t);
+  fx
 
 module Program(Conf : Provider)  = struct
   open Conf
@@ -86,19 +92,21 @@ module Program(Conf : Provider)  = struct
               (None, None, Some(Decision_tree_set.decision_trees_of_superset))
         ) in
     let collect_analyses analyses = 
-      Map.fold ~init:([], [], []) analyses 
-        ~f:(fun ~key ~data (tag_funcs, analysis_funcs, dset) -> 
-            let (tag_func, analysis_func, make_tree) = data in
-            let tag_func = Option.value tag_func 
-                ~default:(fun superset _ _ _ -> superset) in
-            let make_tree = Option.value make_tree ~default:(fun _ -> []) in
-            let analysis_func = 
-              Option.value analysis_func 
-                ~default:(fun ?min_size -> ident) in
-            (tag_func :: tag_funcs),
-            (analysis_func :: analysis_funcs),
-            make_tree :: dset
-          ) in
+      let x, y, z = 
+        Map.fold ~init:([], [], []) analyses 
+          ~f:(fun ~key ~data (tag_funcs, analysis_funcs, dset) -> 
+              let (tag_func, analysis_func, make_tree) = data in
+              let tag_func = Option.value tag_func 
+                  ~default:(fun superset _ _ _ -> superset) in
+              let make_tree = Option.value make_tree ~default:(fun _ -> []) in
+              let analysis_func = 
+                Option.value analysis_func 
+                  ~default:(fun ?min_size -> ident) in
+              (tag_func :: tag_funcs),
+              (analysis_func :: analysis_funcs),
+              make_tree :: dset
+            ) in
+      List.rev x, List.rev y, List.rev z in
     (* Instructions cannot be saved, so we skip the process of both
        lifting them and therefore of removing them, since it is
        assumed that there isn't a need to. Possible that a graph may
@@ -114,15 +122,17 @@ module Program(Conf : Provider)  = struct
     let checkpoint dis_method bin = 
       match checkpoint with
       | Some Import -> 
-        let superset = import bin in
+        let superset = time ~name:"import" import bin in
         let analyses = Map.remove analyses non_insn_idx in
         apply_analyses analyses superset
       | Some Export ->
         let (tag_funcs, analysis_funcs, make_tree) =
           collect_analyses analyses in
         let superset = dis_method tag_funcs bin in
-        let superset = List.fold ~init:superset analysis_funcs 
-            ~f:(fun superset analyze -> analyze superset) in
+        let superset = List.foldi ~init:superset analysis_funcs 
+            ~f:(fun idx superset analyze -> 
+                let name = sprintf "analysis %d" idx in
+                time ~name analyze superset) in
         export bin superset None;
         superset
       | Some Update ->
@@ -136,12 +146,14 @@ module Program(Conf : Provider)  = struct
           collect_analyses analyses in
         let superset = dis_method tag_funcs bin in
         List.fold ~init:superset analysis_funcs 
-          ~f:(fun superset analyze -> analyze superset)
+          ~f:(fun superset analyze -> 
+              time analyze superset)
     in
     let dis_method tag_funcs x =
-      Trim.tagged_disasm_of_file 
-        ~invariants:tag_funcs
-        ~data:Addr.Map.empty ~f:[Trim.add_to_map] ~backend x
+      let f = Trim.tagged_disasm_of_file 
+          ~invariants:tag_funcs
+          ~data:Addr.Map.empty ~f:[Trim.add_to_map] ~backend in
+      time f x
     in
     let superset = 
       checkpoint dis_method options.target in

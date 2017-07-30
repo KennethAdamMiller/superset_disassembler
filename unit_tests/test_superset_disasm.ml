@@ -679,11 +679,11 @@ let test_branch_recognition test_ctxt =
   let superset = Superset.create ~insn_rcfg arch insn_map in
   let branches = Grammar.identify_branches superset in
   let msg = sprintf 
-      "expect two branches to be detected! was %d"
+      "expect branches to be detected! was %d"
       Hash_set.(length branches) in
-  assert_bool msg (Hash_set.(length branches) = 2);
-  let msg = "expect each branch to be detected!" in
-  assert_bool msg (Hash_set.(length branches) = 2);
+  assert_bool msg (Hash_set.(length branches) = 1);
+  let msg = "expect exact branch addr to be detected!" in
+  assert_bool msg (Hash_set.(mem branches tail_addr));
   ()
 
 (* TODO *)
