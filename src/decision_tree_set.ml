@@ -267,12 +267,12 @@ let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
   let rec visit v =
-    if not (Hash_set.mem visited v) then (
-      Hash_set.add visited v;
-      pre v;
-      Superset_rcfg.G.iter_succ visit g v;
-      post v
-    ) in visit v
+    Hash_set.add visited v;
+    pre v;
+    Superset_rcfg.G.iter_succ
+      (fun w -> if not (Hash_set.mem visited w) then visit w) g v;
+    post v
+  in visit v
 
 let visit ?pre ?post superset entries =
   let open Superset in

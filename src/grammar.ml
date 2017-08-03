@@ -73,17 +73,26 @@ let tag_by_traversal superset =
   printf "detected %d if structures\n" (Hash_set.length branches);
   let entries = Decision_tree_set.entries_of_cfg superset.insn_rcfg in
   let cur_total = ref 0 in
-  let threshold = 50 in
-  let marked = ref false in
+  let positives = ref [] in
+  let threshold = 10 in
   let entry = ref None in
+  let tp_entries = Addr.Hash_set.create () in
   let pre addr = 
     if Option.is_none !entry then (
       entry := Some(addr);
       cur_total := 0;
-      marked := false
+      positives := [];
+    );
+    if Hash_set.mem branches addr then (
+      cur_total := !cur_total + 1;
+      positives := addr :: !positives;
+      if !cur_total >= threshold then
+        let open Option in 
+        ignore (List.nth !positives threshold >>| 
+                (fun convergent_point ->
+                   Hash_set.add tp_entries convergent_point));
     )
   in
-  let tp_entries = Addr.Hash_set.create () in
   (* TODO, post does not take into account that increments may occur *)
   (* across layers and keep those isolated *)
   let post addr = 
@@ -93,12 +102,12 @@ let tag_by_traversal superset =
          entry := None
        )
      | None -> ());
-    if Hash_set.mem branches addr then
-      cur_total := !cur_total + 1;
-    if !cur_total >= threshold && not (!marked) then (
-      marked := true;
-      Hash_set.add tp_entries addr;
-    );
+    if Hash_set.mem branches addr then (
+      cur_total := !cur_total - 1;
+      match !positives with
+      | _ :: remaining -> positives := remaining
+      | [] -> ();
+    )
   in
   Decision_tree_set.visit 
     ~pre ~post superset entries;

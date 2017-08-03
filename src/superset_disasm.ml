@@ -115,6 +115,7 @@ module Program(Conf : Provider)  = struct
     let apply_analyses analyses superset =
       let (tag_funcs, analysis_funcs, make_tree) =
         collect_analyses analyses in
+      (* TODO could map tag_funcs to time *)
       let superset = 
         Trim.tag_superset superset ~invariants:tag_funcs in
       List.fold ~init:superset analysis_funcs 
@@ -153,7 +154,7 @@ module Program(Conf : Provider)  = struct
       let f = Trim.tagged_disasm_of_file 
           ~invariants:tag_funcs
           ~data:Addr.Map.empty ~f:[Trim.add_to_map] ~backend in
-      time f x
+      time ~name:"disasm binary" f x
     in
     let superset = 
       checkpoint dis_method options.target in
