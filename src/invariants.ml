@@ -25,6 +25,7 @@ let mark_nonexclusive superset insn_delta data_delta ~mark =
 (* Unfortunately, I can't build this with functional programming in *)
 (* mind, because the ocamlgraph function (fold) required to do so is *)
 (* missing from the DFS module. *) 
+(* *)
 let tag_layer_violations superset = 
   let open Superset in
   let insn_rcfg = superset.insn_rcfg in
@@ -49,31 +50,62 @@ let tag_layer_violations superset =
   let pre deltas addr = 
     add_data_of_insn datas addr;
     Hash_set.add insns addr  in  
-  let post deltas addr =
-    Hash_set.remove insns addr;
-    remove_data_of_insn datas addr in
   let tag_violators deltas addr = 
-    if Hash_set.mem datas addr then
-      Superset.mark_bad superset addr;
     match Map.find deltas addr with
     | Some (insn_delta, data_delta) -> 
       Hash_set.iter insn_delta ~f:(fun insn -> 
           let inbound = Superset_rcfg.G.pred insn_rcfg insn in
+          (* TODO what if we encounter a predecessor we haven't *)
+          (* visited before? *)
           List.iter inbound ~f:(fun src -> 
               if Hash_set.mem data_delta src then (
                 Superset.mark_bad superset insn;
-              ) else if Hash_set.mem datas src then (
-                Superset.mark_bad superset insn;
-              )
+              ) (*else if Hash_set.mem datas src then (
+                  Superset.mark_bad superset insn;
+                  )*)
             );
         );
-      mark_nonexclusive superset insn_delta data_delta
-        ~mark:(Superset.mark_bad superset)
+      (*mark_nonexclusive superset insn_delta data_delta
+        ~mark:(Superset.mark_bad superset)*)
     | None -> ();
   in
   let post deltas addr = 
     tag_violators deltas addr;
-    post deltas addr in
+    Hash_set.remove insns addr;
+    remove_data_of_insn datas addr in
   Decision_tree_set.visit_with_deltas 
     ~is_option ~pre ~post superset entries;
+  superset
+
+let tag_branch_violations superset = 
+  let open Superset in
+  let insn_rcfg = superset.insn_rcfg in
+  let insn_map = Superset.get_data superset in
+  let add_data_of_insn dataset at = 
+    with_data_of_insn superset at ~f:(Hash_set.add dataset)
+  in
+  let remove_data_of_insn dataset at =
+    with_data_of_insn superset at ~f:(Hash_set.remove dataset)
+  in
+  let insns = Addr.Hash_set.create () in
+  let datas = Addr.Hash_set.create () in
+  let pre addr = 
+    add_data_of_insn datas addr;
+    Hash_set.add insns addr;
+    let inbound = Superset_rcfg.G.pred insn_rcfg addr in
+    List.iter inbound ~f:(fun target -> 
+        let ft = Decision_tree_set.is_fall_through
+            superset addr target in
+        if not ft then (
+          if Hash_set.mem datas target then
+            Superset.mark_bad superset addr;
+          (* Could check if addr is a member of both insns and datas *)
+        )
+      )
+  in
+  let post addr = 
+    Hash_set.remove insns addr;
+    remove_data_of_insn datas addr in
+  let entries = Decision_tree_set.entries_of_cfg insn_rcfg in
+  Decision_tree_set.visit ~pre ~post superset entries;
   superset

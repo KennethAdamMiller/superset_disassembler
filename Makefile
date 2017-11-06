@@ -11,6 +11,8 @@ profile:
 	ocaml setup.ml -build -cflag -annot -cflag -bin-annot -tag profile -tag debug
 
 install:
+	oasis setup -setup-update dynamic
+	$(SETUP) -configure --bindir $(shell opam config var bin)
 	$(SETUP) -install
 
 clean:

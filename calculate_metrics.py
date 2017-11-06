@@ -28,6 +28,7 @@ x86_64_binaries = read_file("x86_64binaries.txt")
 x86_binaries = read_file("x86_binaries.txt")
 gcc_binaries = read_file("gcc_binaries.txt")
 icc_binaries = read_file("icc_binaries.txt")
+possible_fp  = read_file("possible_fp.txt")
 
 raw_superset = [superset + removed for superset, removed in zip(raw_superset, total_removed)]
 assert len(raw_superset)==len(total_removed)
@@ -36,7 +37,7 @@ print("Total binaries: ", len(mem_size))
 print("Total false negatives: ", sum(false_negatives))
 percent_mem=[raw / mem for raw, mem in zip(raw_superset, mem_size)]
 average_percent_mem=sum(percent_mem) / len(percent_mem)
-print("Average percent of memory", average_percent_mem)
+print("Average percent of memory {:.0%}".format(average_percent_mem), "max percent of memory", max(percent_mem), "min percent", min(percent_mem))
 percent_removed = [removed / raw_size for removed, raw_size in zip(total_removed, raw_superset)]
 print("Average total removed (% of superset): ", sum(percent_removed) / len(percent_removed))
 #percent_loop_removed_of_total = [ loop_body / raw_size for loop_body, raw_size in zip(loop_reduction, raw_superset)]
@@ -202,6 +203,6 @@ for name, removed, occlusion, reduced, percent in zip(worst_five_names, worst_to
     print("%s & %s & %s & %s & %s \\\\" % (name.replace("_", "\_"), removed, occlusion, reduced, "{0:.0f}\\%".format(percent*100)))
 
 print("")
-percent_tp_of_total_bytes = [ tp / (tp + tp_bytes) for tp, tp_bytes in 
+percent_tp_of_total_bytes = [ tp / (tp + tp_bytes) for tp, tp_bytes in zip(true_positives, possible_fp)]
 avg_percent_tp_of_total_bytes = sum(percent_tp_of_total_bytes) / len(percent_tp_of_total_bytes)
 print("avg percent true positives of total true positive byte space: ", avg_percent_tp_of_total_bytes)

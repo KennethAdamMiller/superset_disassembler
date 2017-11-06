@@ -21,6 +21,10 @@ let mergers_of_cfg insn_cfg =
         Addr.Set.add mergers addr
       else mergers) insn_cfg Addr.Set.empty
 
+let is_entry insn_isg addr = 
+  Superset_rcfg.G.in_degree insn_isg addr  = 0 &&
+  Superset_rcfg.G.out_degree insn_isg addr > 0
+
 let entries_of_cfg insn_cfg = 
   Superset_rcfg.G.fold_vertex (fun addr accu ->
       if Superset_rcfg.G.in_degree insn_cfg addr  = 0 &&
@@ -208,6 +212,17 @@ let min_spanning_tree superset =
     );
   trees
 
+let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
+  let visited = Option.value visited 
+      ~default:(Addr.Hash_set.create ()) in
+  let rec visit v =
+    Hash_set.add visited v;
+    pre v;
+    Superset_rcfg.G.iter_succ
+      (fun w -> if not (Hash_set.mem visited w) then visit w) g v;
+    post v
+  in visit v
+
 let calculate_deltas superset ?entries is_option = 
   let open Superset in
   let entries = Option.value entries 
@@ -237,9 +252,9 @@ let calculate_deltas superset ?entries is_option =
   in
   let insn_rcfg = superset.insn_rcfg in
   (* TOOD should be able to refactor this to use common hash set *)
+  let visited = Addr.Hash_set.create () in
   Hash_set.iter entries 
-    ~f:(Superset_rcfg.Dfs.postfix_component 
-          make_deltas insn_rcfg);
+    ~f:(iter_component ~visited ~post:make_deltas insn_rcfg);
   !deltas
 
 (* TODO Need to find some way to cache results *)
@@ -263,21 +278,26 @@ let insn_is_option superset addr =
       else current
     )
 
-let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
-  let visited = Option.value visited 
-      ~default:(Addr.Hash_set.create ()) in
-  let rec visit v =
-    Hash_set.add visited v;
-    pre v;
-    Superset_rcfg.G.iter_succ
-      (fun w -> if not (Hash_set.mem visited w) then visit w) g v;
-    post v
-  in visit v
+let collect_target_entries visited insn_risg insn_isg addr = 
+  let target_entries = Addr.Hash_set.create () in
+  let pre t = 
+    if is_entry insn_risg t then
+      Hash_set.add target_entries t in
+  let post _ = () in
+  iter_component ~visited ~pre ~post insn_isg addr;
+  target_entries
 
-let visit ?pre ?post superset entries =
+let activate_descendants active insn_isg addr = 
+  let pre t = 
+    Hash_set.add active t in
+  let post _ = () in
+  iter_component ~visited:active ~pre ~post insn_isg addr
+
+(* TODO probably the error is in the fact that ancestors may be *)
+(* occlusive. Should add a check on dispatch. *)
+(* TODO should just calculate entries *)
+let visit ~pre ~post superset entries =
   let open Superset in
-  let pre = Option.value pre ~default:(fun _ -> ()) in
-  let post = Option.value post ~default:(fun _ -> ()) in
   let visited = Addr.Hash_set.create () in
   let pre addr = 
     Hash_set.add visited addr;
@@ -285,7 +305,7 @@ let visit ?pre ?post superset entries =
   let insn_rcfg = superset.insn_rcfg in
   Hash_set.iter entries ~f:(fun addr -> 
       if not (Hash_set.mem visited addr) then
-        Superset_rcfg.Dfs.iter_component ~pre ~post insn_rcfg addr
+        iter_component ~visited ~pre ~post insn_rcfg addr
     )
 
 let visit_with_deltas ?pre ?post ~is_option superset entries =
@@ -300,5 +320,49 @@ let visit_with_deltas ?pre ?post ~is_option superset entries =
   in
   visit ~pre ~post superset entries
 
-(* TODO visit_cumulatively *)
+(* TODO this should be moved to traverse *)
+let fall_through_of superset addr =
+  let len = Superset.len_at superset addr in
+  Addr.(addr ++ len)
+
+(* TODO this should be moved to traverse *)
+let is_fall_through superset parent child = 
+  let ft = fall_through_of superset parent in
+  (* TODO should check for edge *)
+  Addr.(child = ft)
+
+(* TODO: linear scan for decision set 
+   1) move every non-fall through edge into a map, target to source
+   2) do dfs from every return point, keeping common insn & data hash,
+   sets and referencing the map to identify false jumps and if statements
+   3) if a particular addr is in the map:
+      1) look up the target (jump instruction), and check if it is in
+   the current insn set or data set.
+      2) if it is in the insn set, then mark it in another map to
+   maintain for grammar recognition. 
+      3) if it is in the data set, mark it as bad
+   4) prune the bad
+   5) Using the data structure of diamond if statements built in 3.2),
+   do another traversal where it is referenced upon returning in order
+   to recognize convergence
+*)
+let traverse ~pre ~post superset entries = 
+  let open Superset in
+  let insn_risg = superset.insn_rcfg in
+  let insn_isg = Superset_rcfg.Oper.mirror superset.insn_rcfg in
+  let jmps = Superset_rcfg.G.fold_edges (fun src target jmps -> 
+      if not (is_fall_through superset target src) then
+        Map.add jmps target src
+      else jmps
+    ) insn_risg Addr.Map.empty in
+  let visited = Addr.Hash_set.create () in
+  let active = Addr.Hash_set.create () in
+  let pre addr = 
+    Hash_set.add visited addr;
+    pre addr in
+  let insn_rcfg = superset.insn_rcfg in
+  Hash_set.iter entries ~f:(fun addr -> 
+      if not (Hash_set.mem visited addr) then
+        iter_component ~visited ~pre ~post insn_rcfg addr
+    )
 

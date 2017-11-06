@@ -11,13 +11,11 @@ BuildTools: ocamlbuild, camlp4o
 XOCamlbuildExtraArgs: -j 5
 BuildDepends:
               core_kernel,
-              bap,
-              fmt,
-              logs
+              bap
 
-Library superset
+Library superset_disassemblers
   Path:                 src/
-  Install:		false
+  Install:		true
   Modules:		Metrics, Common, Cmdoptions, Superset_rcfg, Superset, Trim, Invariants, Grammar, Insn_disasm_benchmark, Sheathed, Decision_tree_set
   CompiledObject:	best
   BuildDepends:		fmt, bap, core_kernel, cmdliner, ocamlgraph, logs
@@ -27,12 +25,11 @@ Executable superset_disasm
   Install:        	true
   MainIs:	  	superset_disasm.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads, superset
-
+  BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads, superset_disassemblers
 
 Executable test_superset
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset, bap.plugins, ocamlgraph
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, bap.plugins, ocamlgraph
   CompiledObject:	best

@@ -92,58 +92,6 @@ let cfg_to_string superset =
   format_cfg ~format superset;
   Format.flush_str_formatter ()
 
-
-type op_trie = 
-  | Finish of bil
-  | Continue of op_trie Op.Table.t
-
-let lifted_map = Int.Table.create ()
-let is_pc_relevant insn = 
-  Dis.Insn.is insn Kind.(`May_affect_control_flow)
-
-let find_cached insn = 
-  match Hashtbl.find lifted_map (Dis.Insn.code insn) with
-  | None -> None
-  | Some optrie -> 
-    let ops = (Dis.Insn.ops insn) in
-    let rec find_bil idx optrie = 
-      let op =  Array.get ops idx in
-      match Hashtbl.find optrie op with
-      | Some(Finish(cached_bil)) -> Some(cached_bil)
-      | Some (Continue (optrie)) ->
-        find_bil (idx+1) optrie
-      | None -> None in
-    find_bil 0 optrie
-
-let trie_of_op_array ?op_tbl ops bil = 
-  let op_tbl = Option.value op_tbl ~default:(Op.Table.create ()) in
-  let _ = Array.foldi ~init:op_tbl ops ~f:(fun idx cur_tbl op -> 
-      if idx < Array.(length ops) then (
-        let new_tbl = Op.Table.create () in
-        Pervasives.ignore 
-          (Op.Table.add cur_tbl ~key:op ~data:(Continue(new_tbl)));
-        new_tbl
-      ) else (
-        Pervasives.ignore 
-          (Op.Table.add cur_tbl ~key:op ~data:(Finish(bil)));
-        cur_tbl
-      )
-    ) in
-  op_tbl
-
-let store_lifted insn bil = 
-  if not (is_pc_relevant insn) then (
-    Hashtbl.change lifted_map (Dis.Insn.code insn) 
-      ~f:(fun t ->
-          let ops = Dis.Insn.ops insn in
-          match t with
-          | None -> 
-            Some(trie_of_op_array ops bil)
-          | Some(op_tbl) ->
-            Some(trie_of_op_array ~op_tbl ops bil)
-        )
-  )
-
 let next_chunk mem ~addr =
   let next_addr = Addr.succ addr in
   Memory.view ~from:next_addr mem
@@ -168,18 +116,9 @@ let disasm ?(backend="llvm") ~accu ~f arch mem =
     ~f:(fun d -> Ok(run d ~accu ~f mem))
 
 let lift_insn lift_fn (mem,insn) =
-  match insn with
-  | None -> None
-  | Some(insn) -> 
-    match find_cached insn with
-    | Some cached_bil -> 
-      Some(mem, cached_bil)
-    | None -> 
-      match lift_fn mem insn with 
-      | Ok(lifted) -> 
-        store_lifted insn lifted;
-        Some(mem, lifted)
-      | _ -> None 
+  let lift_fn = lift_fn mem in
+  let insn = Option.map insn ~f:lift_fn in
+  Option.map insn ~f:(fun bil -> (mem, bil |> ok_exn))
 
 let lift arch insns =
   let module Target = (val target_of_arch arch) in
@@ -189,7 +128,8 @@ let lift arch insns =
     ~f:(fun lifted_superset (mem, insn) -> 
         match lift_insn lifter (mem, insn) with
         | Some (mem, bil) -> 
-          Map.add lifted_superset ~key:(Memory.min_addr mem)
+          let addr = Memory.min_addr mem in 
+          Map.add lifted_superset ~key:addr
             ~data:(bil, Memory.length mem)
         | None -> lifted_superset
       )
@@ -283,5 +223,4 @@ let superset_of_img ~data ?f ~backend img =
 let superset_disasm_of_file ~backend ~data ?f binary = 
   let img  = Common.img_of_filename binary in
   let r = superset_of_img ~data ~backend img ?f in
-  Int.Table.clear lifted_map;
   r

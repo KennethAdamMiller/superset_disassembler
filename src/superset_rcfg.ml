@@ -137,6 +137,7 @@ let range_seq_of_conflicts insn_map addr len =
   let range_seq = seq_of_addr_range addr len in
   Seq.filter range_seq ~f:Addr.Map.(mem insn_map)
 
+(* TODO do not need to use insn_cfg. Could use superset type *)
 let seq_of_all_conflicts insn_map insn_cfg = 
   let insn_map_seq = Addr.Map.to_sequence insn_map in
   Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 

@@ -18,7 +18,7 @@ let import bin =
   let superset  = Superset.create ~insn_rcfg arch insn_map in
   superset
 
-let export bin superset trees = 
+let export bin superset = 
   let graph_f   = Out_channel.create (bin ^ ".graph") in
   let formatter = Format.formatter_of_out_channel graph_f in
   let open Superset in
@@ -59,10 +59,8 @@ module Program(Conf : Provider)  = struct
             in
             let analyses = 
               Map.add analyses (Map.length analyses)
-                (None, Some(Sheathed.tag_loop_contradictions), None)
-            in
-            let tag_grammar ?min_size =
-              Grammar.tag_by_traversal in
+                (None, Some(Sheathed.tag_loop_contradictions), None) in
+            let tag_grammar ?min_size = Grammar.tag_by_traversal in
             Map.add analyses (Map.length analyses)
               (None, Some(tag_grammar), None)
           | Target_not_in_memory -> 
@@ -109,13 +107,10 @@ module Program(Conf : Provider)  = struct
       List.rev x, List.rev y, List.rev z in
     (* Instructions cannot be saved, so we skip the process of both
        lifting them and therefore of removing them, since it is
-       assumed that there isn't a need to. Possible that a graph may
-       arise where the non insn points were trimmed and then wouldn't
-       be *)
+       assumed that there isn't a need to. *)
     let apply_analyses analyses superset =
       let (tag_funcs, analysis_funcs, make_tree) =
         collect_analyses analyses in
-      (* TODO could map tag_funcs to time *)
       let superset = 
         Trim.tag_superset superset ~invariants:tag_funcs in
       List.fold ~init:superset analysis_funcs 
@@ -134,13 +129,13 @@ module Program(Conf : Provider)  = struct
             ~f:(fun idx superset analyze -> 
                 let name = sprintf "analysis %d" idx in
                 time ~name analyze superset) in
-        export bin superset None;
+        export bin superset;
         superset
       | Some Update ->
         let superset = import bin in
         let analyses = Map.remove analyses non_insn_idx in
         let superset = apply_analyses analyses superset in
-        export bin superset None;
+        export bin superset;
         superset
       | None ->
         let (tag_funcs, analysis_funcs, make_tree) =
@@ -230,7 +225,7 @@ let _main =
   with
   | Bad_user_input -> 
     exitf (-2) "Could not parse: malformed input"
-  | No_input -> exitf (-2) "Could not read rom stdin"
+  | No_input -> exitf (-2) "Could not read from stdin"
   | Unknown_arch -> 
     exitf (-2) "Unknown arch. Supported architectures:\n%s"
       (String.concat ~sep:"\n" @@ List.map Arch.all ~f:Arch.to_string)
