@@ -189,6 +189,27 @@ let raw_superset_to_map ?insn_map raw_superset =
       ~f:add_to_map in
   insn_map
 
+let import bin =
+  let insn_rcfg = Superset_rcfg.Gml.parse (bin ^ ".graph") in
+  let map_str   = In_channel.read_all (bin ^ ".map") in
+  let insn_map  = insn_map_of_string map_str in
+  let meta_str  = In_channel.read_all (bin ^ ".meta") in
+  let arch      = meta_of_string meta_str in
+  let superset  = create ~insn_rcfg arch insn_map in
+  superset
+
+let export bin superset = 
+  let graph_f   = Out_channel.create (bin ^ ".graph") in
+  let formatter = Format.formatter_of_out_channel graph_f in
+  let () = Superset_rcfg.Gml.print formatter superset.insn_rcfg in
+  let () = Out_channel.close graph_f in
+  let insn_map = get_data superset in
+  let map_str  = insn_map_to_string insn_map in
+  Out_channel.write_all (bin ^ ".map") ~data:map_str;
+  let meta_str  = meta_to_string superset in
+  Out_channel.write_all (bin ^ ".meta") ~data:meta_str
+
+
 let update_with_mem ?backend ?f superset mem =
   let superset_rcfg = superset.insn_rcfg in
   let update = Option.value f ~default:(fun (m, i) a -> a) in

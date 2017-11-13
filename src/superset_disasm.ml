@@ -9,28 +9,6 @@ open Metrics.Opts
 
 let () = Pervasives.ignore(Plugins.load ())
 
-(* TODO import and export belong in Superset *)
-let import bin =
-  let insn_rcfg = Superset_rcfg.Gml.parse (bin ^ ".graph") in
-  let map_str   = In_channel.read_all (bin ^ ".map") in
-  let insn_map  = Superset.insn_map_of_string map_str in
-  let meta_str  = In_channel.read_all (bin ^ ".meta") in
-  let arch      = Superset.meta_of_string meta_str in
-  let superset  = Superset.create ~insn_rcfg arch insn_map in
-  superset
-
-let export bin superset = 
-  let graph_f   = Out_channel.create (bin ^ ".graph") in
-  let formatter = Format.formatter_of_out_channel graph_f in
-  let open Superset in
-  let () = Superset_rcfg.Gml.print formatter superset.insn_rcfg in
-  let () = Out_channel.close graph_f in
-  let insn_map = Superset.get_data superset in
-  let map_str  = Superset.insn_map_to_string insn_map in
-  Out_channel.write_all (bin ^ ".map") ~data:map_str;
-  let meta_str  = Superset.meta_to_string superset in
-  Out_channel.write_all (bin ^ ".meta") ~data:meta_str
-
 let time ?(name="") f x =
   let t = Sys.time() in
   let fx = f x in
@@ -118,7 +96,7 @@ module Program(Conf : Provider)  = struct
     let checkpoint dis_method bin = 
       match checkpoint with
       | Some Import -> 
-        let superset = time ~name:"import" import bin in
+        let superset = time ~name:"import" Superset.import bin in
         let analyses = Map.remove analyses non_insn_idx in
         apply_analyses analyses superset
       | Some Export ->
@@ -129,13 +107,13 @@ module Program(Conf : Provider)  = struct
             ~f:(fun idx superset analyze -> 
                 let name = sprintf "analysis %d" idx in
                 time ~name analyze superset) in
-        export bin superset;
+        Superset.export bin superset;
         superset
       | Some Update ->
-        let superset = import bin in
+        let superset = Superset.import bin in
         let analyses = Map.remove analyses non_insn_idx in
         let superset = apply_analyses analyses superset in
-        export bin superset;
+        Superset.export bin superset;
         superset
       | None ->
         let (tag_funcs, analysis_funcs, make_tree) =
