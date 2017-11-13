@@ -31,7 +31,7 @@ icc_binaries = read_file("icc_binaries.txt")
 possible_fp  = read_file("possible_fp.txt")
 
 raw_superset = [superset + removed for superset, removed in zip(raw_superset, total_removed)]
-assert len(raw_superset)==len(total_removed)
+assert len(raw_superset)==len(possible_fp), ("Expected %d got %d" % (len(raw_superset), len(possible_fp)))
 #assert len(raw_superset)==len(loop_reduction)
 print("Total binaries: ", len(mem_size))
 print("Total false negatives: ", sum(false_negatives))

@@ -9,6 +9,7 @@ open Metrics.Opts
 
 let () = Pervasives.ignore(Plugins.load ())
 
+(* TODO import and export belong in Superset *)
 let import bin =
   let insn_rcfg = Superset_rcfg.Gml.parse (bin ^ ".graph") in
   let map_str   = In_channel.read_all (bin ^ ".map") in
@@ -48,6 +49,8 @@ module Program(Conf : Provider)  = struct
       | Latex -> format_latex
       | Standard -> format_standard in
     let non_insn_idx = 4 in
+    let tag_grammar ?min_size = 
+      Grammar.tag_by_traversal ?threshold:None in
     let analyses = 
       List.fold ~init:analyses phases ~f:(fun analyses phase -> 
           match phase with
@@ -60,7 +63,6 @@ module Program(Conf : Provider)  = struct
             let analyses = 
               Map.add analyses (Map.length analyses)
                 (None, Some(Sheathed.tag_loop_contradictions), None) in
-            let tag_grammar ?min_size = Grammar.tag_by_traversal in
             Map.add analyses (Map.length analyses)
               (None, Some(tag_grammar), None)
           | Target_not_in_memory -> 
@@ -81,10 +83,8 @@ module Program(Conf : Provider)  = struct
             Map.add analyses 6
               (None, Some(discard_arg), None)
           | Grammar_convergent -> 
-            let discard_arg ?min_size =
-              Grammar.tag_by_traversal in
             Map.add analyses 7
-              (None, Some(discard_arg), None)
+              (None, Some(tag_grammar), None)
           | Tree_set -> 
             Map.add analyses 8
               (None, None, Some(Decision_tree_set.decision_trees_of_superset))

@@ -76,7 +76,7 @@ let identify_branches superset =
 (* TODO it's not so good that we have to detect that a function is *)
 (* the starting point. It would be better if the visit function *)
 (* managed that for us. *)
-let tag_by_traversal superset =
+let tag_by_traversal ?(threshold=10) superset =
   let superset = Trim.trim superset in 
   let superset = Invariants.tag_branch_violations superset in
   let superset = Trim.trim superset in 
@@ -88,7 +88,6 @@ let tag_by_traversal superset =
     (Hash_set.length branches);
   let cur_total = ref 0 in
   let positives = ref [] in
-  let threshold = 10 in
   let entry = ref None in
   let tp_entries = Addr.Hash_set.create () in
   (* In the case that our current starting point, entry, is none, set *)

@@ -1,3 +1,4 @@
+cat results/*.txt > metrics.txt
 cat metrics.txt| grep "vertices after trimming" | cut -d " " -f6 > total_removed.txt
 cat metrics.txt| grep "Total instructions" | cut -d " " -f4 >  final_total.txt
 cat metrics.txt| grep "superset_cfg_of_mem" | grep length | cut -d " " -f3 > mem_size.txt
@@ -10,12 +11,12 @@ cat metrics.txt| grep "True positives" | cut -d " " -f3 > true_positives.txt
 cat metrics.txt| grep "Number of possible reduced" | cut -d " " -f7 > tp_byte_space.txt
 
 rm binaries.txt
-find ~/workspace/x86_64-binaries/elf/binutils -type f -print >> binaries.txt
-find ~/workspace/x86_64-binaries/elf/coreutils -type f -print >> binaries.txt
-find ~/workspace/x86_64-binaries/elf/findutils -type f -print >> binaries.txt
-find ~/workspace/x86-binaries/elf/binutils -type f -print >> binaries.txt
-find ~/workspace/x86-binaries/elf/coreutils -type f -print >> binaries.txt
-find ~/workspace/x86-binaries/elf/findutils -type f -print >> binaries.txt
+find /Volumes/FAGFD/x86_64-binaries/elf/binutils -type f -print | grep -v "*.map" | grep -v "*.graph" | grep -v "*.meta" >> binaries.txt
+find /Volumes/FAGFD/x86_64-binaries/elf/coreutils -type f -print | grep -v "*.map" | grep -v "*.graph" | grep -v "*.meta" >> binaries.txt
+find /Volumes/FAGFD/x86_64-binaries/elf/findutils -type f -print | grep -v "*.map" | grep -v "*.graph" | grep -v "*.meta" >> binaries.txt
+find /Volumes/FAGFD/x86-binaries/elf/binutils -type f -print | grep -v "*.map" | grep -v "*.graph" | grep -v "*.meta" >> binaries.txt
+find /Volumes/FAGFD/x86-binaries/elf/coreutils -type f -print | grep -v "*.map" | grep -v "*.graph" | grep -v "*.meta" >> binaries.txt
+find /Volumes/FAGFD/x86-binaries/elf/findutils -type f -print | grep -v "*.map" | grep -v "*.graph" | grep -v "*.meta" >> binaries.txt
 cat -n binaries.txt > numbered_binaries.txt
 mv numbered_binaries.txt binaries.txt
 cat binaries.txt | grep x86 | grep -v _64 | sed '/^$/d' | cut -d " " -f3 | cut -f1 > x86_binaries.txt

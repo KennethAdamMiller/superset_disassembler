@@ -42,6 +42,31 @@ let format_latex metrics =
      | _ -> "Missing trim phases")
   | None -> "No metrics gathered!"
 
+let true_positives superset f = 
+  let open Superset in
+  let function_starts =
+    Insn_disasm_benchmark.ground_truth_of_unstripped_bin f |> ok_exn
+  in
+  let ground_truth =
+    Addr.Set.of_list @@ Seq.to_list function_starts in
+  let insn_isg = Superset_rcfg.Oper.mirror superset.insn_rcfg in
+  let true_positives = Addr.Hash_set.create () in  
+  Set.iter ground_truth ~f:(fun addr -> 
+      if Superset_rcfg.G.mem_vertex insn_isg addr then
+        Superset_rcfg.Dfs.prefix_component 
+          (Hash_set.add true_positives) insn_isg addr;
+    );
+  true_positives
+
+let false_positives superset tp =
+  let fp = Addr.Hash_set.create () in
+  Hash_set.iter tp ~f:(fun addr ->
+      let len = Superset.len_at superset addr in
+      Seq.iter (Superset_rcfg.seq_of_addr_range addr len) 
+        ~f:(fun x -> Hash_set.add fp x);
+    );
+  fp
+
 (* adjust this to collect metrics into the metrics field, and then *)
 (* split the printing out into a separate function *)
 let gather_metrics ~bin superset =
@@ -59,6 +84,9 @@ let gather_metrics ~bin superset =
   let dfs_find_conflicts addr = 
     let add_conflicts addr =
       Hash_set.add true_positives addr;
+      (* TODO insn_map is getting mixed from the ground truth, so it *)
+      (* doesn't have the length for either a removed false positive *)
+      (* or negative *)
       let len = match Addr.Map.find insn_map addr with 
         | Some (mem, _) -> 
           Memory.length mem
