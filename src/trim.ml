@@ -1,7 +1,5 @@
 open Core_kernel.Std
 open Bap.Std
-open Superset
-
 
 let static_successors brancher mem insn =
   match insn with 
@@ -32,7 +30,7 @@ let find_non_mem_accesses superset =
   end)
 
 let accesses_non_mem superset mem insn _ = 
-  let arch = superset.arch in
+  let arch = Superset.get_arch superset in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
   try
@@ -50,6 +48,7 @@ let accesses_non_mem superset mem insn _ =
 
 (* TODO Does this belong in Superset? *)
 let tag_with ~f (mem, insn) superset = 
+  let open Superset in
   let targets = static_successors superset.brancher mem insn in
   f superset mem insn targets
 
@@ -65,7 +64,7 @@ let tag_target_not_in_mem superset mem insn targets =
   superset
 
 let tag_target_is_bad superset mem insn targets =
-  let bad = get_bad superset in
+  let bad = Superset.get_bad superset in
   List.iter targets
     ~f:(fun (target,_) ->
         match target with 
@@ -116,11 +115,12 @@ let tag_non_insn superset mem insn targets =
 (* TODO This belongs in Superset *)
 let tag_success superset mem insn targets =
   let src = Memory.min_addr mem in
-  Superset_rcfg.G.add_vertex superset.insn_rcfg src;
+  let insn_risg = Superset.get_graph superset in
+  Superset_risg.G.add_vertex insn_risg src;
   List.iter targets ~f:(fun (target,_) -> 
       match target with
       | Some (target) -> 
-        Superset_rcfg.G.add_edge superset.insn_rcfg target src
+        Superset_risg.G.add_edge insn_risg target src
       | None -> ());
   superset
 
@@ -145,20 +145,22 @@ let tag ?invariants =
   tag_with ~f
 
 let trim superset =
-  let superset_rcfg = superset.insn_rcfg in
-  let bad  = get_bad superset in
-  let module G = Superset_rcfg.G in
+  let superset_risg = Superset.get_graph superset in
+  let bad  = Superset.get_bad superset in
+  let module G = Superset_risg.G in
   let insn_map = Superset.get_data superset in
-  Superset_rcfg.G.iter_vertex (fun vert ->
-      if not Map.(mem insn_map vert) then
+  Superset_risg.G.iter_vertex (fun vert ->
+      if not Map.(mem insn_map vert) then (
         Superset.mark_bad superset vert;
-    ) superset_rcfg;
-  if G.mem_vertex superset_rcfg bad then (
-    let f = G.remove_vertex superset_rcfg in
-    let orig_size = (G.nb_vertex superset_rcfg) in
-    Superset_rcfg.Dfs.postfix_component f superset_rcfg bad;
-    G.remove_vertex superset_rcfg bad;
-    let trimmed_size = (G.nb_vertex superset_rcfg) in
+      )
+    ) superset_risg;
+  if G.mem_vertex superset_risg bad then (
+    let f addr = 
+      G.remove_vertex superset_risg addr in
+    let orig_size = (G.nb_vertex superset_risg) in
+    Superset_risg.Dfs.postfix_component f superset_risg bad;
+    G.remove_vertex superset_risg bad;
+    let trimmed_size = (G.nb_vertex superset_risg) in
     let num_removed = orig_size - trimmed_size in
     printf "%d vertices after trimming, removing %d\n" 
       trimmed_size num_removed;
@@ -166,9 +168,9 @@ let trim superset =
         let vert = key in
         (*let (mem, insn) = data in
           Option.is_some insn && *)
-        Superset_rcfg.G.(mem_vertex superset.insn_rcfg vert)
-      ) (get_data superset) in
-    rebuild ~insn_rcfg:superset_rcfg ~data:insn_map superset
+        Superset_risg.G.(mem_vertex superset_risg vert)
+      ) (Superset.get_data superset) in
+    Superset.rebuild ~insn_risg:superset_risg ~data:insn_map superset
   ) else
     superset
 

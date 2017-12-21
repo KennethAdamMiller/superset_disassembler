@@ -11,7 +11,7 @@ type 'a t = {
   segments  : Image.segment Table.t;
   brancher  : Brancher.t;
   data      : 'a;
-  insn_rcfg : Superset_rcfg.t;
+  insn_risg : Superset_risg.t;
 } [@@deriving fields]
 
 let contains_addr superset addr = 
@@ -25,11 +25,16 @@ let bad_of_arch arch =
 let bad_of_addr addr =
   Addr.of_int ~width:(Addr.bitwidth addr) 0
 
+let get_arch superset = superset.arch
+
+let get_graph superset = superset.insn_risg
+
 let get_bad superset = 
   bad_of_arch superset.arch
 
 let mark_bad superset addr = 
-  Superset_rcfg.G.add_edge superset.insn_rcfg (get_bad superset) addr
+  let g = get_graph superset in
+  Superset_risg.G.add_edge g (get_bad superset) addr
 
 let get_data superset = superset.data
 
@@ -39,43 +44,87 @@ let len_at superset at =
   | None -> 0
   | Some(mem, _) -> Memory.length mem
 
+
+let fall_through_of superset addr =
+  let len = len_at superset addr in
+  Addr.(addr ++ len)
+
+let is_fall_through superset parent child = 
+  let ft = fall_through_of superset parent in
+  (* TODO should check for edge *)
+  Addr.(child = ft)
+
+let get_callsites ?(threshold=6) superset =
+  let g = (get_graph superset) in
+  let callsites = Addr.Hash_set.create () in
+  Superset_risg.G.iter_vertex
+    (fun v -> 
+       let callers = Superset_risg.G.succ g v in
+       let num_callers = 
+         List.fold callers ~init:0 ~f:(fun total caller -> 
+             if not (is_fall_through superset caller v) then
+               total + 1
+             else total) in
+       if num_callers > threshold then (
+         Hash_set.add callsites v;
+       )
+    ) g;
+  callsites
+
 let with_data_of_insn superset at ~f =
   let len = len_at superset at in
-  let body = Superset_rcfg.seq_of_addr_range at len in
+  let body = Superset_risg.seq_of_addr_range at len in
   Seq.iter body ~f
 
-let create ?insn_rcfg arch data =
-  let insn_rcfg = Option.value insn_rcfg 
-      ~default:(Superset_rcfg.G.create ()) in
+let mark_descendents_at ?visited ?datas superset addr = 
+  let insn_risg = get_graph superset in
+  let insn_isg  = Superset_risg.Oper.mirror insn_risg in
+  let visited = Option.value visited 
+      ~default:(Addr.Hash_set.create ()) in
+  let datas = Option.value datas 
+      ~default:(Addr.Hash_set.create ()) in
+  if not (Hash_set.mem visited addr) then
+    Superset_risg.Dfs.prefix_component (fun tp -> 
+        let mark_bad addr = 
+          if Superset_risg.G.mem_vertex insn_isg addr then
+            mark_bad superset addr in
+        with_data_of_insn superset tp ~f:mark_bad;
+        with_data_of_insn superset tp ~f:(Hash_set.add datas);
+        Hash_set.add visited tp;
+      ) insn_isg addr
+
+let create ?insn_risg arch data =
+  let insn_risg = Option.value insn_risg 
+      ~default:(Superset_risg.G.create ()) in
   {
     arch = arch;
     segments = Table.empty;
     brancher = Brancher.of_bil arch;
     data = data;
-    insn_rcfg = insn_rcfg;
+    insn_risg = insn_risg;
   }
 
-let rebuild ?data ?insn_rcfg superset =
+let rebuild ?data ?insn_risg superset =
   let data = Option.value data ~default:superset.data in
-  let insn_rcfg = Option.value insn_rcfg ~default:superset.insn_rcfg in
+  let insn_risg = Option.value insn_risg ~default:superset.insn_risg in
   {
     arch      = superset.arch;
     brancher  = superset.brancher;
     segments  = superset.segments;
     data      = data;
-    insn_rcfg = insn_rcfg;
+    insn_risg = insn_risg;
   }
 
 let drop superset =
   rebuild ~data:() superset
 
 let remove superset addr = 
-  Superset_rcfg.G.remove_vertex superset.insn_rcfg addr;
+  Superset_risg.G.remove_vertex superset.insn_risg addr;
   rebuild superset
 
 let add superset mem insn =
   let addr = Memory.min_addr mem in
-  Superset_rcfg.G.add_vertex superset.insn_rcfg addr;
+  Superset_risg.G.add_vertex superset.insn_risg addr;
   rebuild superset
 
 let replace superset mem insn = 
@@ -85,9 +134,9 @@ let replace superset mem insn =
 
 let format_cfg ?format superset =
   let format = Option.value format ~default:Format.std_formatter in
-  Superset_rcfg.Gml.print format superset.insn_rcfg
+  Superset_risg.Gml.print format superset.insn_risg
 
-let cfg_to_string superset = 
+let isg_to_string superset = 
   let format = Format.str_formatter in
   format_cfg ~format superset;
   Format.flush_str_formatter ()
@@ -190,18 +239,18 @@ let raw_superset_to_map ?insn_map raw_superset =
   insn_map
 
 let import bin =
-  let insn_rcfg = Superset_rcfg.Gml.parse (bin ^ ".graph") in
+  let insn_risg = Superset_risg.Gml.parse (bin ^ ".graph") in
   let map_str   = In_channel.read_all (bin ^ ".map") in
   let insn_map  = insn_map_of_string map_str in
   let meta_str  = In_channel.read_all (bin ^ ".meta") in
   let arch      = meta_of_string meta_str in
-  let superset  = create ~insn_rcfg arch insn_map in
+  let superset  = create ~insn_risg arch insn_map in
   superset
 
 let export bin superset = 
   let graph_f   = Out_channel.create (bin ^ ".graph") in
   let formatter = Format.formatter_of_out_channel graph_f in
-  let () = Superset_rcfg.Gml.print formatter superset.insn_rcfg in
+  let () = Superset_risg.Gml.print formatter superset.insn_risg in
   let () = Out_channel.close graph_f in
   let insn_map = get_data superset in
   let map_str  = insn_map_to_string insn_map in
@@ -211,10 +260,10 @@ let export bin superset =
 
 
 let update_with_mem ?backend ?f superset mem =
-  let superset_rcfg = superset.insn_rcfg in
+  let superset_risg = superset.insn_risg in
   let update = Option.value f ~default:(fun (m, i) a -> a) in
   let f (mem, insn) accu =
-    Superset_rcfg.add ~superset_rcfg mem insn;
+    Superset_risg.add ~superset_risg mem insn;
     update (mem, insn) accu in
   disasm ?backend ~accu:superset ~f superset.arch mem
 
@@ -232,7 +281,7 @@ let superset_of_img ~data ?f ~backend img =
   let superset = {
     data          = data;
     arch          = arch;
-    insn_rcfg     = Superset_rcfg.G.create ();
+    insn_risg     = Superset_risg.G.create ();
     brancher      = brancher;
     segments      = Image.segments img;
   } in

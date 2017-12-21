@@ -1,6 +1,5 @@
 open Bap.Std
 open Core_kernel.Std
-open Superset_rcfg
 
 
 type format_as   = | Latex
@@ -42,18 +41,19 @@ let format_latex metrics =
      | _ -> "Missing trim phases")
   | None -> "No metrics gathered!"
 
+(* implement jmp_of_fp as a map from target to source in *)
+
 let true_positives superset f = 
-  let open Superset in
   let function_starts =
     Insn_disasm_benchmark.ground_truth_of_unstripped_bin f |> ok_exn
   in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
-  let insn_isg = Superset_rcfg.Oper.mirror superset.insn_rcfg in
+  let insn_isg = Superset_risg.Oper.mirror (Superset.get_graph superset) in
   let true_positives = Addr.Hash_set.create () in  
   Set.iter ground_truth ~f:(fun addr -> 
-      if Superset_rcfg.G.mem_vertex insn_isg addr then
-        Superset_rcfg.Dfs.prefix_component 
+      if Superset_risg.G.mem_vertex insn_isg addr then
+        Superset_risg.Dfs.prefix_component 
           (Hash_set.add true_positives) insn_isg addr;
     );
   true_positives
@@ -62,7 +62,7 @@ let false_positives superset tp =
   let fp = Addr.Hash_set.create () in
   Hash_set.iter tp ~f:(fun addr ->
       let len = Superset.len_at superset addr in
-      Seq.iter (Superset_rcfg.seq_of_addr_range addr len) 
+      Seq.iter (Superset_risg.seq_of_addr_range addr len) 
         ~f:(fun x -> Hash_set.add fp x);
     );
   fp
@@ -71,15 +71,14 @@ let false_positives superset tp =
 (* split the printing out into a separate function *)
 let gather_metrics ~bin superset =
   let insn_map = Superset.get_data superset in
-  let open Superset in
-  let insn_rcfg = superset.insn_rcfg in
+  let insn_risg = Superset.get_graph superset in
   let function_starts =
     Insn_disasm_benchmark.ground_truth_of_unstripped_bin bin |> ok_exn in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let reduced_occlusion = Addr.Hash_set.create () in
   let true_positives = Addr.Hash_set.create () in
-  let insn_cfg = Superset_rcfg.Oper.mirror insn_rcfg in
+  let insn_isg = Superset_risg.Oper.mirror insn_risg in
   let data_bytes = Addr.Hash_set.create () in
   let dfs_find_conflicts addr = 
     let add_conflicts addr =
@@ -91,40 +90,48 @@ let gather_metrics ~bin superset =
         | Some (mem, _) -> 
           Memory.length mem
         | None -> 0 in
-      Seq.iter (Superset_rcfg.seq_of_addr_range addr len) 
+      Seq.iter (Superset_risg.seq_of_addr_range addr len) 
         ~f:(fun x -> Hash_set.add data_bytes x);
-      Seq.iter (Superset_rcfg.conflict_seq_at insn_map addr)
+      Seq.iter (Superset_risg.conflict_seq_at insn_map addr)
         ~f:(fun x -> Hash_set.add reduced_occlusion x) in
-    if Superset_rcfg.G.mem_vertex insn_cfg addr then
-      Superset_rcfg.Dfs.prefix_component add_conflicts insn_cfg addr;
+    if Superset_risg.G.mem_vertex insn_isg addr then
+      Superset_risg.Dfs.prefix_component add_conflicts insn_isg addr;
   in
   let num_bytes =
+    let open Superset in
     let segments = Table.to_sequence superset.segments in
     Seq.fold segments ~init:0 ~f:(fun len (mem, segment) ->
         if Image.Segment.is_executable segment then
           len + (Memory.length mem)
         else len
       ) in
-  printf "superset_cfg_of_mem length %d\n" num_bytes;
+  let entries = Superset_risg.entries_of_isg insn_risg in
+  let branches = Grammar.linear_branch_sweep superset entries in
+  let n = Hash_set.length branches in
+  Hash_set.iter true_positives ~f:(fun x -> Hash_set.remove branches x);
+  let tp_branches = Hash_set.(length branches) in
+  let fp_branches = n - tp_branches in
+  printf "Num f.p. branches: %d, num tp branches: %d\n" fp_branches tp_branches;
+  printf "superset_isg_of_mem length %d\n" num_bytes;
   Set.iter ground_truth ~f:dfs_find_conflicts;
   printf "Number of possible reduced false positives: %d\n" 
     Hash_set.(length data_bytes);
   printf "Reduced occlusion: %d\n" Hash_set.(length reduced_occlusion);
   printf "True positives: %d\n" Hash_set.(length true_positives);
   let detected_insns = 
-    G.fold_vertex 
+    Superset_risg.G.fold_vertex 
       (fun vert detected_insns -> Set.add detected_insns vert) 
-      insn_rcfg Addr.Set.empty in
+      insn_risg Addr.Set.empty in
   let missed_set = Set.diff ground_truth detected_insns in
   if not (Set.length missed_set = 0) then
     printf "Missed function entrances %s\n" 
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   printf "Occlusion: %d\n" 
-    (Set.length @@ Superset_rcfg.find_all_conflicts insn_map);
+    (Set.length @@ Superset_risg.find_all_conflicts insn_map);
   printf "superset_map length %d graph size: %d num edges %d\n" 
     Addr.Map.(length insn_map) 
-    (Superset_rcfg.G.nb_vertex superset.insn_rcfg)
-    (Superset_rcfg.G.nb_edges superset.insn_rcfg);
+    (Superset_risg.G.nb_vertex insn_risg)
+    (Superset_risg.G.nb_edges insn_risg);
   let detected_entries =
     Set.(length (inter detected_insns ground_truth)) in
   let missed_entrances = Set.diff ground_truth detected_insns in
@@ -132,7 +139,7 @@ let gather_metrics ~bin superset =
     Set.(length (missed_entrances)) in
   let false_positives =
     Set.(length (diff detected_insns ground_truth)) in
-  let detected_insn_count = G.nb_vertex insn_rcfg in
+  let detected_insn_count = Superset_risg.G.nb_vertex insn_risg in
   Some ({
       name                = bin;
       detected_insn_count = detected_insn_count;

@@ -1,26 +1,18 @@
 open Core_kernel.Std
 open Bap.Std
-open Superset_rcfg
+open Superset_risg
 open Common
 open Graphlib.Std
 open Graph
 
-let exits_of_cfg insn_cfg component = 
-  Set.fold component ~init:Addr.Set.empty ~f:(fun potential_exits addr -> 
-      Superset_rcfg.G.fold_pred (fun ancestor potential_exits ->
-          if not Set.(mem component ancestor) then
-            Set.add potential_exits ancestor
-          else potential_exits
-        ) insn_cfg addr potential_exits
-    )
 
-let parents_of_insns insn_cfg component = 
+let parents_of_insns insn_isg component = 
   Set.fold component ~init:Addr.Set.empty ~f:(fun potential_parents addr -> 
-      Superset_rcfg.G.fold_succ (fun ancestor potential_parents ->
+      Superset_risg.G.fold_succ (fun ancestor potential_parents ->
           if not Set.(mem component ancestor) then
             Set.add potential_parents ancestor
           else potential_parents
-        ) insn_cfg addr potential_parents
+        ) insn_isg addr potential_parents
     )
 
 let filter_components ?(min_size=20) components = 
@@ -34,25 +26,24 @@ let filter_components ?(min_size=20) components =
       )
 
 let tag_loop_contradictions ?(min_size=20) superset = 
-  let open Superset in
-  let insn_rcfg = superset.insn_rcfg in
+  let insn_risg = Superset.get_graph superset in
   let insn_map = Superset.get_data superset in
   let keep = filter_components ~min_size @@ 
-    StrongComponents.scc_list insn_rcfg in
+    StrongComponents.scc_list insn_risg in
   (* Here we have to be careful; we only want to find instructions
      that occur within a loop that produce a self-contradiction *)
-  let parents = parents_of_insns insn_rcfg keep in
+  let parents = parents_of_insns insn_risg keep in
   let to_remove = 
-    Superset_rcfg.conflicts_within_insns insn_map keep in
+    Superset_risg.conflicts_within_insns insn_map keep in
   let to_remove = Set.inter to_remove parents in
   let to_remove = Set.diff to_remove keep in
   printf "tagged %d contradictions of %d parents of %d to keep\n" 
     Set.(length to_remove)
     Set.(length parents)
     Set.(length keep);
-  let bad = get_bad superset in
-  Set.iter to_remove ~f:(G.add_edge insn_rcfg bad);
-  rebuild ~data:insn_map ~insn_rcfg superset
+  let bad = Superset.get_bad superset in
+  Set.iter to_remove ~f:(G.add_edge insn_risg bad);
+  Superset.rebuild ~data:insn_map ~insn_risg superset
 
 let default_tags = [tag_loop_contradictions]
 

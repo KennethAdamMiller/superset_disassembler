@@ -16,7 +16,7 @@ BuildDepends:
 Library superset_disassemblers
   Path:                 src/
   Install:		true
-  Modules:		Metrics, Common, Cmdoptions, Superset_rcfg, Superset, Trim, Invariants, Grammar, Insn_disasm_benchmark, Sheathed, Decision_tree_set
+  Modules:		Superset_risg, Superset, Metrics, Common, Cmdoptions, Traverse, Trim, Invariants, Grammar, Insn_disasm_benchmark, Sheathed, Decision_tree_set
   CompiledObject:	best
   BuildDepends:		fmt, bap, core_kernel, cmdliner, ocamlgraph, logs
 

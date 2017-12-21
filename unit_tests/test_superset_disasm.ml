@@ -4,7 +4,7 @@ open Bap.Std
 open Or_error
 open Common
 open Bap_plugins.Std
-open Superset_rcfg
+open Superset_risg
 open Superset
 
 let () = Pervasives.ignore(Plugins.load ())
@@ -16,9 +16,9 @@ let segments = Table.empty
 let width = 8*(Arch.size_in_bytes arch);;
 
 let init () = 
-  let insn_cfg = Superset_rcfg.G.create () in
+  let insn_isg = Superset_risg.G.create () in
   let insn_map = Addr.Map.empty in
-  insn_map, insn_cfg
+  insn_map, insn_isg
 
 let make_params ?(min_addr=0) bytes =
   let arch = Arch.(`x86) in
@@ -53,10 +53,10 @@ let of_mem arch mem =
   let brancher = Brancher.of_bil arch in
   let insns = 
     Superset.disasm ~accu:[] ~f:List.cons arch mem |> ok_exn in
-  let superset_rcfg = Superset_rcfg.rcfg_of_raw_superset insns in
+  let superset_risg = Superset_risg.risg_of_raw_superset insns in
   let insn_map = Superset.raw_superset_to_map insns in
   Superset.Fields.create 
-    ~data:insn_map ~insn_rcfg:superset_rcfg ~brancher ~arch ~segments
+    ~data:insn_map ~insn_risg:superset_risg ~brancher ~arch ~segments
 
 let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
@@ -66,11 +66,11 @@ let test_trim test_ctxt =
       superset mem ~f:Trim.tag |> ok_exn in
   let superset = Trim.trim superset in
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
-  let msg = Superset.cfg_to_string superset in
+  let msg = Superset.isg_to_string superset in
   (* After refactoring, it may be that some targets that fall outside
      the memory bounds are still in the graph, but this only accounts
      for one edge, so it is negligible. *)
-  assert_equal ~msg 1 @@ G.nb_vertex superset.insn_rcfg
+  assert_equal ~msg 1 @@ G.nb_vertex superset.insn_risg
 
 let test_trims_invalid_jump test_ctxt =
   let bytes = "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
@@ -80,7 +80,7 @@ let test_trims_invalid_jump test_ctxt =
       superset memory ~f:Trim.tag |> ok_exn in
   let superset = Trim.trim superset in
   let expected_results = [ ] in
-  assert_equal ~msg:"lengths unequal" (G.nb_vertex superset.insn_rcfg)
+  assert_equal ~msg:"lengths unequal" (G.nb_vertex superset.insn_risg)
     (List.length expected_results)
 
 let test_addr_map test_ctxt =
@@ -92,37 +92,37 @@ let test_addr_map test_ctxt =
   let msg = "expected length to be one" in
   assert_bool msg ((Addr.Map.length insn_map) = 1)
 
-let test_insn_cfg test_ctxt = 
-  let insn_cfg = Superset_rcfg.G.create () in
+let test_insn_isg test_ctxt = 
+  let insn_risg = Superset_risg.G.create () in
   let addr_size = Size.in_bits @@ Arch.addr_size Arch.(`x86_64) in
   let addr  = Addr.of_int addr_size 0 in
-  Superset_rcfg.G.add_vertex insn_cfg addr;
-  Superset_rcfg.G.add_vertex insn_cfg addr;
+  Superset_risg.G.add_vertex insn_risg addr;
+  Superset_risg.G.add_vertex insn_risg addr;
   let msg = "expected length to be one" in
-  assert_bool msg ((Superset_rcfg.G.nb_vertex insn_cfg) = 1)  
+  assert_bool msg ((Superset_risg.G.nb_vertex insn_risg) = 1)  
 
 let test_consistent_superset test_ctxt = 
   let memory, arch = make_params "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
   let insns = Superset.disasm ~accu:[] ~f:List.cons arch memory
               |> ok_exn in
-  let insn_cfg = Superset_rcfg.rcfg_of_raw_superset insns in
+  let insn_risg = Superset_risg.risg_of_raw_superset insns in
   let insn_map = Superset.raw_superset_to_map insns in
-  let msg = "insn in cfg but not in map after shingled of superset" in
-  Superset_rcfg.G.iter_vertex (fun v -> 
+  let msg = "insn in isg but not in map after shingled of superset" in
+  Superset_risg.G.iter_vertex (fun v -> 
       let msg = msg ^ Addr.to_string v in
       assert_bool msg (Map.mem insn_map v))
-    insn_cfg;
+    insn_risg;
   let msg = "insn in map but not in after shingled of superset" in
   Addr.Map.iteri insn_map (fun ~key ~data -> 
       assert_bool msg 
-        (Superset_rcfg.G.mem_vertex insn_cfg key))
+        (Superset_risg.G.mem_vertex insn_risg key))
 
-let construct_loop insn_map insn_cfg start finish = 
+let construct_loop insn_map insn_isg start finish = 
   if Addr.(finish > start) then (
     (* Where we would otherwise connect the nodes from the tail
        condition back up to the loop body entry, here all the edges are
-       reversed in the spirit of the disassembled insn_cfg. *)
-    Superset_rcfg.G.add_edge insn_cfg start finish;
+       reversed in the spirit of the disassembled insn_isg. *)
+    Superset_risg.G.add_edge insn_isg start finish;
     let junk_data = String.create 1 in
     let start_mem = create_memory arch start junk_data |> ok_exn in
     let insn_map = Addr.Map.add insn_map start (start_mem, None) in
@@ -141,22 +141,22 @@ let construct_loop insn_map insn_cfg start finish =
            nodes, each going from finish to step (reverse as it would
            be a flow in a real binary) before finally reaching the
            start *)
-        Superset_rcfg.G.add_edge insn_cfg step start;
+        Superset_risg.G.add_edge insn_isg step start;
         (* Because the algorithm at this point relies on the graph
            and map entirely, it doesn't matter the contents of the memory. *)
         let junk_data = String.create @@ (Addr.to_int dist |> ok_exn) in
         let insn_map = Addr.Map.add insn_map ~key:start
             ~data:(create_memory arch start junk_data |> ok_exn, None) in
         construct_loop_body insn_map step finish 
-      else insn_map, insn_cfg in
+      else insn_map, insn_isg in
     construct_loop_body insn_map start finish
-  ) else insn_map, insn_cfg
+  ) else insn_map, insn_isg
 
-let construct_entry_conflict insn_map insn_cfg at conflict_len = 
+let construct_entry_conflict insn_map insn_isg at conflict_len = 
   let junk_data = String.create conflict_len in
   let conflict = Addr.(at ++ conflict_len) in
-  Superset_rcfg.G.add_edge insn_cfg at conflict;
-  Superset_rcfg.G.add_edge insn_cfg Addr.(at ++ 1) Addr.(conflict ++ 1);
+  Superset_risg.G.add_edge insn_isg at conflict;
+  Superset_risg.G.add_edge insn_isg Addr.(at ++ 1) Addr.(conflict ++ 1);
   let insn_map = Addr.Map.add insn_map ~key:at 
       ~data:(create_memory arch at junk_data |> ok_exn, None) in
   let insn_map = Addr.Map.add insn_map ~key:conflict
@@ -165,14 +165,14 @@ let construct_entry_conflict insn_map insn_cfg at conflict_len =
       ~data:(create_memory arch Addr.(conflict ++1) junk_data |> ok_exn, None) in
   let insn_map = Addr.Map.add insn_map ~key:Addr.(at ++ 1) 
       ~data:(create_memory arch Addr.(at ++ 1) junk_data |> ok_exn, None) in
-  insn_map, insn_cfg
+  insn_map, insn_isg
 
 let construct_tail_conflict 
-    insn_map insn_cfg tail_addr conflict_count =
+    insn_map insn_isg tail_addr conflict_count =
   let orig = 
-    if Superset_rcfg.G.mem_vertex insn_cfg tail_addr &&
-       Superset_rcfg.G.out_degree insn_cfg tail_addr > 0 then
-      let orig = Superset_rcfg.G.succ insn_cfg tail_addr in
+    if Superset_risg.G.mem_vertex insn_isg tail_addr &&
+       Superset_risg.G.out_degree insn_isg tail_addr > 0 then
+      let orig = Superset_risg.G.succ insn_isg tail_addr in
       let orig = Addr.Set.of_list orig in orig
     else Addr.Set.empty in
   let insn_map, tail_len = match Addr.Map.find insn_map tail_addr with
@@ -188,33 +188,33 @@ let construct_tail_conflict
     if conflict_count > 0 then
       let junk_data = String.create conflict_count in
       let conflict_addr = Addr.(tail_addr -- conflict_count) in
-      Superset_rcfg.G.add_edge insn_cfg tail_addr conflict_addr;
+      Superset_risg.G.add_edge insn_isg tail_addr conflict_addr;
       let insn_map = Addr.Map.add insn_map ~key:conflict_addr 
           ~data:(create_memory arch conflict_addr junk_data |> ok_exn,
                  None) in
       make_tail_options insn_map (conflict_count - 1)
     else 
-      insn_map, insn_cfg in
-  let insn_map, insn_cfg = 
+      insn_map, insn_isg in
+  let insn_map, insn_isg = 
     make_tail_options insn_map conflict_count in
-  let opts = Superset_rcfg.G.succ insn_cfg tail_addr in
+  let opts = Superset_risg.G.succ insn_isg tail_addr in
   let opts = Addr.Set.of_list opts in
   let opts = Set.diff opts orig in
   let msg = sprintf
       "expected %d, got %d" conflict_count Set.(length opts) in
   assert_equal ~msg true (Set.(length opts) = conflict_count);
-  insn_map, insn_cfg
+  insn_map, insn_isg
 
 let test_construct_entry_conflict test_ctxt = 
   let rec test_entry_conflict_of_len entry conflict_len = 
     if conflict_len < 2 then
       () 
     else
-      let insn_map, insn_cfg = init () in
-      let insn_map, insn_cfg =
-        construct_entry_conflict insn_map insn_cfg 
+      let insn_map, insn_isg = init () in
+      let insn_map, insn_isg =
+        construct_entry_conflict insn_map insn_isg 
           entry conflict_len in
-      let entries = Decision_tree_set.entries_of_cfg insn_cfg in
+      let entries = Superset_risg.entries_of_isg insn_isg in
       let conflicts = Decision_tree_set.conflicts_of_entries
           entries insn_map in
       (match conflicts with
@@ -238,19 +238,19 @@ let test_tail_construction test_ctxt =
     if conflict_len <= 1 then
       ()
     else
-      let insn_map, insn_cfg = init () in
-      let insn_map, insn_cfg = 
-        construct_tail_conflict insn_map insn_cfg tail conflict_len in
+      let insn_map, insn_isg = init () in
+      let insn_map, insn_isg = 
+        construct_tail_conflict insn_map insn_isg tail conflict_len in
       Map.iteri insn_map ~f:(fun ~key ~data -> 
-          assert_equal true @@ Superset_rcfg.G.mem_vertex insn_cfg key;
+          assert_equal true @@ Superset_risg.G.mem_vertex insn_isg key;
         );
-      Superset_rcfg.G.iter_vertex (fun vert -> 
+      Superset_risg.G.iter_vertex (fun vert -> 
           assert_equal true @@ Map.mem insn_map vert;
-        ) insn_cfg;
-      let entries = Decision_tree_set.entries_of_cfg insn_cfg in
-      let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+        ) insn_isg;
+      let entries = Superset_risg.entries_of_isg insn_isg in
+      let conflicts = Superset_risg.find_all_conflicts insn_map in
       let tails = Decision_tree_set.tails_of_conflicts
-          conflicts insn_cfg entries in
+          conflicts insn_isg entries in
       let num_tails = Addr.Map.length tails in
       let msg = "There should be exactly one tail; there was "
                 ^ string_of_int num_tails ^ ", tail at: "
@@ -271,16 +271,16 @@ let test_tail_construction test_ctxt =
 let test_tails_of_conflicts test_ctxt =
   let entry = Addr.(of_int ~width 1) in
   let tail = Addr.(of_int ~width 30) in
-  let insn_map, insn_cfg = init () in
-  let insn_map, insn_cfg =
-    construct_entry_conflict insn_map insn_cfg 
+  let insn_map, insn_isg = init () in
+  let insn_map, insn_isg =
+    construct_entry_conflict insn_map insn_isg 
       entry 10 in
-  let insn_map, insn_cfg = 
-    construct_tail_conflict insn_map insn_cfg tail 4 in
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
-  let entries = Decision_tree_set.entries_of_cfg insn_cfg in
+  let insn_map, insn_isg = 
+    construct_tail_conflict insn_map insn_isg tail 4 in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in
+  let entries = Superset_risg.entries_of_isg insn_isg in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_cfg entries in
+      conflicts insn_isg entries in
   assert_equal true (Addr.Map.length tails = 1)
     ~msg:"There should be exactly one tail" 
 
@@ -290,17 +290,17 @@ let test_extenuating_tail_competitors test_ctxt =
   let conflict_len = 4 in
   let entry = Addr.(of_int ~width 1) in
   let tail = Addr.(of_int ~width 30) in
-  let insn_map, insn_cfg = init () in
-  let insn_map, insn_cfg = 
-    construct_tail_conflict insn_map insn_cfg tail conflict_len in
+  let insn_map, insn_isg = init () in
+  let insn_map, insn_isg = 
+    construct_tail_conflict insn_map insn_isg tail conflict_len in
   let extenuation_addr = Addr.(entry ++ conflict_len) in
-  let insn_map, insn_cfg = 
+  let insn_map, insn_isg = 
     construct_tail_conflict 
-      insn_map insn_cfg extenuation_addr conflict_len in  
-  let entries = Decision_tree_set.entries_of_cfg insn_cfg in
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+      insn_map insn_isg extenuation_addr conflict_len in  
+  let entries = Superset_risg.entries_of_isg insn_isg in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_cfg entries in
+      conflicts insn_isg entries in
   assert_equal true @@ Addr.Map.mem tails tail;
   assert_equal true @@ Addr.Map.mem tails extenuation_addr;
   assert_equal (Addr.Map.length tails) 2
@@ -308,50 +308,50 @@ let test_extenuating_tail_competitors test_ctxt =
 (* construct an entry conflict and ensure 
    that the two are reachable from addr 0.  *)
 let test_decision_tree_of_entries test_ctxt =
-  let insn_map, insn_cfg = init () in
+  let insn_map, insn_isg = init () in
   let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
-  let insn_map, insn_cfg =
-    construct_entry_conflict insn_map insn_cfg 
+  let insn_map, insn_isg =
+    construct_entry_conflict insn_map insn_isg 
       entry 10 in
-  let msg = sprintf "expected entry %s to be in cfg" 
+  let msg = sprintf "expected entry %s to be in isg" 
       (Addr.to_string entry) in
-  assert_equal ~msg true (Superset_rcfg.G.mem_vertex insn_cfg entry);
-  let entries = Decision_tree_set.entries_of_cfg insn_cfg in
+  assert_equal ~msg true (Superset_risg.G.mem_vertex insn_isg entry);
+  let entries = Superset_risg.entries_of_isg insn_isg in
   let msg = sprintf "expected entry %s to be in entries" 
       (Addr.to_string entry) in
   assert_equal ~msg true (Hash_set.mem entries entry);
   let msg = sprintf "expected entry %s to be in entries" 
       Addr.(to_string @@ succ entry) in
   assert_equal ~msg true (Hash_set.mem entries Addr.(succ entry));
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_cfg entries in
+      conflicts insn_isg entries in
   let conflicted_entries = Decision_tree_set.conflicts_of_entries
       entries insn_map in
   let decision_trees = Decision_tree_set.decision_tree_of_entries
-      conflicted_entries entries tails insn_cfg in
+      conflicted_entries entries tails insn_isg in
   let expect_entry_msg = "Expect entry in decision_tree" in
   let expect_zero_msg = "Expect zero node in decision tree" in
   let non_empty_tree_msg = "Expect decision tree to be non empty" in
   assert_equal true @@ (not ((List.length decision_trees) = 0));
   List.iter decision_trees ~f:(fun decision_tree ->
       assert_equal ~msg:non_empty_tree_msg 
-        true @@ not ((Superset_rcfg.G.nb_vertex decision_tree)=0);
+        true @@ not ((Superset_risg.G.nb_vertex decision_tree)=0);
       assert_equal ~msg:expect_entry_msg 
-        true @@ (Superset_rcfg.G.mem_vertex decision_tree entry);
+        true @@ (Superset_risg.G.mem_vertex decision_tree entry);
       assert_equal ~msg:expect_zero_msg 
-        true @@ (Superset_rcfg.G.mem_vertex decision_tree zero);
+        true @@ (Superset_risg.G.mem_vertex decision_tree zero);
     )
 
 let test_loop_scc test_ctxt = 
-  let insn_map, insn_cfg = init () in
+  let insn_map, insn_isg = init () in
   let entry = Addr.(of_int ~width 1) in
-  let insn_map, insn_cfg = 
-    construct_loop insn_map insn_cfg entry Addr.(entry ++ 20) in
+  let insn_map, insn_isg = 
+    construct_loop insn_map insn_isg entry Addr.(entry ++ 20) in
   let loop_points = Addr.Hash_set.create () in
-  Superset_rcfg.G.iter_vertex (fun vert -> Hash_set.add loop_points vert) insn_cfg;
-  let scc = Superset_rcfg.StrongComponents.scc_list insn_cfg in
+  Superset_risg.G.iter_vertex (fun vert -> Hash_set.add loop_points vert) insn_isg;
+  let scc = Superset_risg.StrongComponents.scc_list insn_isg in
   let scc_points = Addr.Hash_set.create () in
   List.iter scc ~f:(fun scc -> 
       List.iter scc ~f:(fun component_addr -> 
@@ -367,31 +367,31 @@ let test_loop_scc test_ctxt =
       @@ Hash_set.mem loop_points loop_addr)
 
 let test_scc test_ctxt =
-  let _, insn_cfg = init () in
+  let _, insn_isg = init () in
   let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
-  Superset_rcfg.G.add_edge insn_cfg zero entry;
-  let components = Superset_rcfg.StrongComponents.scc_list insn_cfg in
+  Superset_risg.G.add_edge insn_isg zero entry;
+  let components = Superset_risg.StrongComponents.scc_list insn_isg in
   let components = Sheathed.filter_components components in
   assert_equal ~msg:"found non scc component" 0 (Set.length components)
 
 let test_find_conflicts test_ctxt = 
-  let insn_map, insn_cfg = init () in
+  let insn_map, insn_isg = init () in
   let in_loop_addr = Addr.(of_int ~width 0x10) in
   let num_conflicts = 6 in
-  let insn_map, insn_cfg =
-    construct_tail_conflict insn_map insn_cfg in_loop_addr num_conflicts in
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in 
+  let insn_map, insn_isg =
+    construct_tail_conflict insn_map insn_isg in_loop_addr num_conflicts in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in 
   assert_equal Set.(length conflicts) num_conflicts
 
 let test_is_option test_ctxt = 
-  let insn_map, insn_cfg = init () in
+  let insn_map, insn_isg = init () in
   let in_loop_addr = Addr.(of_int ~width 0x10) in
   let num_conflicts = 6 in
-  let insn_map, insn_rcfg =
-    construct_tail_conflict insn_map insn_cfg in_loop_addr
+  let insn_map, insn_risg =
+    construct_tail_conflict insn_map insn_isg in_loop_addr
       num_conflicts in
-  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let superset = Superset.create ~insn_risg arch insn_map in
   let is_option = (Decision_tree_set.insn_is_option superset) in
   let deltas = Decision_tree_set.calculate_deltas superset
       is_option in
@@ -401,33 +401,33 @@ let test_is_option test_ctxt =
   assert_bool msg (Map.(length deltas) = num_conflicts)
 
 let test_trim_scc test_ctxt = 
-  let insn_map, insn_cfg = init () in
+  let insn_map, insn_isg = init () in
   let entry = Addr.(of_int ~width 1) in
   let brancher = Brancher.of_bil arch in
-  let insn_map, insn_cfg = 
-    construct_loop insn_map insn_cfg entry Addr.(entry ++ 20) in
+  let insn_map, insn_isg = 
+    construct_loop insn_map insn_isg entry Addr.(entry ++ 20) in
   let in_loop_addr = Addr.(of_int ~width 0x10) in
   let loop_points = Addr.Hash_set.create () in
-  Superset_rcfg.G.iter_vertex (Hash_set.add loop_points) insn_cfg;
-  let insn_map, insn_rcfg =
-    construct_tail_conflict insn_map insn_cfg in_loop_addr 3 in
+  Superset_risg.G.iter_vertex (Hash_set.add loop_points) insn_isg;
+  let insn_map, insn_risg =
+    construct_tail_conflict insn_map insn_isg in_loop_addr 3 in
   let insns = Addr.Map.data insn_map in
   let insn_map = Superset.raw_superset_to_map insns in
   let conflicts_added = Addr.Hash_set.create () in
-  Superset_rcfg.G.iter_vertex (fun vert -> 
+  Superset_risg.G.iter_vertex (fun vert -> 
       if not (Hash_set.mem loop_points vert) then 
-        Hash_set.add conflicts_added vert) insn_cfg;
+        Hash_set.add conflicts_added vert) insn_isg;
   let superset = Superset.Fields.create 
-      ~data:insn_map ~insn_rcfg ~arch ~segments ~brancher in
-  let components = Superset_rcfg.StrongComponents.scc_list insn_cfg in
+      ~data:insn_map ~insn_risg ~arch ~segments ~brancher in
+  let components = Superset_risg.StrongComponents.scc_list insn_isg in
   assert_bool "Should have a component" 
     (List.(length components) > 0);
   let superset = 
     Sheathed.tag_loop_contradictions ~min_size:1 superset in
   assert_bool "should have marked conflict" 
-    Superset_rcfg.G.(mem_vertex insn_cfg Superset.(get_bad superset));
-  let immediate_bad = Superset_rcfg.G.succ 
-      insn_cfg Superset.(get_bad superset) in
+    Superset_risg.G.(mem_vertex insn_isg Superset.(get_bad superset));
+  let immediate_bad = Superset_risg.G.succ 
+      insn_isg Superset.(get_bad superset) in
   let marked_bad = List.fold ~init:[] immediate_bad
       ~f:(fun marked immb -> 
           if Hash_set.mem loop_points immb then
@@ -440,9 +440,9 @@ let test_trim_scc test_ctxt =
   let superset = Trim.trim superset in
   let insn_map = Superset.get_data superset in
   let insn_map = Map.filteri insn_map ~f:(fun ~key ~data ->
-      Superset_rcfg.G.mem_vertex insn_rcfg key) in
+      Superset_risg.G.mem_vertex insn_risg key) in
   let superset = Superset.rebuild superset ~data:insn_map in
-  let insn_cfg = superset.insn_rcfg in
+  let insn_isg = superset.insn_risg in
   let conflicts_added_str = List.to_string ~f:Addr.to_string @@ 
     Hash_set.to_list conflicts_added in
   let removed_msg = "of conflicts " ^ conflicts_added_str 
@@ -451,29 +451,29 @@ let test_trim_scc test_ctxt =
       let removed_map = removed_msg ^ " insn_map at " ^ Addr.to_string addr in
       assert_equal ~msg:removed_map true
       @@ not (Addr.Map.mem insn_map addr);
-      let removed_cfg = removed_msg ^ " cfg at " ^ Addr.to_string addr in
-      assert_equal ~msg:removed_cfg true
-      @@ not (Superset_rcfg.G.mem_vertex insn_cfg addr);
+      let removed_isg = removed_msg ^ " isg at " ^ Addr.to_string addr in
+      assert_equal ~msg:removed_isg true
+      @@ not (Superset_risg.G.mem_vertex insn_isg addr);
     );
   let loop_msg = "loop addr should remain during tail trim" in
   Hash_set.iter loop_points ~f:(fun addr -> 
       assert_equal ~msg:loop_msg true @@ 
-      Superset_rcfg.G.mem_vertex insn_cfg addr)
+      Superset_risg.G.mem_vertex insn_isg addr)
 
 (* Establishes, in the case of if structures, how topological *)
 (* tranversal works - one time visit only *)
 let test_topological_revisit ctxt = 
-  let _, insn_rcfg = init () in
+  let _, insn_risg = init () in
   let width = 32 in
   let start = Addr.of_int 0 ~width in
   let stop = Addr.of_int 2 ~width in
   let rec make_if current stop =
     if not (current = stop) then
       let next = Addr.succ current in
-      Superset_rcfg.G.add_edge insn_rcfg current next;
+      Superset_risg.G.add_edge insn_risg current next;
       make_if next stop in
   make_if start stop;
-  Superset_rcfg.G.add_edge insn_rcfg start stop;
+  Superset_risg.G.add_edge insn_risg start stop;
   let update_count addr visit_count = 
     match Map.find visit_count addr with
     | Some (count) -> 
@@ -481,33 +481,33 @@ let test_topological_revisit ctxt =
       Map.add visit_count addr (count+1)
     | None -> Map.add visit_count addr 1 in
   let visit_count = Topological.fold 
-      update_count insn_rcfg Addr.Map.empty in
+      update_count insn_risg Addr.Map.empty in
   Map.iteri visit_count (fun ~key ~data -> assert_equal ~ctxt data 1)
 
 let test_cross_layer_pruning test_ctxt = 
-  let insn_map, insn_rcfg = init () in
+  let insn_map, insn_risg = init () in
   let arch = Arch.(`x86) in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
-  let insn_map, insn_rcfg =
-    construct_tail_conflict insn_map insn_rcfg tail_addr 2 in
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+  let insn_map, insn_risg =
+    construct_tail_conflict insn_map insn_risg tail_addr 2 in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in
   let conflict_len = Set.length conflicts in
   assert_bool "should have a conflict" (conflict_len > 0);
-  let layer_options = Superset_rcfg.G.(succ insn_rcfg tail_addr) in
+  let layer_options = Superset_risg.G.(succ insn_risg tail_addr) in
   assert_equal true (List.(length layer_options) >= 1);
   let _ = List.fold ~init:None layer_options 
       ~f:(fun current next -> 
           let _ = Option.map current ~f:(fun current -> 
-              Superset_rcfg.G.add_edge insn_rcfg current next
+              Superset_risg.G.add_edge insn_risg current next
             ) in
           Some(next)
         ) in
-  let superset = Superset.create ~insn_rcfg arch insn_map in
-  let entries = Decision_tree_set.entries_of_cfg insn_rcfg in  
+  let superset = Superset.create ~insn_risg arch insn_map in
+  let entries = Superset_risg.entries_of_isg insn_risg in  
   assert_bool "Should have at least one entry" (Hash_set.(length entries) > 0);
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_rcfg entries in
+      conflicts insn_risg entries in
   assert_bool "Should have at least one tail" 
     (Map.(length tails) > 0);
   assert_bool "Should contain tail adder" Map.(mem tails tail_addr);
@@ -524,67 +524,67 @@ let test_cross_layer_pruning test_ctxt =
     List.(length decision_trees > 0);
   List.iter decision_trees ~f:(fun dtree -> 
       assert_bool "at least one decision available!" 
-        (Superset_rcfg.G.(nb_vertex dtree) > 0)
+        (Superset_risg.G.(nb_vertex dtree) > 0)
     );
   let superset = Invariants.tag_layer_violations superset in
   let superset = Trim.trim superset in
-  let insn_rcfg = superset.insn_rcfg in
+  let insn_risg = superset.insn_risg in
   let num_decisions = List.length 
-      (Superset_rcfg.G.succ insn_rcfg tail_addr) in
+      (Superset_risg.G.succ insn_risg tail_addr) in
   assert_bool "Expected one of the admissible to have been removed" 
     (num_decisions < 2)
 
-let rec extend_back insn_map insn_cfg ?(step=1) addr num =
+let rec extend_back insn_map insn_isg ?(step=1) addr num =
   let make_link len =
     let dest = Addr.(addr -- len) in
-    Superset_rcfg.G.add_edge insn_cfg addr dest;
+    Superset_risg.G.add_edge insn_isg addr dest;
     let junk_data = String.create len in
     let mem = create_memory arch dest junk_data |> ok_exn in
     let insn_map = Map.add insn_map dest (mem, None) in
-    (insn_map, insn_cfg) in
+    (insn_map, insn_isg) in
   if not (num = 0) then 
-    let (insn_map, insn_cfg) = make_link step in
-    extend_back insn_map insn_cfg Addr.(addr -- step) (num - 1) ~step
+    let (insn_map, insn_isg) = make_link step in
+    extend_back insn_map insn_isg Addr.(addr -- step) (num - 1) ~step
   else
-    insn_map, insn_cfg
+    insn_map, insn_isg
 
 let make_extended_cross tail_addr =
-  let insn_map, insn_rcfg = init () in
-  let insn_map, insn_rcfg =
-    construct_tail_conflict insn_map insn_rcfg tail_addr 2 in
-  let layer_options = Superset_rcfg.G.(succ insn_rcfg tail_addr) in
-  let insn_map, insn_rcfg = List.fold ~init:(insn_map, insn_rcfg)
-      layer_options ~f:(fun (insn_map, insn_rcfg) opt -> 
-          extend_back insn_map insn_rcfg opt 1 ~step:2
+  let insn_map, insn_risg = init () in
+  let insn_map, insn_risg =
+    construct_tail_conflict insn_map insn_risg tail_addr 2 in
+  let layer_options = Superset_risg.G.(succ insn_risg tail_addr) in
+  let insn_map, insn_risg = List.fold ~init:(insn_map, insn_risg)
+      layer_options ~f:(fun (insn_map, insn_risg) opt -> 
+          extend_back insn_map insn_risg opt 1 ~step:2
         ) in
   let extended_points = 
-    Decision_tree_set.entries_of_cfg 
-      (Superset_rcfg.Oper.mirror insn_rcfg) in
+    Superset_risg.entries_of_isg 
+      (Superset_risg.Oper.mirror insn_risg) in
   let _ = Hash_set.fold ~init:None extended_points
       ~f:(fun current next -> 
           let _ = Option.map current ~f:(fun current -> 
-              Superset_rcfg.G.add_edge insn_rcfg current next
+              Superset_risg.G.add_edge insn_risg current next
             ) in
           Some(next)
         ) in
-  insn_map, insn_rcfg
+  insn_map, insn_risg
 
 let test_calculate_delta test_ctxt = 
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
-  let insn_map, insn_rcfg = make_extended_cross tail_addr in
-  let superset = Superset.create ~insn_rcfg arch insn_map in
-  let entries = Decision_tree_set.entries_of_cfg insn_rcfg in
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+  let insn_map, insn_risg = make_extended_cross tail_addr in
+  let superset = Superset.create ~insn_risg arch insn_map in
+  let entries = Superset_risg.entries_of_isg insn_risg in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_rcfg entries in
+      conflicts insn_risg entries in
   let option_set = List.fold ~init:Addr.Set.empty (Map.data tails)
       ~f:(fun option_set options -> 
           List.fold ~init:option_set options ~f:Addr.Set.add) in
   let is_option = Set.mem option_set in
   let deltas = Decision_tree_set.calculate_deltas 
       superset ~entries is_option in
-  let expected_deltas = Superset_rcfg.G.succ insn_rcfg tail_addr in
+  let expected_deltas = Superset_risg.G.succ insn_risg tail_addr in
   let num_expected = List.(length expected_deltas) in
   let actual = Map.(length deltas) in
   let msg = sprintf "expected %d deltas, got %d" 
@@ -610,50 +610,26 @@ let test_calculate_delta test_ctxt =
 let test_extended_cross_layer_pruning test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
-  let insn_map, insn_rcfg = make_extended_cross tail_addr in
-  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let insn_map, insn_risg = make_extended_cross tail_addr in
+  let superset = Superset.create ~insn_risg arch insn_map in
   let decision_trees = Decision_tree_set.decision_trees_of_superset
       superset in
   assert_bool "should have a decision tree" 
     List.(length decision_trees > 0);
   List.iter decision_trees ~f:(fun dtree -> 
       assert_bool "at least one decision available!" 
-        (Superset_rcfg.G.(nb_vertex dtree) > 0)
+        (Superset_risg.G.(nb_vertex dtree) > 0)
     );
   let superset = Invariants.tag_layer_violations superset in
   let superset = Trim.trim superset in
-  let insn_rcfg = superset.insn_rcfg in
+  let insn_risg = superset.insn_risg in
   let num_decisions = List.length 
-      (Superset_rcfg.G.succ insn_rcfg tail_addr) in
+      (Superset_risg.G.succ insn_risg tail_addr) in
   (* TODO make sure that the extensions were removed *)
   assert_bool "Should still have decision accessible" 
     (num_decisions = 2)
 
-let test_spanning_tree_behavior test_ctxt =
-  let addr_size= Size.in_bits @@ Arch.addr_size arch in
-  let tail_addr = Addr.of_int addr_size 50 in
-  let insn_map, insn_rcfg = make_extended_cross tail_addr in
-  let superset = Superset.create ~insn_rcfg arch insn_map in
-  let min_tree = Decision_tree_set.min_spanning_tree superset in
-  let termination_points = 
-    Decision_tree_set.entries_of_cfg 
-      (Superset_rcfg.Oper.mirror superset.insn_rcfg) in
-  assert_bool "should have a min tree should not be empty" 
-    (Superset_rcfg.G.(nb_vertex min_tree) > 0);
-  let superset = Invariants.tag_layer_violations superset in
-  let bad =  get_bad superset in
-  assert_bool "Should have marked one" 
-    Superset_rcfg.G.(mem_vertex superset.insn_rcfg bad);
-  let superset = Trim.trim superset in
-  let insn_rcfg = superset.insn_rcfg in
-  let status = Hash_set.fold termination_points ~init:true 
-      ~f:(fun status addr -> 
-          status && Superset_rcfg.G.mem_vertex insn_rcfg addr) in
-  let status = not status in
-  let msg = sprintf "Expected one of the termination_points to have been removed" in
-  assert_bool msg status
-
-let construct_branch insn_map insn_rcfg branch_at incr = 
+let construct_branch insn_map insn_risg branch_at incr = 
   let left = Addr.(branch_at ++ incr) in
   let junk_data = String.create incr in
   let left_mem = create_memory arch left junk_data |> ok_exn in
@@ -664,19 +640,19 @@ let construct_branch insn_map insn_rcfg branch_at incr =
   let rejoin = Addr.(right ++ incr) in
   let rejoin_mem = create_memory arch rejoin junk_data |> ok_exn in
   let insn_map = Map.add insn_map rejoin (rejoin_mem, None) in
-  Superset_rcfg.G.add_edge insn_rcfg left branch_at;
-  Superset_rcfg.G.add_edge insn_rcfg right branch_at;
-  Superset_rcfg.G.add_edge insn_rcfg rejoin right;
-  Superset_rcfg.G.add_edge insn_rcfg rejoin left;
-  insn_map, insn_rcfg
+  Superset_risg.G.add_edge insn_risg left branch_at;
+  Superset_risg.G.add_edge insn_risg right branch_at;
+  Superset_risg.G.add_edge insn_risg rejoin right;
+  Superset_risg.G.add_edge insn_risg rejoin left;
+  insn_map, insn_risg
 
 let test_branch_recognition test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
-  let insn_map, insn_rcfg = init () in
-  let insn_map, insn_rcfg = 
-    construct_branch insn_map insn_rcfg tail_addr 2 in
-  let superset = Superset.create ~insn_rcfg arch insn_map in
+  let insn_map, insn_risg = init () in
+  let insn_map, insn_risg = 
+    construct_branch insn_map insn_risg tail_addr 2 in
+  let superset = Superset.create ~insn_risg arch insn_map in
   let branches = Grammar.identify_branches superset in
   let msg = sprintf 
       "expect branches to be detected! was %d"
@@ -702,15 +678,15 @@ let test_layer_delta_calculation test_ctxt = ()
 let test_dfs_redundancy_elimination test_ctxt = ()
 
 let test_dfs_iter_order test_ctxt = 
-  let _, insn_rcfg = init () in
+  let _, insn_risg = init () in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let start = Addr.of_int addr_size 40 in
-  Superset_rcfg.G.add_edge insn_rcfg start Addr.(succ start);
-  Superset_rcfg.G.add_edge insn_rcfg start Addr.(start ++ 2);
+  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
+  Superset_risg.G.add_edge insn_risg start Addr.(start ++ 2);
   let visit_order = ref [] in
-  Superset_rcfg.Dfs.prefix_component
+  Superset_risg.Dfs.prefix_component
     (fun v -> visit_order := v :: !visit_order) 
-    insn_rcfg start;
+    insn_risg start;
   visit_order := List.rev !visit_order;
   let msg = sprintf "expected addr %s to be first, was %s" 
       Addr.(to_string start)
@@ -723,7 +699,7 @@ let test_dfs_iter_order test_ctxt =
 (* TODO *)
 (* This test is intended to be very much alike the entry *)
 (* conflict test, differing by the fact that it will occur inline of *)
-(* the insn_cfg. The overlay is a scenario in which a discrete *)
+(* the insn_isg. The overlay is a scenario in which a discrete *)
 (* control flow appears within another. We want to be certain that *)
 (* the decision tree set incorporates considerations for picking *)
 (* the overlay control flow *)
@@ -732,28 +708,28 @@ let test_overlay_construction test_ctxt = ()
 (* conflicts should include both the instruction at a data address *)
 (* and the instruction whose body it is inside. *)
 let test_find_all_conflicts test_ctxt =
-  let insn_map, insn_rcfg = init () in
+  let insn_map, insn_risg = init () in
   let arch = Arch.(`x86) in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
   let num_conflicts = 2 in
-  let insn_map, insn_rcfg =
-    construct_tail_conflict insn_map insn_rcfg tail_addr num_conflicts in
-  let conflicts = Superset_rcfg.find_all_conflicts insn_map in
+  let insn_map, insn_risg =
+    construct_tail_conflict insn_map insn_risg tail_addr num_conflicts in
+  let conflicts = Superset_risg.find_all_conflicts insn_map in
   let msg = sprintf "expect %d conflicts" num_conflicts in
   assert_equal ~msg num_conflicts Set.(length conflicts)
 
 
 (* Establish the idempotency or addition of edges. *)
 let test_graph_edge_behavior test_ctxt =
-  let _, insn_rcfg = init () in
+  let _, insn_risg = init () in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let start = Addr.of_int addr_size 50 in
-  Superset_rcfg.G.add_edge insn_rcfg start Addr.(succ start);
-  Superset_rcfg.G.add_edge insn_rcfg start Addr.(succ start);
-  Superset_rcfg.G.add_edge insn_rcfg start Addr.(succ start);
-  let edges = Superset_rcfg.G.find_all_edges 
-      insn_rcfg start Addr.(succ start) in
+  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
+  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
+  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
+  let edges = Superset_risg.G.find_all_edges 
+      insn_risg start Addr.(succ start) in
   let msg = "expect single edge between nodes" in
   assert_equal ~msg List.(length edges) 1
 
@@ -767,7 +743,7 @@ let () =
       "test_trim" >:: test_trim;
       "test_trims_invalid_jump" >:: test_trims_invalid_jump;
       "test_addr_map" >:: test_addr_map;
-      "test_insn_cfg" >:: test_insn_cfg;
+      "test_insn_isg" >:: test_insn_isg;
       "test_consistent_superset" >:: test_consistent_superset;
       "test_construct_entry_conflict" >:: test_construct_entry_conflict;
       "test_tail_construction" >:: test_tail_construction;
@@ -783,7 +759,6 @@ let () =
       "test_cross_layer_pruning" >:: test_cross_layer_pruning;
       "test_calculate_delta" >:: test_calculate_delta;
       "test_extended_cross_layer_pruning" >:: test_extended_cross_layer_pruning;
-      "test_spanning_tree_behavior" >:: test_spanning_tree_behavior;
       "test_branch_recognition" >:: test_branch_recognition;
       "test_layer_delta_calculation" >:: test_layer_delta_calculation;
       "test_dfs_iter_order" >:: test_dfs_iter_order;

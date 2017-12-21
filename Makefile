@@ -2,9 +2,12 @@ SETUP=LDFLAGS=-L/usr/local/lib LIBRARY_PATH=/opt/local/lib ocaml setup.ml
 
 default: all
 
-all:
+setup.data:
 	oasis setup -setup-update dynamic
+	$(SETUP) -configure
 	touch setup.data
+
+all: setup.data
 	$(SETUP) -build -cflag -annot -cflag -bin-annot
 
 profile:

@@ -27,7 +27,7 @@ module Dominator = Dominator.Make(G)
 module Oper = Oper.I(G)
 module StrongComponents = Components.Make(G)
 module DiscreteComponents = Components.Undirected(G)
-module Dfs        = Traverse.Dfs(G)
+module Dfs        = Graph.Traverse.Dfs(G)
 module Path       = Path.Check(G)
 module GmlOut     = Gml.Print(G)(struct 
     let node (label : G.V.label) = 
@@ -69,23 +69,32 @@ module Gml = struct
     igraph
 end
 
-let add ?superset_rcfg mem insn =
-  let superset_rcfg =
-    Option.value superset_rcfg ~default:(G.create ()) in
+let add ?superset_risg mem insn =
+  let superset_risg =
+    Option.value superset_risg ~default:(G.create ()) in
   let src = Memory.min_addr mem in
   let bad = Addr.of_int ~width:(Addr.bitwidth src) 0 in
   match insn with
   | Some(insn) ->
-    G.add_vertex superset_rcfg src;
-  | None -> G.add_edge superset_rcfg bad src
+    G.add_vertex superset_risg src;
+  | None -> G.add_edge superset_risg bad src
+
+let exits_of_isg insn_isg component = 
+  Set.fold component ~init:Addr.Set.empty ~f:(fun potential_exits addr -> 
+      G.fold_pred (fun ancestor potential_exits ->
+          if not Set.(mem component ancestor) then
+            Set.add potential_exits ancestor
+          else potential_exits
+        ) insn_isg addr potential_exits
+    )
 
 
-let rcfg_of_raw_superset ?superset_rcfg raw_superset =
-  let superset_rcfg = Option.value superset_rcfg ~default:(G.create ()) in
+let risg_of_raw_superset ?superset_risg raw_superset =
+  let superset_risg = Option.value superset_risg ~default:(G.create ()) in
   List.iter raw_superset ~f:(fun (mem, insn) ->
-      add ~superset_rcfg mem insn
+      add ~superset_risg mem insn
     );
-  superset_rcfg
+  superset_risg
 
 let conflicts_within_insn_at ?conflicts insn_map addr =
   let conflicts = Option.value conflicts ~default:Addr.Set.empty in
@@ -138,7 +147,7 @@ let range_seq_of_conflicts insn_map addr len =
   Seq.filter range_seq ~f:Addr.Map.(mem insn_map)
 
 (* TODO do not need to use insn_cfg. Could use superset type *)
-let seq_of_all_conflicts insn_map insn_cfg = 
+let seq_of_all_conflicts insn_map insn_isg = 
   let insn_map_seq = Addr.Map.to_sequence insn_map in
   Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 
       range_seq_of_conflicts insn_map addr (Memory.length mem)
@@ -150,3 +159,67 @@ let conflict_seq_at insn_map addr =
     let len = Memory.length mem  in
     range_seq_of_conflicts insn_map addr len
   | None -> Seq.empty
+
+let mergers_of_isg insn_isg = 
+  G.fold_vertex (fun addr mergers ->
+      if G.out_degree insn_isg addr > 1 then
+        Addr.Set.add mergers addr
+      else mergers) insn_isg Addr.Set.empty
+
+let is_entry insn_isg addr = 
+  G.in_degree insn_isg addr  = 0 &&
+  G.out_degree insn_isg addr > 0
+
+let entries_of_isg insn_isg = 
+  G.fold_vertex (fun addr accu ->
+      if is_entry insn_isg addr then
+        (Hash_set.add accu addr; accu)
+      else accu)
+    insn_isg (Addr.Hash_set.create ())
+
+let is_branch insn_risg addr =
+  G.in_degree insn_risg addr = 2
+
+let get_branches insn_risg =
+  let branches = Addr.Hash_set.create () in
+  G.iter_vertex (fun vert -> 
+      if is_branch insn_risg vert then
+        Hash_set.add branches vert;
+    ) insn_risg;
+  branches
+
+let get_loop_addrs insn_risg = 
+  let loop_addrs = 
+    StrongComponents.scc_list insn_risg in
+  List.fold_left loop_addrs ~init:Addr.Set.empty 
+    ~f:(fun loop_addrs loop -> 
+        List.fold_left ~init:loop_addrs loop ~f:(fun loop_addrs addr -> 
+            Set.add loop_addrs addr
+          )
+      )
+
+let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
+  let visited = Option.value visited 
+      ~default:(Addr.Hash_set.create ()) in
+  let rec visit v =
+    Hash_set.add visited v;
+    pre v;
+    G.iter_succ
+      (fun w -> if not (Hash_set.mem visited w) then visit w) g v;
+    post v
+  in visit v
+
+let collect_target_entries visited insn_risg insn_isg addr = 
+  let target_entries = Addr.Hash_set.create () in
+  let pre t = 
+    if is_entry insn_risg t then
+      Hash_set.add target_entries t in
+  let post _ = () in
+  iter_component ~visited ~pre ~post insn_isg addr;
+  target_entries
+
+let activate_descendants active insn_isg addr = 
+  let pre t = 
+    Hash_set.add active t in
+  let post _ = () in
+  iter_component ~visited:active ~pre ~post insn_isg addr

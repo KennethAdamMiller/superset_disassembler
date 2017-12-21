@@ -38,6 +38,10 @@ module Program(Conf : Provider)  = struct
                 ~f:(fun idx analyses tag_func ->
                     Map.add analyses idx (Some(tag_func), None, None))
             in
+            (*let discard_arg ?min_size = 
+              Invariants.tag_branch_violations in
+              let analyses = Map.add analyses (Map.length analyses)
+                (None, Some(discard_arg), None) in*)
             let analyses = 
               Map.add analyses (Map.length analyses)
                 (None, Some(Sheathed.tag_loop_contradictions), None) in
@@ -57,7 +61,7 @@ module Program(Conf : Provider)  = struct
               (None, Some(Sheathed.tag_loop_contradictions), None)
           | Cross_layer_invalidation ->
             let discard_arg ?min_size = 
-              Invariants.tag_layer_violations in
+              Invariants.tag_branch_violations in
             Map.add analyses 6
               (None, Some(discard_arg), None)
           | Grammar_convergent -> 
