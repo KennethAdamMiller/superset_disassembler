@@ -9,7 +9,7 @@ rm -f reduced_occlusion.txt
 mkdir -p results
 find results -size 0 -exec rm {} \;
 
-bindir=/Volumes/FAGFD/
+bindir=${HOME}/workspace/
 jobs=6
 command=' [[ -f results/$(basename {.})_metrics.txt ]] || ~/workspace/superset_disassembler/superset_disasm.native --checkpoint=Export --ground_truth {.} --target {.} >> results/$(basename {.})_metrics.txt '
 analyze() {

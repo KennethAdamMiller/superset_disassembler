@@ -8,14 +8,16 @@ module Dis = Disasm_expert.Basic
 
 type 'a t = {
   arch      : arch;
-  segments  : Image.segment Table.t;
+  img       : Image.t option;
   brancher  : Brancher.t;
   data      : 'a;
+  insn_map  : (mem * (Dis.full_insn option)) Addr.Map.t;
   insn_risg : Superset_risg.t;
 } [@@deriving fields]
 
 let contains_addr superset addr = 
-  let segments = Table.to_sequence superset.segments in
+  let img = Option.value_exn superset.img in
+  let segments = Table.to_sequence Image.(segments img) in
   Seq.fold segments ~init:false ~f:(fun status (mem, segment) ->
       status || Memory.contains mem addr)
 
@@ -24,6 +26,14 @@ let bad_of_arch arch =
 
 let bad_of_addr addr =
   Addr.of_int ~width:(Addr.bitwidth addr) 0
+
+let get_img superset = Option.(value_exn superset.img)
+
+let get_segments superset = 
+  Image.segments Option.(value_exn superset.img)
+
+let get_endianness superset = 
+  Image.endian Option.(value_exn superset.img)
 
 let get_arch superset = superset.arch
 
@@ -36,10 +46,12 @@ let mark_bad superset addr =
   let g = get_graph superset in
   Superset_risg.G.add_edge g (get_bad superset) addr
 
+let get_map superset = superset.insn_map
+
 let get_data superset = superset.data
 
 let len_at superset at = 
-  let insn_map = get_data superset in
+  let insn_map = get_map superset in
   match Map.find insn_map at with
   | None -> 0
   | Some(mem, _) -> Memory.length mem
@@ -76,9 +88,11 @@ let with_data_of_insn superset at ~f =
   let body = Superset_risg.seq_of_addr_range at len in
   Seq.iter body ~f
 
-let mark_descendents_at ?visited ?datas superset addr = 
-  let insn_risg = get_graph superset in
-  let insn_isg  = Superset_risg.Oper.mirror insn_risg in
+let mark_descendents_at ?insn_isg ?visited ?datas superset addr = 
+  let get_insn_isg () =
+    let insn_risg = get_graph superset in
+    Superset_risg.Oper.mirror insn_risg in
+  let insn_isg  = Option.value insn_isg ~default:(get_insn_isg ()) in
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
   let datas = Option.value datas 
@@ -93,26 +107,30 @@ let mark_descendents_at ?visited ?datas superset addr =
         Hash_set.add visited tp;
       ) insn_isg addr
 
-let create ?insn_risg arch data =
+let create ?insn_map ?insn_risg arch data =
+  let insn_map = Option.value insn_map ~default:Addr.Map.empty in
   let insn_risg = Option.value insn_risg 
       ~default:(Superset_risg.G.create ()) in
   {
     arch = arch;
-    segments = Table.empty;
+    img = None;
     brancher = Brancher.of_bil arch;
-    data = data;
+    insn_map = insn_map;
     insn_risg = insn_risg;
+    data = data;
   }
 
-let rebuild ?data ?insn_risg superset =
+let rebuild ?data ?insn_map ?insn_risg superset =
+  let insn_map = Option.value insn_map ~default:superset.insn_map in
   let data = Option.value data ~default:superset.data in
   let insn_risg = Option.value insn_risg ~default:superset.insn_risg in
   {
     arch      = superset.arch;
     brancher  = superset.brancher;
-    segments  = superset.segments;
+    img       = superset.img;
     data      = data;
     insn_risg = insn_risg;
+    insn_map  = insn_map;
   }
 
 let drop superset =
@@ -244,7 +262,7 @@ let import bin =
   let insn_map  = insn_map_of_string map_str in
   let meta_str  = In_channel.read_all (bin ^ ".meta") in
   let arch      = meta_of_string meta_str in
-  let superset  = create ~insn_risg arch insn_map in
+  let superset  = create ~insn_risg arch ~insn_map () in
   superset
 
 let export bin superset = 
@@ -252,7 +270,7 @@ let export bin superset =
   let formatter = Format.formatter_of_out_channel graph_f in
   let () = Superset_risg.Gml.print formatter superset.insn_risg in
   let () = Out_channel.close graph_f in
-  let insn_map = get_data superset in
+  let insn_map = get_map superset in
   let map_str  = insn_map_to_string insn_map in
   Out_channel.write_all (bin ^ ".map") ~data:map_str;
   let meta_str  = meta_to_string superset in
@@ -267,7 +285,7 @@ let update_with_mem ?backend ?f superset mem =
     update (mem, insn) accu in
   disasm ?backend ~accu:superset ~f superset.arch mem
 
-let with_img ~accu ~backend img ~f = 
+let with_img ~accu ~backend img ~f =
   let segments = Table.to_sequence @@ Image.segments img in
   Seq.fold segments ~init:accu ~f:(fun accu (mem, segment) ->
       if Image.Segment.is_executable segment then
@@ -282,8 +300,9 @@ let superset_of_img ~data ?f ~backend img =
     data          = data;
     arch          = arch;
     insn_risg     = Superset_risg.G.create ();
+    insn_map      = Addr.Map.empty;
     brancher      = brancher;
-    segments      = Image.segments img;
+    img           = Some img;
   } in
   with_img ~accu:superset ~backend img
     ~f:(fun ~accu ~backend mem -> 

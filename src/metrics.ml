@@ -58,48 +58,58 @@ let true_positives superset f =
     );
   true_positives
 
-let false_positives superset tp =
-  let fp = Addr.Hash_set.create () in
+let reduced_occlusion superset tp =
+  let fps = Addr.Hash_set.create () in
   Hash_set.iter tp ~f:(fun addr ->
       let len = Superset.len_at superset addr in
       Seq.iter (Superset_risg.seq_of_addr_range addr len) 
-        ~f:(fun x -> Hash_set.add fp x);
+        ~f:(fun x -> Hash_set.add fps x);
     );
-  fp
+  fps
+
+let false_positives superset ro = 
+  let insn_risg = Superset.get_graph superset in
+  Hash_set.filter ro ~f:(Superset_risg.G.mem_vertex insn_risg)
 
 (* adjust this to collect metrics into the metrics field, and then *)
 (* split the printing out into a separate function *)
 let gather_metrics ~bin superset =
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   let insn_risg = Superset.get_graph superset in
   let function_starts =
     Insn_disasm_benchmark.ground_truth_of_unstripped_bin bin |> ok_exn in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let reduced_occlusion = Addr.Hash_set.create () in
-  let true_positives = Addr.Hash_set.create () in
+  let true_positives = true_positives superset bin in
   let insn_isg = Superset_risg.Oper.mirror insn_risg in
   let data_bytes = Addr.Hash_set.create () in
-  let dfs_find_conflicts addr = 
+  let dfs_find_conflicts total addr =
+    let is_clean = ref true in
     let add_conflicts addr =
       Hash_set.add true_positives addr;
       (* TODO insn_map is getting mixed from the ground truth, so it *)
       (* doesn't have the length for either a removed false positive *)
       (* or negative *)
-      let len = match Addr.Map.find insn_map addr with 
-        | Some (mem, _) -> 
-          Memory.length mem
-        | None -> 0 in
+      let len = Superset.len_at superset addr in
       Seq.iter (Superset_risg.seq_of_addr_range addr len) 
         ~f:(fun x -> Hash_set.add data_bytes x);
-      Seq.iter (Superset_risg.conflict_seq_at insn_map addr)
-        ~f:(fun x -> Hash_set.add reduced_occlusion x) in
+      let conflicts_at = Superset_risg.conflict_seq_at insn_map addr
+      in
+      let conflicts_at = Seq.filter conflicts_at 
+          ~f:Superset_risg.G.(mem_vertex insn_risg) in
+      let conflicts_at = Seq.to_list conflicts_at in
+      List.iter conflicts_at
+        ~f:(fun x -> Hash_set.add reduced_occlusion x);
+      if not (List.length conflicts_at = 0) then is_clean := false in
     if Superset_risg.G.mem_vertex insn_isg addr then
       Superset_risg.Dfs.prefix_component add_conflicts insn_isg addr;
+    if !is_clean then total+1 else total
   in
   let num_bytes =
-    let open Superset in
-    let segments = Table.to_sequence superset.segments in
+    let open Superset in 
+    let segments = Table.to_sequence 
+        Superset.(get_segments superset) in
     Seq.fold segments ~init:0 ~f:(fun len (mem, segment) ->
         if Image.Segment.is_executable segment then
           len + (Memory.length mem)
@@ -108,12 +118,20 @@ let gather_metrics ~bin superset =
   let entries = Superset_risg.entries_of_isg insn_risg in
   let branches = Grammar.linear_branch_sweep superset entries in
   let n = Hash_set.length branches in
-  Hash_set.iter true_positives ~f:(fun x -> Hash_set.remove branches x);
-  let tp_branches = Hash_set.(length branches) in
+  let tp_branches = 
+    Hash_set.fold ~init:0 true_positives
+      ~f:(fun tp_branches x -> 
+          if Hash_set.mem branches x
+          then tp_branches + 1 else tp_branches) in
   let fp_branches = n - tp_branches in
   printf "Num f.p. branches: %d, num tp branches: %d\n" fp_branches tp_branches;
   printf "superset_isg_of_mem length %d\n" num_bytes;
-  Set.iter ground_truth ~f:dfs_find_conflicts;
+  let total_clean = Set.fold ground_truth ~init:0 ~f:
+      dfs_find_conflicts in
+  printf "Number of functions precisely trimmed: %d of %d\n"
+    total_clean Set.(length ground_truth);
+  (* TODO number of functions not directly referenced by an edge that *)
+  (* are trimmed *)
   printf "Number of possible reduced false positives: %d\n" 
     Hash_set.(length data_bytes);
   printf "Reduced occlusion: %d\n" Hash_set.(length reduced_occlusion);

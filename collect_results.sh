@@ -20,3 +20,4 @@ cat binaries.txt | grep x86_64 | sed '/^$/d' | cut -f1 > x86_64binaries.txt
 cat binaries.txt | grep gcc | sed '/^$/d' | cut -f1 > gcc_binaries.txt
 cat binaries.txt | grep icc | sed '/^$/d' | cut -f1 > icc_binaries.txt
 cat binaries.txt | grep "Number of possible reduced false" | cut -d " " -f7 > possible_fp.txt
+python3 calculate_metrics.py

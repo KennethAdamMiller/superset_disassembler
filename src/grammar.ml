@@ -105,18 +105,19 @@ let tag_by_traversal ?(threshold=8) superset =
   let superset = Trim.trim superset in
   let insn_risg = Superset.get_graph superset in
   let visited = Addr.Hash_set.create () in
-  let insn_isg  = Superset_risg.Oper.mirror insn_risg in
   (* TODO should be either in it's own module and designated function *)
   let callsites = Superset.get_callsites ~threshold:6 superset in
   let superset = tag_callsites visited ~callsites superset in
   let superset = Trim.trim superset in
-  (*let superset = Invariants.tag_branch_violations superset in
-    let superset = Trim.trim superset in*)
+  let superset = Invariants.tag_layer_violations superset in
+  let superset = Trim.trim superset in
+  let superset = Invariants.tag_branch_violations superset in
+  let superset = Trim.trim superset in
   let insn_isg  = Superset_risg.Oper.mirror insn_risg in
   let entries = Superset_risg.entries_of_isg insn_risg in
-  (*Hash_set.iter visited ~f:(fun v -> Hash_set.remove entries v);*)
-  let branches = linear_branch_sweep superset entries in
+  let branches = Superset_risg.get_branches insn_risg in
   (*let branches = identify_branches superset in*)
+  (*let branches = linear_branch_sweep superset entries in*)
   (* TODO should delete this printf *)
   printf "detected %d if structures, %d callsites\n" 
     (Hash_set.length branches) Hash_set.(length callsites);
@@ -139,6 +140,7 @@ let tag_by_traversal ?(threshold=8) superset =
       positives := addr :: !positives;
       if !cur_total >= threshold then (
         let open Option in 
+        (* TODO could add the remaining part of the positives from threshold *)
         ignore (List.nth !positives threshold >>| 
                 (fun convergent_point ->
                    Hash_set.add tps convergent_point));

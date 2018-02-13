@@ -130,7 +130,7 @@ module Program(Conf : Provider)  = struct
     let dis_method tag_funcs x =
       let f = Trim.tagged_disasm_of_file 
           ~invariants:tag_funcs
-          ~data:Addr.Map.empty ~f:[Trim.add_to_map] ~backend in
+          ~data:() ~f:[Trim.add_to_map] ~backend in
       time ~name:"disasm binary" f x
     in
     let superset = 

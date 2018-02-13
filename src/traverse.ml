@@ -26,8 +26,8 @@ let visit_with_deltas ?pre ?post ~is_option superset entries =
   in
   visit ~pre ~post superset entries
 
-let visit_by_block superset entries
-    ?(pre=(fun _ _ _ -> ())) ?(post=(fun _ _ _ -> ())) = 
+let visit_by_block superset
+    ?(pre=(fun _ _ _ -> ())) ?(post=(fun _ _ _ -> ())) entries = 
   let insn_risg = Superset.get_graph superset in
   let (jmps,targets) = Superset_risg.G.fold_edges (fun src target (jmps,targets) -> 
       let is_branch = Superset_risg.is_branch insn_risg target in
@@ -48,6 +48,7 @@ let visit_by_block superset entries
   Map.iteri jmps ~f:(fun ~key ~data -> 
       Superset_risg.G.remove_edge insn_risg key data;
     );
+  let entries = Superset_risg.entries_of_isg insn_risg in
   let visited = Addr.Hash_set.create () in
   let rec visit v =
     Hash_set.add visited v;

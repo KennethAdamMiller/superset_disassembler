@@ -27,7 +27,7 @@ let filter_components ?(min_size=20) components =
 
 let tag_loop_contradictions ?(min_size=20) superset = 
   let insn_risg = Superset.get_graph superset in
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   let keep = filter_components ~min_size @@ 
     StrongComponents.scc_list insn_risg in
   (* Here we have to be careful; we only want to find instructions
@@ -41,16 +41,14 @@ let tag_loop_contradictions ?(min_size=20) superset =
     Set.(length to_remove)
     Set.(length parents)
     Set.(length keep);
-  let bad = Superset.get_bad superset in
-  Set.iter to_remove ~f:(G.add_edge insn_risg bad);
-  Superset.rebuild ~data:insn_map ~insn_risg superset
+  Set.iter to_remove ~f:(Superset.mark_bad superset);
+  Superset.rebuild ~insn_map ~insn_risg superset
 
 let default_tags = [tag_loop_contradictions]
 
 let tagged_disasm_of_file ?(backend="llvm") bin =
-  let data = Addr.Map.empty in
   let superset = Trim.tagged_disasm_of_file 
-      ~f:[Trim.add_to_map] ~data ~backend bin in
+      ~f:[Trim.add_to_map] ~data:() ~backend bin in
   tag_loop_contradictions superset
 
 let trimmed_disasm_of_file ?(backend="llvm") bin =

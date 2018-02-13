@@ -160,6 +160,23 @@ let conflict_seq_at insn_map addr =
     range_seq_of_conflicts insn_map addr len
   | None -> Seq.empty
 
+let parent_conflict_at insn_risg insn_map addr =
+  let children = G.pred insn_risg addr in
+  List.fold children ~init:Addr.Set.empty ~f:(fun cparents child -> 
+      let parents = G.succ insn_risg child in
+      List.fold parents ~init:cparents ~f:(fun cparents parent -> 
+          if not Addr.(parent = addr) then
+            match Map.find insn_map parent with
+            | Some(mem, _) -> 
+              let len = Memory.length mem in
+              if Addr.(parent < addr) && Addr.(addr < (parent ++ len)) then
+                Set.add cparents parent
+              else cparents
+            | None -> cparents
+          else cparents
+        )
+    )
+
 let mergers_of_isg insn_isg = 
   G.fold_vertex (fun addr mergers ->
       if G.out_degree insn_isg addr > 1 then

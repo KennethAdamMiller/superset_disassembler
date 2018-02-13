@@ -25,10 +25,9 @@ let mark_nonexclusive superset insn_delta data_delta ~mark =
 (* Unfortunately, I can't build this with functional programming in *)
 (* mind, because the ocamlgraph function (fold) required to do so is *)
 (* missing from the DFS module. *) 
-(* *)
 let tag_layer_violations superset = 
   let insn_risg = Superset.get_graph superset in
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   let add_data_of_insn dataset at = 
     Superset.with_data_of_insn superset at ~f:(Hash_set.add dataset)
   in
@@ -102,7 +101,7 @@ let tag_branch_violations superset =
         )
       )
   in
-  let post addr = 
+  let post addr =
     Hash_set.remove insns addr;
     remove_data_of_insn datas addr in
   let entries = Superset_risg.entries_of_isg insn_risg in

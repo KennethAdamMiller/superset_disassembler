@@ -149,7 +149,7 @@ let decision_tree_of_entries conflicted_entries entries tails insn_isg =
 (** to (mem, insn) *)
 let decision_trees_of_superset superset = 
   let open Superset in
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   let insn_risg = Superset.get_graph superset in
   (* Here, for each vertex, look up the insn from the map and *)
   (* identify conflicts. *)
@@ -205,7 +205,6 @@ let calculate_deltas superset ?entries is_option =
     )
     (* else if is in entries then store the delta in the deltas map *)
   in
-  (* TOOD should be able to refactor this to use common hash set *)
   let visited = Addr.Hash_set.create () in
   Hash_set.iter entries 
     ~f:(Superset_risg.iter_component ~visited ~post:make_deltas insn_risg);

@@ -126,9 +126,9 @@ let tag_success superset mem insn targets =
 
 (* pretty sure this belongs in superset *)
 let add_to_map superset mem insn _ = 
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   let insn_map = Superset.add_to_map insn_map (mem, insn) in
-  Superset.rebuild ~data:insn_map superset
+  Superset.rebuild ~insn_map superset
 
 let default_tags = [tag_non_insn;
                     tag_non_mem_access;
@@ -148,7 +148,7 @@ let trim superset =
   let superset_risg = Superset.get_graph superset in
   let bad  = Superset.get_bad superset in
   let module G = Superset_risg.G in
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   Superset_risg.G.iter_vertex (fun vert ->
       if not Map.(mem insn_map vert) then (
         Superset.mark_bad superset vert;
@@ -169,14 +169,14 @@ let trim superset =
         (*let (mem, insn) = data in
           Option.is_some insn && *)
         Superset_risg.G.(mem_vertex superset_risg vert)
-      ) (Superset.get_data superset) in
-    Superset.rebuild ~insn_risg:superset_risg ~data:insn_map superset
+      ) (Superset.get_map superset) in
+    Superset.rebuild ~insn_risg:superset_risg ~insn_map superset
   ) else
     superset
 
 let tag_superset ?invariants superset = 
   let invariants = Option.value invariants ~default:default_tags in
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   Addr.Map.fold ~init:superset insn_map ~f:(fun ~key ~data superset -> 
       let mem, insn = data in
       List.fold ~init:superset invariants ~f:(fun superset f -> 

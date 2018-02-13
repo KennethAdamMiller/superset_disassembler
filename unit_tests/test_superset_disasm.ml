@@ -56,7 +56,7 @@ let of_mem arch mem =
   let superset_risg = Superset_risg.risg_of_raw_superset insns in
   let insn_map = Superset.raw_superset_to_map insns in
   Superset.Fields.create 
-    ~data:insn_map ~insn_risg:superset_risg ~brancher ~arch ~segments
+    ~insn_map ~insn_risg:superset_risg ~data:() ~brancher ~arch ~img:None
 
 let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
@@ -418,7 +418,7 @@ let test_trim_scc test_ctxt =
       if not (Hash_set.mem loop_points vert) then 
         Hash_set.add conflicts_added vert) insn_isg;
   let superset = Superset.Fields.create 
-      ~data:insn_map ~insn_risg ~arch ~segments ~brancher in
+      ~insn_map ~insn_risg ~arch ~img:None ~brancher ~data:() in
   let components = Superset_risg.StrongComponents.scc_list insn_isg in
   assert_bool "Should have a component" 
     (List.(length components) > 0);
@@ -438,10 +438,10 @@ let test_trim_scc test_ctxt =
       List.(to_string marked_bad ~f:Addr.to_string) in
   assert_bool msg (List.(length marked_bad) = 0);
   let superset = Trim.trim superset in
-  let insn_map = Superset.get_data superset in
+  let insn_map = Superset.get_map superset in
   let insn_map = Map.filteri insn_map ~f:(fun ~key ~data ->
       Superset_risg.G.mem_vertex insn_risg key) in
-  let superset = Superset.rebuild superset ~data:insn_map in
+  let superset = Superset.rebuild superset ~insn_map in
   let insn_isg = superset.insn_risg in
   let conflicts_added_str = List.to_string ~f:Addr.to_string @@ 
     Hash_set.to_list conflicts_added in
