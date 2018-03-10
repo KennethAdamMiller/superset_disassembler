@@ -35,14 +35,9 @@ let conflicts_of_entries entries insn_map =
        ) else conflicted_entries
     )
 
-let tails_of_conflicts conflicts insn_isg entries = 
+let tails_of_conflicts conflicts insn_isg = 
   let possible_tails = Superset_risg.mergers_of_isg insn_isg in
-  (* we iterate over the basic blocks, reversing them in order to
-     find the tails first because our isg is in reverse, and also
-     because in the case of basic blocks, we always group 
-     competitors with a common tail by their entire instruction 
-     lineage due to leader list. 
-     This tail is the particular instruction
+  (* This tail is the particular instruction
      that is the fall through target of several potential
      competitors. We use this instruction against the
      leaders map because those will be the ones that fall
@@ -167,7 +162,7 @@ let decision_trees_of_superset superset =
      instructions to check for conflicts, we know which are tails
      in order to properly construct the sheath type.
   *)
-  let tails = tails_of_conflicts conflicts insn_risg entries in
+  let tails = tails_of_conflicts conflicts insn_risg in
   (* It may be that some entries are accidental indirections that *)
   (* happen to preside at the intended entry. These must map to to an *)
   (* entirely distinct interpretation. *)

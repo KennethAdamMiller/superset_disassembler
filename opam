@@ -24,7 +24,7 @@ remove: [
 ]
 
 depends: [
-    "bap"
+    "bap-std"
 ]
 
 depexts: [

@@ -42,7 +42,8 @@ let format_latex metrics =
   | None -> "No metrics gathered!"
 
 (* implement jmp_of_fp as a map from target to source in *)
-
+(* True positive set is going to come up short because if it isn't in *)
+(* the isg, it isn't going to be explored *)
 let true_positives superset f = 
   let function_starts =
     Insn_disasm_benchmark.ground_truth_of_unstripped_bin f |> ok_exn
@@ -64,12 +65,31 @@ let reduced_occlusion superset tp =
       let len = Superset.len_at superset addr in
       Seq.iter (Superset_risg.seq_of_addr_range addr len) 
         ~f:(fun x -> Hash_set.add fps x);
+      Hash_set.remove fps addr;
     );
   fps
 
 let false_positives superset ro = 
   let insn_risg = Superset.get_graph superset in
-  Hash_set.filter ro ~f:(Superset_risg.G.mem_vertex insn_risg)
+  let fps = Addr.Hash_set.create () in
+  Hash_set.iter ro ~f:(fun v ->
+      if Superset_risg.G.mem_vertex insn_risg v then
+        Hash_set.add fps v
+    );
+  fps
+
+let fn_insn_cnt superset tps =
+  let insn_risg = Superset.get_graph superset in
+  Hash_set.fold ~init:0 tps ~f:(fun count v -> 
+      if Superset_risg.G.mem_vertex insn_risg v then count 
+      else count+1)
+
+let fn_insns superset tps =
+  let insn_risg = Superset.get_graph superset in
+  let fn_insns = Addr.Hash_set.create () in
+  Superset_risg.G.iter_vertex 
+    (fun v -> if Hash_set.mem tps v then 
+        Hash_set.add fn_insns v) insn_risg 
 
 (* adjust this to collect metrics into the metrics field, and then *)
 (* split the printing out into a separate function *)
@@ -87,7 +107,7 @@ let gather_metrics ~bin superset =
   let dfs_find_conflicts total addr =
     let is_clean = ref true in
     let add_conflicts addr =
-      Hash_set.add true_positives addr;
+      (*Hash_set.add true_positives addr;*)
       (* TODO insn_map is getting mixed from the ground truth, so it *)
       (* doesn't have the length for either a removed false positive *)
       (* or negative *)
@@ -146,6 +166,7 @@ let gather_metrics ~bin superset =
       (List.to_string ~f:Addr.to_string @@ Set.to_list missed_set);
   printf "Occlusion: %d\n" 
     (Set.length @@ Superset_risg.find_all_conflicts insn_map);
+  printf "Instruction fns: %d\n" (fn_insn_cnt superset true_positives);
   printf "superset_map length %d graph size: %d num edges %d\n" 
     Addr.Map.(length insn_map) 
     (Superset_risg.G.nb_vertex insn_risg)

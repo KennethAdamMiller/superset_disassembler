@@ -247,10 +247,9 @@ let test_tail_construction test_ctxt =
       Superset_risg.G.iter_vertex (fun vert -> 
           assert_equal true @@ Map.mem insn_map vert;
         ) insn_isg;
-      let entries = Superset_risg.entries_of_isg insn_isg in
       let conflicts = Superset_risg.find_all_conflicts insn_map in
       let tails = Decision_tree_set.tails_of_conflicts
-          conflicts insn_isg entries in
+          conflicts insn_isg in
       let num_tails = Addr.Map.length tails in
       let msg = "There should be exactly one tail; there was "
                 ^ string_of_int num_tails ^ ", tail at: "
@@ -278,9 +277,8 @@ let test_tails_of_conflicts test_ctxt =
   let insn_map, insn_isg = 
     construct_tail_conflict insn_map insn_isg tail 4 in
   let conflicts = Superset_risg.find_all_conflicts insn_map in
-  let entries = Superset_risg.entries_of_isg insn_isg in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_isg entries in
+      conflicts insn_isg in
   assert_equal true (Addr.Map.length tails = 1)
     ~msg:"There should be exactly one tail" 
 
@@ -297,10 +295,9 @@ let test_extenuating_tail_competitors test_ctxt =
   let insn_map, insn_isg = 
     construct_tail_conflict 
       insn_map insn_isg extenuation_addr conflict_len in  
-  let entries = Superset_risg.entries_of_isg insn_isg in
   let conflicts = Superset_risg.find_all_conflicts insn_map in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_isg entries in
+      conflicts insn_isg in
   assert_equal true @@ Addr.Map.mem tails tail;
   assert_equal true @@ Addr.Map.mem tails extenuation_addr;
   assert_equal (Addr.Map.length tails) 2
@@ -326,7 +323,7 @@ let test_decision_tree_of_entries test_ctxt =
   assert_equal ~msg true (Hash_set.mem entries Addr.(succ entry));
   let conflicts = Superset_risg.find_all_conflicts insn_map in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_isg entries in
+      conflicts insn_isg in
   let conflicted_entries = Decision_tree_set.conflicts_of_entries
       entries insn_map in
   let decision_trees = Decision_tree_set.decision_tree_of_entries
@@ -507,7 +504,7 @@ let test_cross_layer_pruning test_ctxt =
   let entries = Superset_risg.entries_of_isg insn_risg in  
   assert_bool "Should have at least one entry" (Hash_set.(length entries) > 0);
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_risg entries in
+      conflicts insn_risg in
   assert_bool "Should have at least one tail" 
     (Map.(length tails) > 0);
   assert_bool "Should contain tail adder" Map.(mem tails tail_addr);
@@ -577,7 +574,7 @@ let test_calculate_delta test_ctxt =
   let entries = Superset_risg.entries_of_isg insn_risg in
   let conflicts = Superset_risg.find_all_conflicts insn_map in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_risg entries in
+      conflicts insn_risg in
   let option_set = List.fold ~init:Addr.Set.empty (Map.data tails)
       ~f:(fun option_set options -> 
           List.fold ~init:option_set options ~f:Addr.Set.add) in

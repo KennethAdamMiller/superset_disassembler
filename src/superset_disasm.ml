@@ -181,7 +181,7 @@ module Cmdline = struct
     Term.(const create 
           $checkpoint $(disassembler ()) $ground_truth $target
           $metrics_format $phases),
-    Term.info "superset_disasm" ~doc ~man ~version:Config.version
+    Term.info "superset_disasm" ~doc ~man
 
   let parse argv =
     match Term.eval ~argv (program ()) ~catch:false with

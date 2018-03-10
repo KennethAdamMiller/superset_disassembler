@@ -89,10 +89,12 @@ let with_data_of_insn superset at ~f =
   Seq.iter body ~f
 
 let mark_descendents_at ?insn_isg ?visited ?datas superset addr = 
-  let get_insn_isg () =
-    let insn_risg = get_graph superset in
-    Superset_risg.Oper.mirror insn_risg in
-  let insn_isg  = Option.value insn_isg ~default:(get_insn_isg ()) in
+  let insn_isg = 
+    match insn_isg with 
+    | Some insn_isg -> insn_isg 
+    | None -> 
+      let insn_risg = get_graph superset in
+      Superset_risg.Oper.mirror insn_risg in
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
   let datas = Option.value datas 
@@ -100,8 +102,9 @@ let mark_descendents_at ?insn_isg ?visited ?datas superset addr =
   if not (Hash_set.mem visited addr) then
     Superset_risg.Dfs.prefix_component (fun tp -> 
         let mark_bad addr = 
-          if Superset_risg.G.mem_vertex insn_isg addr then
-            mark_bad superset addr in
+          if not Hash_set.(mem visited addr) then
+            if Superset_risg.G.mem_vertex insn_isg addr then
+              mark_bad superset addr in
         with_data_of_insn superset tp ~f:mark_bad;
         with_data_of_insn superset tp ~f:(Hash_set.add datas);
         Hash_set.add visited tp;

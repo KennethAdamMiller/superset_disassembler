@@ -37,7 +37,7 @@ let tag_layer_violations superset =
   let conflicts = Superset_risg.find_all_conflicts insn_map in
   let entries = Superset_risg.entries_of_isg insn_risg in
   let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_risg entries in
+      conflicts insn_risg in
   let options = Map.fold tails ~init:Addr.Set.empty ~f:
       (fun ~key ~data options -> 
          List.fold ~init:options data ~f:Set.add) in
@@ -80,6 +80,7 @@ let tag_branch_violations superset =
   let add_data_of_insn dataset at = 
     Superset.with_data_of_insn superset at ~f:(Hash_set.add dataset)
   in
+  (* TODO removing should move to an alternate set to track discrete lineages *)
   let remove_data_of_insn dataset at =
     Superset.with_data_of_insn superset at ~f:(Hash_set.remove dataset)
   in
@@ -102,6 +103,8 @@ let tag_branch_violations superset =
       )
   in
   let post addr =
+    (* TODO removing should move to a different set, for tracking
+       alternate lineages *)
     Hash_set.remove insns addr;
     remove_data_of_insn datas addr in
   let entries = Superset_risg.entries_of_isg insn_risg in
