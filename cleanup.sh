@@ -7,9 +7,18 @@ clean_dir() {
   find ${bindir}/${subdir} -name "*.lserr" -type f -exec rm {} \;
 }
 
+clean_dir ../Desktop/linux_binaries
+
 clean_dir x86_64-binaries/elf/binutils
 clean_dir x86_64-binaries/elf/coreutils
 clean_dir x86_64-binaries/elf/findutils
 clean_dir x86-binaries/elf/binutils
 clean_dir x86-binaries/elf/coreutils
 clean_dir x86-binaries/elf/findutils
+
+clean_dir x86_64-binaries/elf_stripped/binutils
+clean_dir x86_64-binaries/elf_stripped/coreutils
+clean_dir x86_64-binaries/elf_stripped/findutils
+clean_dir x86-binaries/elf_stripped/binutils
+clean_dir x86-binaries/elf_stripped/coreutils
+clean_dir x86-binaries/elf_stripped/findutils

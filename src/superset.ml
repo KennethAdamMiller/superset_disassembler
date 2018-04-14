@@ -26,7 +26,7 @@ let bad_of_arch arch =
 
 let bad_of_addr addr =
   Addr.of_int ~width:(Addr.bitwidth addr) 0
-
+  
 let get_img superset = Option.(value_exn superset.img)
 
 let get_segments superset = 
@@ -48,6 +48,11 @@ let mark_bad superset addr =
 
 let get_map superset = superset.insn_map
 
+let get_base superset =
+  let insn_map = get_map superset in
+  let (base_addr, _)  = Addr.Map.min_elt insn_map |> Option.value_exn in
+  base_addr
+
 let get_data superset = superset.data
 
 let len_at superset at = 
@@ -66,6 +71,15 @@ let is_fall_through superset parent child =
   (* TODO should check for edge *)
   Addr.(child = ft)
 
+let get_callers superset addr =
+  let g = (get_graph superset) in
+  if Superset_risg.G.mem_vertex g addr &&
+       Superset_risg.G.out_degree g addr > 0 then
+    let callers = Superset_risg.G.succ g addr in
+    List.filter callers ~f:(fun caller ->
+        not (is_fall_through superset caller addr))
+  else []
+  
 let get_callsites ?(threshold=6) superset =
   let g = (get_graph superset) in
   let callsites = Addr.Hash_set.create () in

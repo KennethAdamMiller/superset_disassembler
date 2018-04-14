@@ -7,7 +7,10 @@ setup.data:
 	$(SETUP) -configure
 	touch setup.data
 
-all: setup.data
+setup.ml:
+	oasis setup -setup-update dynamic
+
+all: setup.data setup.ml
 	$(SETUP) -build -cflag -annot -cflag -bin-annot
 
 profile:
