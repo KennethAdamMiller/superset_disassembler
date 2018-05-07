@@ -1,3 +1,4 @@
+#!/bin/bash
 bindir=${HOME}/workspace/
 clean_dir() {
   subdir=${1}
@@ -5,9 +6,9 @@ clean_dir() {
   find ${bindir}/${subdir} -name "*.meta" -type f -exec rm {} \;
   find ${bindir}/${subdir} -name "*.map" -type f -exec rm {} \;
   find ${bindir}/${subdir} -name "*.lserr" -type f -exec rm {} \;
+  find ${bindir}/${subdir} -name "*addrs*" -type f -exec rm {} \;
 }
 
-clean_dir ../Desktop/linux_binaries
 
 clean_dir x86_64-binaries/elf/binutils
 clean_dir x86_64-binaries/elf/coreutils

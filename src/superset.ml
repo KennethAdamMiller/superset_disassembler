@@ -79,6 +79,15 @@ let get_callers superset addr =
     List.filter callers ~f:(fun caller ->
         not (is_fall_through superset caller addr))
   else []
+
+let get_non_fall_through_edges superset = 
+  let g = (get_graph superset) in
+  Superset_risg.G.fold_edges
+    (fun child parent jmps -> 
+      if is_fall_through superset parent child then
+        Map.add jmps child parent
+      else jmps
+    ) g Addr.Map.empty
   
 let get_callsites ?(threshold=6) superset =
   let g = (get_graph superset) in
