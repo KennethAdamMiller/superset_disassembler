@@ -113,6 +113,7 @@ let tag_non_insn superset mem insn targets =
 
 
 (* TODO This belongs in Superset *)
+(* could merge add_to_map and tag_success *)
 let tag_success superset mem insn targets =
   let src = Memory.min_addr mem in
   let insn_risg = Superset.get_graph superset in
