@@ -12,7 +12,12 @@ type 'a t = {
   brancher  : Brancher.t;
   data      : 'a;
   insn_map  : (mem * (Dis.full_insn option)) Addr.Map.t;
+  (* TODO: needs to become an array *)
   insn_risg : Superset_risg.t;
+  (* marked truth *)
+  (* marked data  *)
+  (* visited *)
+  (* union_find *)
 } [@@deriving fields]
 
 let contains_addr superset addr = 
