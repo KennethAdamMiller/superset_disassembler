@@ -102,17 +102,13 @@ let tag_callsites visited ?callsites superset =
 (* sequences must branch at some point only to reify at a common *)
 (* point, expressing a path by which they can finally rejoin. *)
 let tag_by_traversal ?(threshold=8) superset =
-  let superset = Trim.trim superset in
   let insn_risg = Superset.get_graph superset in
   let visited = Addr.Hash_set.create () in
   (* TODO should be either in it's own module and designated function *)
   let callsites = Superset.get_callsites ~threshold:6 superset in
   let superset = tag_callsites visited ~callsites superset in
-  let superset = Trim.trim superset in
   let superset = Invariants.tag_layer_violations superset in
-  let superset = Trim.trim superset in
   let superset = Invariants.tag_branch_violations superset in
-  let superset = Trim.trim superset in
   let insn_isg  = Superset_risg.Oper.mirror insn_risg in
   let entries = Superset_risg.entries_of_isg insn_risg in
   let branches = Superset_risg.get_branches insn_risg in
@@ -179,4 +175,4 @@ let tag_by_traversal ?(threshold=8) superset =
       ~f:(fun tp -> 
           if Superset_risg.G.mem_vertex insn_risg tp then
             Superset_risg.G.remove_edge insn_risg bad tp);
-  Trim.trim superset
+  superset

@@ -1,6 +1,11 @@
 open Bap.Std
 open Core_kernel.Std
 
+module type InvariantApplicator = sig
+  val apply : 'a Superset.t -> 'a Superset.t
+end
+
+
 let enforce_exclusivity insn_delta data_delta =
   let insns_in_data = 
     Hash_set.fold ~init:[] data_delta ~f:(fun violators data -> 

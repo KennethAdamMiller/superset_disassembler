@@ -91,7 +91,7 @@ let decision_tree_of_entries conflicted_entries entries tails insn_isg =
   let link_zero decision_tree entry =
     let width = Addr.bitwidth entry in
     let zero = Addr.(of_int ~width 0) in
-    Superset_risg.G.add_edge decision_tree zero entry;
+    Superset_risg.G.add_edge decision_tree zero entry
   in
   let f decision_tree entry =
     let width = Addr.bitwidth entry in

@@ -16,6 +16,16 @@ type metrics = {
   trimmed             : int list;
 }
 
+module InvariantTrackingApplicator = struct
+end
+
+module MetricsGatheringReducer = struct
+end
+
+module MetricsInstrument = struct
+
+end
+
 let format_standard metrics =
   match metrics with 
   | Some metrics -> 
@@ -51,7 +61,7 @@ let true_positives superset f =
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let insn_isg = Superset_risg.Oper.mirror (Superset.get_graph superset) in
-  let true_positives = Addr.Hash_set.create () in  
+  let true_positives = Addr.Hash_set.create () in
   Set.iter ground_truth ~f:(fun addr -> 
       if Superset_risg.G.mem_vertex insn_isg addr then
         Superset_risg.Dfs.prefix_component 

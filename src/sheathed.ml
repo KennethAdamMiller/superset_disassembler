@@ -48,19 +48,21 @@ let default_tags = [tag_loop_contradictions]
 
 let tagged_disasm_of_file ?(backend="llvm") bin =
   let superset = Trim.tagged_disasm_of_file 
-      ~f:[Trim.add_to_map] ~data:() ~backend bin in
+      ~f:[(fun s x y z -> Superset.add_to_map s x y)]
+      ~data:() ~backend bin in
   tag_loop_contradictions superset
 
+(* TODO belongs elsewhere or is a duplicate *)
 let trimmed_disasm_of_file ?(backend="llvm") bin =
   let superset = tagged_disasm_of_file ~backend bin in
-  Trim.trim superset
+  Trim.Default.trim superset
 
 let sheaths_of_file ?(backend="llvm") bin = 
   let superset = tagged_disasm_of_file ~backend bin in
   superset, Decision_tree_set.decision_trees_of_superset superset
 
 let trimmed_sheaths_of_file ?(backend="llvm") bin =
-  let superset = Trim.trim (tagged_disasm_of_file ~backend bin) in
+  let superset = Trim.Default.trim (tagged_disasm_of_file ~backend bin) in
   superset, Decision_tree_set.decision_trees_of_superset superset
 
 (* TODO test the below functions *)

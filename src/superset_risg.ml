@@ -26,7 +26,7 @@ module Topological = Topological.Make(G)
 module Dominator = Dominator.Make(G)
 module Oper = Oper.I(G)
 module StrongComponents = Components.Make(G)
-module DiscreteComponents = Components.Undirected(G)
+(*module DiscreteComponents = Components.Undirected(G)*)
 module Dfs        = Graph.Traverse.Dfs(G)
 module Path       = Path.Check(G)
 module GmlOut     = Gml.Print(G)(struct 
@@ -225,6 +225,28 @@ let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
       (fun w -> if not (Hash_set.mem visited w) then visit w) g v;
     post v
   in visit v
+
+let fold_component ?visited ~pre ~post i g v0 =
+  let visited = Option.value visited
+      ~default:(Addr.Hash_set.create ()) in
+  let s = Stack.create () in
+  (* invariant: [h] contains exactly the vertices which have been pushed *)
+  let push v =
+    if not (Hash_set.mem visited v) then begin
+      Hash_set.add visited v;
+      Stack.push s v
+    end
+  in
+  push v0;
+  let rec loop acc =
+    match Stack.pop s with
+    | Some v ->
+      let acc = pre acc v in
+      G.iter_succ push g v;
+      post (loop acc) v
+    | None -> acc
+  in
+  loop i
 
 let collect_target_entries visited insn_risg insn_isg addr = 
   let target_entries = Addr.Hash_set.create () in

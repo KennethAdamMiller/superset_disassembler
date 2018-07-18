@@ -117,7 +117,8 @@ let tag_non_insn superset mem insn targets =
 let tag_success superset mem insn targets =
   let src = Memory.min_addr mem in
   let insn_risg = Superset.get_graph superset in
-  Superset_risg.G.add_vertex insn_risg src;
+  (*let superset = Superset.add superset mem insn in*)
+  (* TODO perhaps the below should be merged with Superset.add *)
   List.iter targets ~f:(fun (target,_) -> 
       match target with
       | Some (target) -> 
@@ -125,18 +126,12 @@ let tag_success superset mem insn targets =
       | None -> ());
   superset
 
-(* pretty sure this belongs in superset *)
-let add_to_map superset mem insn _ = 
-  let insn_map = Superset.get_map superset in
-  let insn_map = Superset.add_to_map insn_map (mem, insn) in
-  Superset.rebuild ~insn_map superset
-
 let default_tags = [tag_non_insn;
                     tag_non_mem_access;
                     tag_target_not_in_mem;
                     tag_target_is_bad;
                     tag_target_in_body;
-                    tag_success]
+                    tag_success;]
 
 let tag ?invariants =
   let invariants = Option.value invariants ~default:default_tags in
@@ -145,44 +140,102 @@ let tag ?invariants =
         (f superset mem insn targets)) in
   tag_with ~f
 
-let trim superset =
-  let superset_risg = Superset.get_graph superset in
-  let bad  = Superset.get_bad superset in
-  let module G = Superset_risg.G in
-  let insn_map = Superset.get_map superset in
-  Superset_risg.G.iter_vertex (fun vert ->
-      if not Map.(mem insn_map vert) then (
-        Superset.mark_bad superset vert;
+module type Reducer = sig
+  type acc
+  val accu : acc
+  val check_pre : 'a Superset.t -> acc -> addr -> acc
+  val check_elim : 'a Superset.t -> acc -> addr -> bool
+  val check_post : 'a Superset.t -> acc -> addr -> acc
+  val mark  : 'a Superset.t -> acc -> addr -> unit
+end
+
+module Reduction(R : Reducer) = struct
+
+  let trim superset =
+    print_endline "trimming...";
+    let superset_risg = Superset.get_graph superset in
+    let bad  = Superset.get_bad superset in
+    let module G = Superset_risg.G in
+    let superset = Superset.rebalance superset in
+    if G.mem_vertex superset_risg bad then (
+      let post accu addr =
+        if R.check_elim superset accu addr then (
+          R.mark superset accu addr;
+          G.remove_vertex superset_risg addr;
+        );
+        R.check_post superset accu addr
+      in
+      let orig_size = (G.nb_vertex superset_risg) in
+      let pre = R.check_pre superset in
+      Superset_risg.fold_component ~pre ~post R.accu superset_risg bad;
+      G.remove_vertex superset_risg bad;
+      let trimmed_size = (G.nb_vertex superset_risg) in
+      let num_removed = orig_size - trimmed_size in
+      printf "%d vertices after trimming, removing %d\n" 
+        trimmed_size num_removed;
+      Superset.rebalance superset
+    ) else
+      superset
+
+end
+
+module DefaultReducer : Reducer = struct
+  type acc = unit
+  let accu = ()
+  let check_pre _ accu _ = accu
+  let check_post _ accu _ = accu
+  let check_elim _ _ _ = true
+  let mark _ _ _ = ()
+end
+
+module Default = Reduction(DefaultReducer)
+
+module DeadblockTolerantReducer : Reducer
+(*with type acc = Superset.elem option*) = struct
+  type acc = Superset.elem option
+  let accu = None
+  let check_pre superset accu addr =
+    match accu with 
+    | Some _ -> accu
+    | None -> (
+        match Map.find Superset.(get_map superset) addr with
+        | Some (mem,insn) -> (
+            match insn with
+            | Some i -> 
+              let i = Insn.of_basic i in
+              if Insn.is Insn.jump i then
+                Some (mem,insn) else None
+            | None -> None
+          )
+        | None -> None
       )
-    ) superset_risg;
-  if G.mem_vertex superset_risg bad then (
-    let f addr = 
-      G.remove_vertex superset_risg addr in
-    let orig_size = (G.nb_vertex superset_risg) in
-    Superset_risg.Dfs.postfix_component f superset_risg bad;
-    G.remove_vertex superset_risg bad;
-    let trimmed_size = (G.nb_vertex superset_risg) in
-    let num_removed = orig_size - trimmed_size in
-    printf "%d vertices after trimming, removing %d\n" 
-      trimmed_size num_removed;
-    let insn_map = Map.filteri ~f:(fun ~key ~data -> 
-        let vert = key in
-        (*let (mem, insn) = data in
-          Option.is_some insn && *)
-        Superset_risg.G.(mem_vertex superset_risg vert)
-      ) (Superset.get_map superset) in
-    Superset.rebuild ~insn_risg:superset_risg ~insn_map superset
-  ) else
-    superset
+
+  let check_post superset accu addr =
+    match accu with
+    | Some(mem,insn) ->
+      if Memory.(min_addr mem) = addr then
+        None
+      else accu
+    | None -> accu
+
+  let check_elim superset accu addr =
+    Option.is_none accu
+
+  let mark _ _ _ = ()
+end
+
+module DeadblockTolerant = Reduction(DeadblockTolerantReducer)
 
 let tag_superset ?invariants superset = 
   let invariants = Option.value invariants ~default:default_tags in
   let insn_map = Superset.get_map superset in
+  let f superset mem insn targets =
+    List.fold ~init:superset invariants
+      ~f:(fun superset invariant -> 
+          invariant superset mem insn targets) in
   Addr.Map.fold ~init:superset insn_map ~f:(fun ~key ~data superset -> 
       let mem, insn = data in
-      List.fold ~init:superset invariants ~f:(fun superset f -> 
-          tag_with ~f (mem, insn) superset
-        )
+      tag_with ~f (mem, insn) superset
     )
 
 let tagged_disasm_of_file ~data ?f ?invariants ~backend file =
@@ -192,4 +245,4 @@ let tagged_disasm_of_file ~data ?f ?invariants ~backend file =
   Superset.superset_disasm_of_file ~data ~backend file ~f:(tag ?invariants)
 
 let trimmed_disasm_of_file ~data ?f ~backend file =
-  trim (tagged_disasm_of_file ~data ?f ~backend file)
+  Default.trim (tagged_disasm_of_file ~data ?f ~backend file)

@@ -51,12 +51,11 @@ let test_hits_every_byte test_ctxt =
 
 let of_mem arch mem = 
   let brancher = Brancher.of_bil arch in
-  let insns = 
-    Superset.disasm ~accu:[] ~f:List.cons arch mem |> ok_exn in
-  let superset_risg = Superset_risg.risg_of_raw_superset insns in
-  let insn_map = Superset.raw_superset_to_map insns in
-  Superset.Fields.create 
-    ~insn_map ~insn_risg:superset_risg ~data:() ~brancher ~arch ~img:None
+  let insn_risg = (Superset_risg.G.create ()) in
+  let superset = Superset.Fields.create
+      ~arch ~brancher ~img:None ~data:()
+      ~insn_map:Addr.Map.empty ~insn_risg in
+  Superset.update_with_mem superset mem |> ok_exn
 
 let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
@@ -64,7 +63,7 @@ let test_trim test_ctxt =
   let superset = of_mem arch mem in
   let superset = Superset.update_with_mem
       superset mem ~f:Trim.tag |> ok_exn in
-  let superset = Trim.trim superset in
+  let superset = Trim.Default.trim superset in
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
   let msg = Superset.isg_to_string superset in
   (* After refactoring, it may be that some targets that fall outside
@@ -78,9 +77,10 @@ let test_trims_invalid_jump test_ctxt =
   let superset = of_mem arch memory in
   let superset = Superset.update_with_mem
       superset memory ~f:Trim.tag |> ok_exn in
-  let superset = Trim.trim superset in
+  let superset = Trim.Default.trim superset in
   let expected_results = [ ] in
-  assert_equal ~msg:"lengths unequal" (G.nb_vertex superset.insn_risg)
+  assert_equal ~msg:"lengths unequal"
+    (G.nb_vertex superset.insn_risg)
     (List.length expected_results)
 
 let test_addr_map test_ctxt =
@@ -103,10 +103,9 @@ let test_insn_isg test_ctxt =
 
 let test_consistent_superset test_ctxt = 
   let memory, arch = make_params "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
-  let insns = Superset.disasm ~accu:[] ~f:List.cons arch memory
-              |> ok_exn in
-  let insn_risg = Superset_risg.risg_of_raw_superset insns in
-  let insn_map = Superset.raw_superset_to_map insns in
+  let superset = of_mem arch memory in
+  let insn_risg = Superset.get_graph superset in
+  let insn_map = Superset.get_map superset in
   let msg = "insn in isg but not in map after shingled of superset" in
   Superset_risg.G.iter_vertex (fun v -> 
       let msg = msg ^ Addr.to_string v in
@@ -388,7 +387,7 @@ let test_is_option test_ctxt =
   let insn_map, insn_risg =
     construct_tail_conflict insn_map insn_isg in_loop_addr
       num_conflicts in
-  let superset = Superset.create ~insn_risg arch insn_map in
+  let superset = Superset.create ~insn_risg arch ~insn_map () in
   let is_option = (Decision_tree_set.insn_is_option superset) in
   let deltas = Decision_tree_set.calculate_deltas superset
       is_option in
@@ -408,8 +407,6 @@ let test_trim_scc test_ctxt =
   Superset_risg.G.iter_vertex (Hash_set.add loop_points) insn_isg;
   let insn_map, insn_risg =
     construct_tail_conflict insn_map insn_isg in_loop_addr 3 in
-  let insns = Addr.Map.data insn_map in
-  let insn_map = Superset.raw_superset_to_map insns in
   let conflicts_added = Addr.Hash_set.create () in
   Superset_risg.G.iter_vertex (fun vert -> 
       if not (Hash_set.mem loop_points vert) then 
@@ -434,7 +431,7 @@ let test_trim_scc test_ctxt =
   let msg = sprintf "should not mark loop bad %s" 
       List.(to_string marked_bad ~f:Addr.to_string) in
   assert_bool msg (List.(length marked_bad) = 0);
-  let superset = Trim.trim superset in
+  let superset = Trim.Default.trim superset in
   let insn_map = Superset.get_map superset in
   let insn_map = Map.filteri insn_map ~f:(fun ~key ~data ->
       Superset_risg.G.mem_vertex insn_risg key) in
@@ -500,7 +497,7 @@ let test_cross_layer_pruning test_ctxt =
             ) in
           Some(next)
         ) in
-  let superset = Superset.create ~insn_risg arch insn_map in
+  let superset = Superset.create ~insn_risg arch ~insn_map () in
   let entries = Superset_risg.entries_of_isg insn_risg in  
   assert_bool "Should have at least one entry" (Hash_set.(length entries) > 0);
   let tails = Decision_tree_set.tails_of_conflicts
@@ -524,7 +521,7 @@ let test_cross_layer_pruning test_ctxt =
         (Superset_risg.G.(nb_vertex dtree) > 0)
     );
   let superset = Invariants.tag_layer_violations superset in
-  let superset = Trim.trim superset in
+  let superset = Trim.Default.trim superset in
   let insn_risg = superset.insn_risg in
   let num_decisions = List.length 
       (Superset_risg.G.succ insn_risg tail_addr) in
@@ -608,7 +605,7 @@ let test_extended_cross_layer_pruning test_ctxt =
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let tail_addr = Addr.of_int addr_size 50 in
   let insn_map, insn_risg = make_extended_cross tail_addr in
-  let superset = Superset.create ~insn_risg arch insn_map in
+  let superset = Superset.create ~insn_risg arch ~insn_map () in
   let decision_trees = Decision_tree_set.decision_trees_of_superset
       superset in
   assert_bool "should have a decision tree" 
@@ -618,7 +615,7 @@ let test_extended_cross_layer_pruning test_ctxt =
         (Superset_risg.G.(nb_vertex dtree) > 0)
     );
   let superset = Invariants.tag_layer_violations superset in
-  let superset = Trim.trim superset in
+  let superset = Trim.Default.trim superset in
   let insn_risg = superset.insn_risg in
   let num_decisions = List.length 
       (Superset_risg.G.succ insn_risg tail_addr) in

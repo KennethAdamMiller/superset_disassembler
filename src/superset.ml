@@ -2,9 +2,11 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 open Or_error
-open Format
+(*open Format*)
 
 module Dis = Disasm_expert.Basic
+
+type elem = mem * (Dis.full_insn option)
 
 type 'a t = {
   arch      : arch;
@@ -20,6 +22,9 @@ type 'a t = {
   (* union_find *)
 } [@@deriving fields]
 
+module type Superset_intf = sig
+end
+
 let contains_addr superset addr = 
   let img = Option.value_exn superset.img in
   let segments = Table.to_sequence Image.(segments img) in
@@ -31,7 +36,7 @@ let bad_of_arch arch =
 
 let bad_of_addr addr =
   Addr.of_int ~width:(Addr.bitwidth addr) 0
-  
+
 let get_img superset = Option.(value_exn superset.img)
 
 let get_segments superset = 
@@ -66,7 +71,6 @@ let len_at superset at =
   | None -> 0
   | Some(mem, _) -> Memory.length mem
 
-
 let fall_through_of superset addr =
   let len = len_at superset addr in
   Addr.(addr ++ len)
@@ -79,7 +83,7 @@ let is_fall_through superset parent child =
 let get_callers superset addr =
   let g = (get_graph superset) in
   if Superset_risg.G.mem_vertex g addr &&
-       Superset_risg.G.out_degree g addr > 0 then
+     Superset_risg.G.out_degree g addr > 0 then
     let callers = Superset_risg.G.succ g addr in
     List.filter callers ~f:(fun caller ->
         not (is_fall_through superset caller addr))
@@ -89,11 +93,11 @@ let get_non_fall_through_edges superset =
   let g = (get_graph superset) in
   Superset_risg.G.fold_edges
     (fun child parent jmps -> 
-      if is_fall_through superset parent child then
-        Map.add jmps child parent
-      else jmps
+       if is_fall_through superset parent child then
+         Map.add jmps child parent
+       else jmps
     ) g Addr.Map.empty
-  
+
 let get_callsites ?(threshold=6) superset =
   let g = (get_graph superset) in
   let callsites = Addr.Hash_set.create () in
@@ -171,10 +175,21 @@ let remove superset addr =
   Superset_risg.G.remove_vertex superset.insn_risg addr;
   rebuild superset
 
-let add superset mem insn =
+let add_to_map superset mem insn = 
+  let insn_map = get_map superset in
+  let addr = (Memory.min_addr mem) in
+  let insn_map = Addr.Map.add insn_map addr (mem, insn) in
+  rebuild ~insn_map superset
+
+let add_to_graph superset mem insn =
   let addr = Memory.min_addr mem in
   Superset_risg.G.add_vertex superset.insn_risg addr;
   rebuild superset
+
+let add superset mem insn =
+  let superset = add_to_graph superset mem insn in
+  let superset = add_to_map superset mem insn in
+  superset
 
 let replace superset mem insn = 
   let addr = Memory.min_addr mem in
@@ -232,21 +247,12 @@ let lift arch insns =
         | None -> lifted_superset
       )
 
-module With_exn = struct
-  let disasm ?backend ~accu ~f arch mem = 
-    disasm ?backend ~accu ~f arch mem |> ok_exn
-end
-
 let memmap_all ?backend arch mem =
   let filter_add elem memmap =
     let (mem, insn) = elem in 
     Option.value_map insn ~default:memmap
       ~f:(Memmap.add memmap mem) in
-  With_exn.disasm ?backend ~accu:Memmap.empty ~f:filter_add arch mem
-
-let add_to_map insn_map (mem, insn) =
-  let addr = (Memory.min_addr mem) in
-  Addr.Map.add insn_map addr (mem, insn)
+  disasm ?backend ~accu:Memmap.empty ~f:filter_add arch mem |> ok_exn
 
 let sexp_of_mem mem = 
   let endianness = Memory.endian mem in
@@ -281,12 +287,6 @@ let meta_of_string meta_str =
 let meta_to_string superset = 
   Sexp.to_string (Arch.sexp_of_t superset.arch)
 
-let raw_superset_to_map ?insn_map raw_superset = 
-  let insn_map = Option.value insn_map ~default:Addr.Map.empty in
-  let insn_map = List.fold_left ~init:insn_map raw_superset
-      ~f:add_to_map in
-  insn_map
-
 let import bin =
   let insn_risg = Superset_risg.Gml.parse (bin ^ ".graph") in
   let map_str   = In_channel.read_all (bin ^ ".map") in
@@ -307,13 +307,11 @@ let export bin superset =
   let meta_str  = meta_to_string superset in
   Out_channel.write_all (bin ^ ".meta") ~data:meta_str
 
-
 let update_with_mem ?backend ?f superset mem =
-  let superset_risg = superset.insn_risg in
   let update = Option.value f ~default:(fun (m, i) a -> a) in
-  let f (mem, insn) accu =
-    Superset_risg.add ~superset_risg mem insn;
-    update (mem, insn) accu in
+  let f (mem, insn) superset =
+    let superset = add superset mem insn in
+    update (mem, insn) superset in
   disasm ?backend ~accu:superset ~f superset.arch mem
 
 let with_img ~accu ~backend img ~f =
@@ -340,7 +338,34 @@ let superset_of_img ~data ?f ~backend img =
         update_with_mem ~backend accu mem ?f
       )
 
-let superset_disasm_of_file ~backend ~data ?f binary = 
+let superset_disasm_of_file ?(backend="llvm") ~data ?f binary = 
   let img  = Common.img_of_filename binary in
   let r = superset_of_img ~data ~backend img ?f in
   r
+
+let fold_insns superset f =
+  let insn_map = get_map superset in
+  Addr.Map.fold ~init:superset insn_map ~f:(fun ~key ~data superset -> 
+      let mem, insn = data in
+      f ~superset ~mem ~insn
+    )
+
+let with_graph superset f =
+  let insn_risg = superset.insn_risg in
+  f insn_risg
+
+let rebalance superset =
+  let insn_map = get_map superset in
+  let superset_risg = get_graph superset in
+  Superset_risg.G.iter_vertex (fun vert ->
+      if not Map.(mem insn_map vert) then (
+        mark_bad superset vert;
+      )
+    ) superset_risg;
+  let insn_map = Map.filteri ~f:(fun ~key ~data -> 
+      let vert = key in
+      (*let (mem, insn) = data in
+        Option.is_some insn && *)
+      Superset_risg.G.(mem_vertex superset_risg vert)
+    ) insn_map in
+  rebuild ~insn_risg:superset_risg ~insn_map superset
