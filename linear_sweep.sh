@@ -9,6 +9,7 @@ dump_errors() {
   #rm /tmp/files.txt
   for f in `cat files.txt` ; do
     export s=${f/'elf'/'elf_stripped'}
+    #objdump -no-show-raw-insn -no-symbolic-operands -no-leading-headers -d ${s} | grep ":" | cut -d ":" -f 1 | grep -e "[0-9a-f]" | grep -v "[g-z]" > ${f}.lserr
     objdump -no-show-raw-insn -no-symbolic-operands -no-leading-addr -no-leading-headers -d ${s}  | grep ":" | cut -d ":" -f 1 | grep -e "[0-9a-f]" > ${f}.lserr
     echo "$(tail -n +2 ${f}.lserr)" > ${f}.lserr
     echo "Processed ${f}"
