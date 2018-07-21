@@ -64,12 +64,13 @@ let tag_target_not_in_mem superset mem insn targets =
   superset
 
 let tag_target_is_bad superset mem insn targets =
-  let bad = Superset.get_bad superset in
+  let width = Addr.bitwidth @@ Memory.min_addr mem in
+  let z = Addr.zero width in
   List.iter targets
     ~f:(fun (target,_) ->
         match target with 
         | Some(target) -> 
-          if Addr.(target = bad) then
+          if Addr.(target = z) then
             Superset.mark_bad superset target
         | None -> ()
       );
@@ -154,28 +155,23 @@ module Reduction(R : Reducer) = struct
   let trim superset =
     print_endline "trimming...";
     let superset_risg = Superset.get_graph superset in
-    let bad  = Superset.get_bad superset in
     let module G = Superset_risg.G in
     let superset = Superset.rebalance superset in
-    if G.mem_vertex superset_risg bad then (
-      let post accu addr =
-        if R.check_elim superset accu addr then (
-          R.mark superset accu addr;
-          G.remove_vertex superset_risg addr;
-        );
-        R.check_post superset accu addr
-      in
-      let orig_size = (G.nb_vertex superset_risg) in
-      let pre = R.check_pre superset in
-      Superset_risg.fold_component ~pre ~post R.accu superset_risg bad;
-      G.remove_vertex superset_risg bad;
-      let trimmed_size = (G.nb_vertex superset_risg) in
-      let num_removed = orig_size - trimmed_size in
-      printf "%d vertices after trimming, removing %d\n" 
-        trimmed_size num_removed;
-      Superset.rebalance superset
-    ) else
-      superset
+    let post accu addr =
+      if R.check_elim superset accu addr then (
+        R.mark superset accu addr;
+        G.remove_vertex superset_risg addr;
+      );
+      R.check_post superset accu addr
+    in
+    let orig_size = (G.nb_vertex superset_risg) in
+    let pre = R.check_pre superset in
+    let _ = Superset.with_bad superset ~pre ~post R.accu in
+    let trimmed_size = (G.nb_vertex superset_risg) in
+    let num_removed = orig_size - trimmed_size in
+    printf "%d vertices after trimming, removing %d\n" 
+      trimmed_size num_removed;
+    Superset.rebalance superset
 
 end
 
@@ -203,7 +199,7 @@ module DeadblockTolerantReducer : Reducer
             match insn with
             | Some i -> 
               let i = Insn.of_basic i in
-              if Insn.is Insn.jump i then
+              if Insn.may Insn.affect_control_flow i then
                 Some (mem,insn) else None
             | None -> None
           )

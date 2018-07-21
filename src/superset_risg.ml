@@ -243,7 +243,7 @@ let fold_component ?visited ~pre ~post i g v0 =
     | Some v ->
       let acc = pre acc v in
       G.iter_succ push g v;
-      post (loop acc) v
+      loop @@ post acc v
     | None -> acc
   in
   loop i

@@ -16,6 +16,7 @@ type 'a t = {
   insn_map  : (mem * (Dis.full_insn option)) Addr.Map.t;
   (* TODO: needs to become an array *)
   insn_risg : Superset_risg.t;
+  bad       : Addr.Hash_set.t;
   (* marked truth *)
   (* marked data  *)
   (* visited *)
@@ -31,12 +32,6 @@ let contains_addr superset addr =
   Seq.fold segments ~init:false ~f:(fun status (mem, segment) ->
       status || Memory.contains mem addr)
 
-let bad_of_arch arch = 
-  Addr.of_int ~width:(Size.in_bits @@ Arch.addr_size arch) 0
-
-let bad_of_addr addr =
-  Addr.of_int ~width:(Addr.bitwidth addr) 0
-
 let get_img superset = Option.(value_exn superset.img)
 
 let get_segments superset = 
@@ -49,13 +44,26 @@ let get_arch superset = superset.arch
 
 let get_graph superset = superset.insn_risg
 
-let get_bad superset = 
-  bad_of_arch superset.arch
-
 let mark_bad superset addr = 
-  let g = get_graph superset in
-  Superset_risg.G.add_edge g (get_bad superset) addr
+  Hash_set.add superset.bad addr
 
+let num_bad superset =
+  Hash_set.length superset.bad
+
+let clear_bad superset addr =
+  Hash_set.remove superset.bad addr
+
+let clear_all_bad superset =
+  Hash_set.clear superset.bad
+
+let with_bad superset ?visited ~pre ~post accu =
+  Hash_set.fold ~init:accu superset.bad ~f:(fun accu b -> 
+      if Superset_risg.G.mem_vertex superset.insn_risg b then
+        Superset_risg.fold_component accu superset.insn_risg
+          ?visited ~pre ~post b
+      else accu
+    )  
+  
 let get_map superset = superset.insn_map
 
 let get_base superset =
@@ -152,6 +160,7 @@ let create ?insn_map ?insn_risg arch data =
     brancher = Brancher.of_bil arch;
     insn_map = insn_map;
     insn_risg = insn_risg;
+    bad      = Addr.Hash_set.create ();
     data = data;
   }
 
@@ -163,6 +172,7 @@ let rebuild ?data ?insn_map ?insn_risg superset =
     arch      = superset.arch;
     brancher  = superset.brancher;
     img       = superset.img;
+    bad       = superset.bad;
     data      = data;
     insn_risg = insn_risg;
     insn_map  = insn_map;
@@ -328,6 +338,7 @@ let superset_of_img ~data ?f ~backend img =
   let superset = {
     data          = data;
     arch          = arch;
+    bad           = Addr.Hash_set.create ();
     insn_risg     = Superset_risg.G.create ();
     insn_map      = Addr.Map.empty;
     brancher      = brancher;

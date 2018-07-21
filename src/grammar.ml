@@ -169,10 +169,6 @@ let tag_by_traversal ?(threshold=8) superset =
           ) insn_isg tp;
       )
     );
-  let bad = Superset.get_bad superset in
-  if Superset_risg.G.mem_vertex insn_risg bad then
-    Hash_set.iter visited 
-      ~f:(fun tp -> 
-          if Superset_risg.G.mem_vertex insn_risg tp then
-            Superset_risg.G.remove_edge insn_risg bad tp);
+  Hash_set.iter visited 
+    ~f:(fun tp -> Superset.clear_bad superset tp);
   superset
