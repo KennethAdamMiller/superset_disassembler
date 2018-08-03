@@ -44,9 +44,3 @@ let linear_of_ground_truth bin =
       Linear.sweep arch mem_for_entrance |> ok_exn
     )
 
-let ground_truth = 
-  let open Cmdliner in
-  Arg.(value & opt (some string) (None) 
-       & info ["ground_truth"] ~doc:
-         ("Compare results against a ground truth if desired," ^
-          " of either debug symbols or an unstripped binary"))

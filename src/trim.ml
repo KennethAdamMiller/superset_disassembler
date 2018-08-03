@@ -132,7 +132,7 @@ let default_tags = [tag_non_insn;
                     tag_target_not_in_mem;
                     tag_target_is_bad;
                     tag_target_in_body;
-                    tag_success;]
+(*tag_success;*)]
 
 let tag ?invariants =
   let invariants = Option.value invariants ~default:default_tags in
@@ -150,21 +150,29 @@ module type Reducer = sig
   val mark  : 'a Superset.t -> acc -> addr -> unit
 end
 
+module type ReducerInstance = sig
+  include Reducer
+  val post : 'a Superset.t -> acc -> addr -> acc
+end
+                    
 module Reduction(R : Reducer) = struct
 
+  let post superset accu addr =
+    let module G = Superset_risg.G in
+    let superset_risg = Superset.get_graph superset in
+    if R.check_elim superset accu addr then (
+      R.mark superset accu addr;
+      G.remove_vertex superset_risg addr;
+    );
+    R.check_post superset accu addr
+  
   let trim superset =
     print_endline "trimming...";
     let superset_risg = Superset.get_graph superset in
     let module G = Superset_risg.G in
     let superset = Superset.rebalance superset in
-    let post accu addr =
-      if R.check_elim superset accu addr then (
-        R.mark superset accu addr;
-        G.remove_vertex superset_risg addr;
-      );
-      R.check_post superset accu addr
-    in
     let orig_size = (G.nb_vertex superset_risg) in
+    let post = post superset in
     let pre = R.check_pre superset in
     let _ = Superset.with_bad superset ~pre ~post R.accu in
     let trimmed_size = (G.nb_vertex superset_risg) in
@@ -175,16 +183,29 @@ module Reduction(R : Reducer) = struct
 
 end
 
-module DefaultReducer : Reducer = struct
+module DefaultReducer = Reduction(struct
   type acc = unit
   let accu = ()
   let check_pre _ accu _ = accu
   let check_post _ accu _ = accu
   let check_elim _ _ _ = true
   let mark _ _ _ = ()
-end
+end)
 
-module Default = Reduction(DefaultReducer)
+module Default = DefaultReducer
+
+module ReducerComposer
+         (M1 : Reducer)
+         (M2 : Reducer) = struct
+  module M1 = Reduction(M1)
+  module M2 = Reduction(M2)
+  let post superset (m1,m2) addr =
+    let l = M1.post superset m1 addr in
+    let r = M2.post superset m2 addr in
+    l, r
+  let trim superset =
+    M2.trim @@ M1.trim superset
+end
 
 module DeadblockTolerantReducer : Reducer
 (*with type acc = Superset.elem option*) = struct

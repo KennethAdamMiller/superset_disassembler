@@ -6,27 +6,153 @@ open Format
 open Cmdoptions
 open Metrics
 open Metrics.Opts
-
+   
 let () = Pervasives.ignore(Plugins.load ())
+       
+let build_setops trim setops =
+  List.fold setops ~init:(trim,String.Map.empty)
+    ~f:(fun (trim,metrics) (colr, (sop, (f1, f2))) ->
+      let add (trim,metrics) f =
+        if Map.mem metrics f then
+          trim, metrics
+        else
+          let accu = (Addr.Hash_set.create () ,
+                      Superset_risg.G.create ()) in
+          let module Instance = MetricsGatheringReducer(struct
+                                    type acc = (Addr.Hash_set.t * Superset_risg.t )
+                                    let accu = accu
+                                  end) in
+          let module Instance = Trim.Reduction(Instance) in
+          let metrics = Map.add metrics f accu in
+          ((fun x -> Instance.trim @@ trim x), metrics) in
+      add (add (trim,metrics) f1) f2
+    )
 
+let apply_setops metrics setops =
+  let report_err colr f1 =
+    Format.eprintf
+      "Feature %s not found, error for color %s!" f1 colr in
+  List.fold setops ~init:String.Map.empty
+    ~f:(fun results (colr, (sop, (f1, f2))) -> 
+      match Map.find metrics f1, Map.find metrics f2 with
+      | Some (fmetric1,g1), Some (fmetric2,g2) -> (
+        match sop with
+        | Difference ->
+           let s = Addr.Hash_set.create () in
+           Hash_set.iter fmetric1 ~f:(fun fv ->
+               if not (Hash_set.mem fmetric2 fv) then
+                 Hash_set.add s fv
+             );
+           Map.add results colr s
+        | Union ->
+           let s = Addr.Hash_set.create () in
+           Hash_set.iter fmetric1 ~f:(fun fv ->
+               Hash_set.add s fv
+             );
+           Hash_set.iter fmetric2 ~f:(fun fv ->
+               Hash_set.add s fv
+             );
+           Map.add results colr s
+        | Intersection ->
+           let s = Addr.Hash_set.create () in
+           Hash_set.iter fmetric1 ~f:(fun fv ->
+               if (Hash_set.mem fmetric2 fv) then
+                 Hash_set.add s fv
+             );
+           Hash_set.iter fmetric2 ~f:(fun fv ->
+               if (Hash_set.mem fmetric1 fv) then
+                 Hash_set.add s fv
+             );
+           Map.add results colr s
+      )
+      | None, None ->
+         report_err colr f1;
+         report_err colr f2;
+         results
+      | None, _ ->
+         report_err colr f1;
+         results
+      | _, None ->
+         report_err colr f2;
+         results
+    ) 
+
+let take_random superset =
+  let insn_map = Superset.get_map superset in
+  let insn_risg = Superset.get_graph superset in
+  let minimum_depth = 200 in
+  let rec get_deep () =
+    let r = Random.int (Map.length insn_map) in
+    let x = List.nth Map.(keys insn_map) r |> Option.value_exn in
+    let depth = Superset_risg.get_depth insn_risg x in
+    if depth < minimum_depth then
+      get_deep ()
+    else
+      x
+  in get_deep ()
+
+let process_cut superset options results =
+  let insn_risg = Superset.get_graph superset in  
+  match options.cut with 
+  | None ->
+     if options.save_dot then
+       Metrics.print_dot superset results;
+  | Some cut -> (
+    let cut =
+      let c, addr, len = cut in
+      let addr =
+        match addr with
+        | "random" -> take_random superset
+        | "lowest" ->
+           let insn_map = Superset.get_map superset in
+           let addr,_ = Map.min_elt insn_map |> Option.value_exn in
+           addr
+        | "highest" ->
+           let insn_map = Superset.get_map superset in
+           let addr,_ = Map.max_elt insn_map |> Option.value_exn in
+           addr
+        | _ -> Addr.of_string addr in
+      c,addr,len in
+    match cut with
+    | DFS, addr, len ->
+       let subgraph = Addr.Hash_set.create () in
+       let depth = ref 0 in
+       let post _ =
+         depth := !depth - 1; in
+       let pre addr =
+         depth := !depth + 1;
+         Hash_set.add subgraph addr in
+       let terminator _ =
+         !depth < len &&
+           Hash_set.(length subgraph) < len in
+       Superset_risg.iter_component ~terminator ~pre ~post insn_risg
+         addr;
+       let sg = Superset_risg.subgraph insn_risg subgraph in
+       let superset = Superset.(rebuild ~insn_risg:sg superset) in
+       Metrics.print_dot superset results
+    | Interval, addr, len ->
+       let subgraph = Addr.Hash_set.create () in
+       let add x =
+         if Addr.(addr <= x) && Addr.(x <= (addr ++ len)) then
+           Hash_set.add subgraph x in
+       Superset_risg.G.iter_vertex add insn_risg;
+       let sg = Superset_risg.subgraph insn_risg subgraph in
+       let superset = Superset.(rebuild ~insn_risg:sg superset) in
+       Metrics.print_dot superset results
+  );
+   
 module Program(Conf : Provider)  = struct
   open Conf
-
+     
   let main () =
+    Random.self_init ();
     let phases = Option.value options.phases ~default:[] in
     let backend = options.disassembler in
-    let checkpoint = options.checkpoint in
-    let trim =
-      match options.trim_method with
-      | Some Simple | None -> Trim.Default.trim
-      (*| Some Memoried -> Trim.*)
-      | Some DeadBlockResistant ->
-        Trim.DeadblockTolerant.trim in
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
     let checkpoint dis_method bin = 
-      match checkpoint with
+      match options.checkpoint with
       | Some Import -> 
         let superset = time ~name:"import" Superset.import bin in
         let phases =
@@ -56,15 +182,38 @@ module Program(Conf : Provider)  = struct
           (*~f:(Trim.tag ~invariants:[Trim.tag_success]) *) in
       time ~name:"disasm binary" f x
     in
+    let trim = select_trimmer options.trim_method in
+    let (trim,metrics) = build_setops trim options.setops in
     let superset = 
       checkpoint dis_method options.target in
     let superset = trim superset in
-    let insn_map = Superset.get_map superset in
-    let addrs = Map.keys insn_map in
-    let addrs = List.map addrs ~f:Addr.to_string in
-    let addrs_file = open_out (options.target ^ "_addrs.txt") in
-    Out_channel.output_lines addrs_file addrs;
-    match options.ground_truth with
+    let results = apply_setops metrics options.setops in
+    let results =
+      match options.ground_truth_file with
+      | Some (gt) ->
+         let insn_map = Superset.get_map superset in
+         let min_addr,_ = Map.min_elt insn_map |> Option.value_exn in
+         let tp = read_addrs Addr.(bitwidth min_addr) gt in
+         let tps = Addr.Hash_set.create () in
+         List.iter tp ~f:(Hash_set.add tps);
+         let fps = Addr.Hash_set.create () in
+         let _ = Map.iteri insn_map ~f:(fun ~key ~data -> 
+                       if not (Hash_set.mem tps key) then
+                         Hash_set.add fps key
+                   ) in
+         let fns = Addr.Hash_set.create () in
+         Hash_set.iter tps ~f:(fun v -> 
+             if not (Map.mem insn_map v) then
+               Hash_set.add fns v;
+           );
+         let results = String.Map.add results "True Positives" tps in
+         let results = String.Map.add results "False Positives" fps in
+         let results = String.Map.add results "False Negatives" fns in
+         results
+      | None -> results in
+    process_cut superset options results;
+    Superset.export_addrs options.target superset;
+    match options.ground_truth_bin with
     | Some bin -> 
       gather_metrics ~bin superset |> format |> print_endline
     | None -> ()
@@ -76,10 +225,11 @@ module Cmdline = struct
   open Insn_disasm_benchmark
 
   let create 
-      checkpoint disassembler ground_truth target
-      metrics_format phases trim_method = 
-    Fields.create ~checkpoint ~disassembler ~ground_truth ~target 
-      ~metrics_format ~phases ~trim_method
+      checkpoint disassembler ground_truth_bin ground_truth_file target
+      metrics_format phases trim_method setops cut save_dot = 
+    Fields.create ~checkpoint ~disassembler ~ground_truth_bin
+      ~ground_truth_file ~target ~metrics_format ~phases ~trim_method
+      ~setops ~cut ~save_dot
 
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
@@ -107,8 +257,9 @@ module Cmdline = struct
       `S "OPTIONS";
     ] in
     Term.(const create 
-          $checkpoint $(disassembler ()) $ground_truth $target
-          $metrics_format $phases $trim_method),
+          $checkpoint $(disassembler ()) $ground_truth_bin
+          $ground_truth_file $target $metrics_format $phases
+          $trim_method $setops $cut $save_dot),
     Term.info "superset_disasm" ~doc ~man
 
   let parse argv =

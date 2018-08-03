@@ -28,6 +28,7 @@ module Oper = Oper.I(G)
 module StrongComponents = Components.Make(G)
 (*module DiscreteComponents = Components.Undirected(G)*)
 module Dfs        = Graph.Traverse.Dfs(G)
+module Bfs        = Graph.Traverse.Bfs(G)
 module Path       = Path.Check(G)
 module GmlOut     = Gml.Print(G)(struct 
     let node (label : G.V.label) = 
@@ -78,6 +79,23 @@ let add ?superset_risg mem insn =
   | Some(insn) ->
     G.add_vertex superset_risg src;
   | None -> G.add_edge superset_risg bad src
+
+let subgraph insn_risg subgraph =
+  let g = G.create () in
+  Hash_set.iter subgraph ~f:(fun addr ->
+      G.add_vertex g addr;
+      G.iter_succ
+        (fun s ->
+          if Hash_set.mem subgraph s then
+            G.add_edge g addr s
+        ) insn_risg addr;
+      G.iter_pred
+        (fun s ->
+          if Hash_set.mem subgraph s then
+            G.add_edge g s addr
+        ) insn_risg addr;
+    );
+  g
 
 let exits_of_isg insn_isg component = 
   Set.fold component ~init:Addr.Set.empty ~f:(fun potential_exits addr -> 
@@ -215,14 +233,17 @@ let get_loop_addrs insn_risg =
           )
       )
 
-let iter_component ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
+let iter_component ?(terminator=(fun _ -> true))
+      ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
   let rec visit v =
     Hash_set.add visited v;
     pre v;
     G.iter_succ
-      (fun w -> if not (Hash_set.mem visited w) then visit w) g v;
+      (fun w ->
+        if (not (Hash_set.mem visited w)) && (terminator w) then
+          visit w) g v;
     post v
   in visit v
 
@@ -248,6 +269,16 @@ let fold_component ?visited ~pre ~post i g v0 =
   in
   loop i
 
+let get_depth insn_risg x =
+  let depth = ref 0 in
+  let deepest = ref 0 in
+  let pre x = depth := !depth + 1 in
+  let post x =
+    deepest := max !deepest !depth;
+    depth := !depth - 1; in
+  iter_component insn_risg ~pre ~post x;
+  !deepest
+  
 let collect_target_entries visited insn_risg insn_isg addr = 
   let target_entries = Addr.Hash_set.create () in
   let pre t = 

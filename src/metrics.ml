@@ -19,13 +19,46 @@ type metrics = {
 module InvariantTrackingApplicator = struct
 end
 
-module MetricsGatheringReducer = struct
+module type MetricsGathererInstance = sig
+  type acc = (Addr.Hash_set.t * Superset_risg.t )
+  val accu : acc
+end
+
+module MetricsGatheringReducer(M : MetricsGathererInstance) : Trim.Reducer = struct
+  type acc = M.acc
+  let accu = M.accu
+  let check_pre _ accu _ = accu
+  let check_post _ accu _ = accu
+  let check_elim _ _ _ = true
+  let mark superset (s,g) addr =
+    Hash_set.add s addr;
+    let src_graph = Superset.get_graph superset in
+    List.iter Superset_risg.G.(succ src_graph addr) ~f:(fun succ -> 
+        Superset_risg.G.add_edge g addr succ
+      );
+    List.iter Superset_risg.G.(pred src_graph addr) ~f:(fun pred -> 
+        Superset_risg.G.add_edge g pred addr
+      )
 end
 
 module MetricsInstrument = struct
-
 end
 
+
+let print_dot superset colorings =
+  (*if not (colorings = String.Map.empty) then*)
+    let img = Superset.get_img superset in
+    let fout = Out_channel.create @@
+                 Option.value_exn Image.(filename img) ^ ".dot" in
+    let superset_risg = Superset.get_graph superset in
+    let insn_map = Superset.get_map superset in
+    let module Layout =
+      Cfg_dot_layout.Make(struct
+          let instance = (superset_risg, colorings, insn_map)
+        end) in
+    Layout.Dot.output_graph fout (superset_risg, colorings, insn_map)
+
+                         
 let format_standard metrics =
   match metrics with 
   | Some metrics -> 

@@ -317,6 +317,13 @@ let export bin superset =
   let meta_str  = meta_to_string superset in
   Out_channel.write_all (bin ^ ".meta") ~data:meta_str
 
+let export_addrs bin superset =
+  let insn_map = get_map superset in
+  let addrs = Map.keys insn_map in
+  let addrs = List.map addrs ~f:Addr.to_string in
+  let addrs_file = Out_channel.create (bin ^ "_addrs.txt") in
+  Out_channel.output_lines addrs_file addrs
+  
 let update_with_mem ?backend ?f superset mem =
   let update = Option.value f ~default:(fun (m, i) a -> a) in
   let f (mem, insn) superset =
@@ -370,7 +377,7 @@ let rebalance superset =
   let superset_risg = get_graph superset in
   Superset_risg.G.iter_vertex (fun vert ->
       if not Map.(mem insn_map vert) then (
-        mark_bad superset vert;
+      (*mark_bad superset vert;*)
       )
     ) superset_risg;
   let insn_map = Map.filteri ~f:(fun ~key ~data -> 
