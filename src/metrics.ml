@@ -51,12 +51,13 @@ let print_dot superset colorings =
     let fout = Out_channel.create @@
                  Option.value_exn Image.(filename img) ^ ".dot" in
     let superset_risg = Superset.get_graph superset in
+    let superset_isg = Superset_risg.Oper.mirror superset_risg in
     let insn_map = Superset.get_map superset in
     let module Layout =
       Cfg_dot_layout.Make(struct
-          let instance = (superset_risg, colorings, insn_map)
+          let instance = (superset_isg, colorings, insn_map)
         end) in
-    Layout.Dot.output_graph fout (superset_risg, colorings, insn_map)
+    Layout.Dot.output_graph fout (superset_isg, colorings, insn_map)
 
                          
 let format_standard metrics =

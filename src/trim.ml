@@ -183,6 +183,11 @@ module Reduction(R : Reducer) = struct
 
 end
 
+module Disabled = struct
+  let post _ accu _ = accu
+  let trim superset = superset
+end
+
 module DefaultReducer = Reduction(struct
   type acc = unit
   let accu = ()

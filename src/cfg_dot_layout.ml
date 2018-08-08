@@ -46,6 +46,8 @@ module Make(T : sig val instance : colored_superset end) = struct
     let blue = 0x0000ff
     let orange = 0xff6600
     let purple = 0x660066
+    let brown = 0x663300
+    let cyan = 0x0099cc
 
     let vertex_name name =
       let fmt = Format.str_formatter in

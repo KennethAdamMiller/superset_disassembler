@@ -40,6 +40,7 @@ type trimmer =
   | Simple
   (*| Memoried*)
   | DeadBlockResistant
+  | Disabled
 [@@deriving sexp]
 
 type cut =
@@ -153,6 +154,7 @@ let list_trimmers = [
   "Simple", Simple;
   (*"Memoried", Memoried;*)
   "DeadBlockResistant", DeadBlockResistant;
+  "Disabled", Disabled;
 ]
 let trimmer_doc =
   sprintf
@@ -210,6 +212,8 @@ let select_trimmer trim_method =
   (*| Some Memoried -> Trim.*)
   | Some DeadBlockResistant ->
      Trim.DeadblockTolerant.trim
+  | Some Disabled ->
+     Trim.Disabled.trim
     
 let with_phases superset phases =
   let tag_grammar ?min_size = 

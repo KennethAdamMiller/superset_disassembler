@@ -8,6 +8,28 @@ open Metrics
 open Metrics.Opts
    
 let () = Pervasives.ignore(Plugins.load ())
+
+let make_gatherer accu = 
+  let module Instance = MetricsGatheringReducer(struct
+                            type acc = (Addr.Hash_set.t * Superset_risg.t )
+                            let accu = accu
+                          end) in
+  let module Instance = Trim.Reduction(Instance) in
+  Instance.trim 
+       
+let build_metrics trim phases =
+  List.fold phases ~init:(trim,String.Map.empty)
+    ~f:(fun (trim,metrics) phase ->
+      match List.find list_phases ~f:(fun (name,p) ->
+                phase = p
+              ) with
+      | Some (name,p) ->
+          let accu = (Addr.Hash_set.create () ,
+                      Superset_risg.G.create ()) in
+          let instance_trim = make_gatherer accu in         
+         (fun x -> instance_trim @@ trim x), Map.add metrics name accu
+      | None -> trim,metrics
+    )
        
 let build_setops trim setops =
   List.fold setops ~init:(trim,String.Map.empty)
@@ -18,13 +40,9 @@ let build_setops trim setops =
         else
           let accu = (Addr.Hash_set.create () ,
                       Superset_risg.G.create ()) in
-          let module Instance = MetricsGatheringReducer(struct
-                                    type acc = (Addr.Hash_set.t * Superset_risg.t )
-                                    let accu = accu
-                                  end) in
-          let module Instance = Trim.Reduction(Instance) in
+          let instance_trim = make_gatherer accu in
           let metrics = Map.add metrics f accu in
-          ((fun x -> Instance.trim @@ trim x), metrics) in
+          ((fun x -> instance_trim @@ trim x), metrics) in
       add (add (trim,metrics) f1) f2
     )
 
@@ -183,32 +201,53 @@ module Program(Conf : Provider)  = struct
       time ~name:"disasm binary" f x
     in
     let trim = select_trimmer options.trim_method in
-    let (trim,metrics) = build_setops trim options.setops in
+    let (trim,metrics) = build_metrics trim phases in
+    let (trim,setops) = build_setops trim options.setops in
     let superset = 
       checkpoint dis_method options.target in
     let superset = trim superset in
-    let results = apply_setops metrics options.setops in
+    let results = apply_setops setops options.setops in
     let results =
       match options.ground_truth_file with
       | Some (gt) ->
          let insn_map = Superset.get_map superset in
+         let remaining = Addr.Hash_set.create () in
+         Map.iter_keys insn_map ~f:(Hash_set.add remaining);
+         let s = sprintf "metrics - %d" Map.(length metrics) in
+         print_endline s;
+         let s = sprintf "setops - %d" Map.(length setops) in
+         print_endline s;
+         let s = sprintf "results - %d" Map.(length results) in
+         print_endline s;
+         Map.iteri setops ~f:(fun ~key ~data ->
+             let data,_ = data in
+             let s = sprintf "%s - %d" key Hash_set.(length data) in
+             print_endline s;
+             Hash_set.iter data ~f:(Hash_set.remove remaining);
+           );
          let min_addr,_ = Map.min_elt insn_map |> Option.value_exn in
          let tp = read_addrs Addr.(bitwidth min_addr) gt in
          let tps = Addr.Hash_set.create () in
          List.iter tp ~f:(Hash_set.add tps);
          let fps = Addr.Hash_set.create () in
-         let _ = Map.iteri insn_map ~f:(fun ~key ~data -> 
+         let _ = Hash_set.iter remaining ~f:(fun key -> 
                        if not (Hash_set.mem tps key) then
                          Hash_set.add fps key
                    ) in
          let fns = Addr.Hash_set.create () in
          Hash_set.iter tps ~f:(fun v -> 
-             if not (Map.mem insn_map v) then
+             if not (Hash_set.mem remaining v) then
                Hash_set.add fns v;
            );
+         let s = sprintf "fps: %d" Hash_set.(length fps) in
+         print_endline s;
+         let s = sprintf "tps: %d" Hash_set.(length tps) in
+         print_endline s;
          let results = String.Map.add results "True Positives" tps in
          let results = String.Map.add results "False Positives" fps in
          let results = String.Map.add results "False Negatives" fns in
+         let s = sprintf "false negatives: %d" Hash_set.(length fns) in
+         print_endline s;
          results
       | None -> results in
     process_cut superset options results;

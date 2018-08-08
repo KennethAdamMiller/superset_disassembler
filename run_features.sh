@@ -7,9 +7,9 @@ process() {
     phases=$2
     options=$3
     echo ${name}
-    #time ~/workspace/superset_disassembler/superset_disasm.native --target ${target} --trimmer=DeadBlockResistant --phases=${phases}
-    time ~/workspace/superset_disassembler/superset_disasm.native --target ${target} --trimmer=DeadBlockResistant --phases=${phases} --cut=DFS,random,500
-    dot -Tpng ${target}.dot -o ${target}.png -Grotate=180
+    time ~/workspace/superset_disassembler/superset_disasm.native --target "${target}" --trimmer=DeadBlockResistant --phases="${phases}" --cut=DFS,random,500 --ground_truth_file=./instr-addresses-actual.txt
+    dot -Tpdf "${target}.dot" -o "${target}.pdf" -Grotate=180
+    python ~/workspace/binary_pgm/calc_fn.py ./instr-addresses-actual.txt "${target}.lserr" "${target}_addrs.txt"
     mkdir "${name}_results"
     mv *dot "${name}_results/"
     mv *addrs.txt "${name}_results/"
