@@ -86,13 +86,13 @@ let subgraph insn_risg subgraph =
       G.add_vertex g addr;
       G.iter_succ
         (fun s ->
-          if Hash_set.mem subgraph s then
-            G.add_edge g addr s
+           if Hash_set.mem subgraph s then
+             G.add_edge g addr s
         ) insn_risg addr;
       G.iter_pred
         (fun s ->
-          if Hash_set.mem subgraph s then
-            G.add_edge g s addr
+           if Hash_set.mem subgraph s then
+             G.add_edge g s addr
         ) insn_risg addr;
     );
   g
@@ -234,7 +234,7 @@ let get_loop_addrs insn_risg =
       )
 
 let iter_component ?(terminator=(fun _ -> true))
-      ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
+    ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) g v =
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
   let rec visit v =
@@ -242,8 +242,8 @@ let iter_component ?(terminator=(fun _ -> true))
     pre v;
     G.iter_succ
       (fun w ->
-        if (not (Hash_set.mem visited w)) && (terminator w) then
-          visit w) g v;
+         if (not (Hash_set.mem visited w)) && (terminator w) then
+           visit w) g v;
     post v
   in visit v
 
@@ -278,7 +278,7 @@ let get_depth insn_risg x =
     depth := !depth - 1; in
   iter_component insn_risg ~pre ~post x;
   !deepest
-  
+
 let collect_target_entries visited insn_risg insn_isg addr = 
   let target_entries = Addr.Hash_set.create () in
   let pre t = 
@@ -289,7 +289,6 @@ let collect_target_entries visited insn_risg insn_isg addr =
   target_entries
 
 let activate_descendants active insn_isg addr = 
-  let pre t = 
-    Hash_set.add active t in
+  let pre _ = ()in
   let post _ = () in
   iter_component ~visited:active ~pre ~post insn_isg addr

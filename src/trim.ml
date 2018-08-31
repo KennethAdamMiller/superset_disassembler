@@ -127,15 +127,23 @@ let tag_success superset mem insn targets =
       | None -> ());
   superset
 
-let default_tags = [tag_non_insn;
-                    tag_non_mem_access;
-                    tag_target_not_in_mem;
-                    tag_target_is_bad;
-                    tag_target_in_body;
-(*tag_success;*)]
+let default_tags = ["Tag non insn", tag_non_insn;
+                    "Tag non mem access", tag_non_mem_access;
+                    "Tag target not in mem", tag_target_not_in_mem;
+                    "Tag target is bad", tag_target_is_bad;
+                    "Tag target in body", tag_target_in_body;
+                    (*tag_success;*)]
+
+let default_funcs = [
+  tag_non_insn;
+  tag_non_mem_access;
+  tag_target_not_in_mem;
+  tag_target_is_bad;
+  tag_target_in_body;
+  (*tag_success;*)]
 
 let tag ?invariants =
-  let invariants = Option.value invariants ~default:default_tags in
+  let invariants = Option.value invariants ~default:default_funcs in
   let f superset mem insn targets =
     List.fold_left invariants ~init:superset ~f:(fun superset f -> 
         (f superset mem insn targets)) in
@@ -154,7 +162,7 @@ module type ReducerInstance = sig
   include Reducer
   val post : 'a Superset.t -> acc -> addr -> acc
 end
-                    
+
 module Reduction(R : Reducer) = struct
 
   let post superset accu addr =
@@ -165,7 +173,7 @@ module Reduction(R : Reducer) = struct
       G.remove_vertex superset_risg addr;
     );
     R.check_post superset accu addr
-  
+
   let trim superset =
     print_endline "trimming...";
     let superset_risg = Superset.get_graph superset in
@@ -189,28 +197,15 @@ module Disabled = struct
 end
 
 module DefaultReducer = Reduction(struct
-  type acc = unit
-  let accu = ()
-  let check_pre _ accu _ = accu
-  let check_post _ accu _ = accu
-  let check_elim _ _ _ = true
-  let mark _ _ _ = ()
-end)
+    type acc = unit
+    let accu = ()
+    let check_pre _ accu _ = accu
+    let check_post _ accu _ = accu
+    let check_elim _ _ _ = true
+    let mark _ _ _ = ()
+  end)
 
 module Default = DefaultReducer
-
-module ReducerComposer
-         (M1 : Reducer)
-         (M2 : Reducer) = struct
-  module M1 = Reduction(M1)
-  module M2 = Reduction(M2)
-  let post superset (m1,m2) addr =
-    let l = M1.post superset m1 addr in
-    let r = M2.post superset m2 addr in
-    l, r
-  let trim superset =
-    M2.trim @@ M1.trim superset
-end
 
 module DeadblockTolerantReducer : Reducer
 (*with type acc = Superset.elem option*) = struct
@@ -249,7 +244,7 @@ end
 module DeadblockTolerant = Reduction(DeadblockTolerantReducer)
 
 let tag_superset ?invariants superset = 
-  let invariants = Option.value invariants ~default:default_tags in
+  let invariants = Option.value invariants ~default:default_funcs in
   let insn_map = Superset.get_map superset in
   let f superset mem insn targets =
     List.fold ~init:superset invariants
@@ -261,7 +256,7 @@ let tag_superset ?invariants superset =
     )
 
 let tagged_disasm_of_file ~data ?f ?invariants ~backend file =
-  let invariants = Option.value invariants ~default:default_tags in
+  let invariants = Option.value invariants ~default:default_funcs in
   let f = Option.value f ~default:[] in
   let invariants = Some(List.append f invariants) in
   Superset.superset_disasm_of_file ~data ~backend file ~f:(tag ?invariants)

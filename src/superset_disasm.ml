@@ -157,10 +157,31 @@ let process_cut superset options results =
         let sg = Superset_risg.subgraph insn_risg subgraph in
         let superset = Superset.(rebuild ~insn_risg:sg superset) in
         Metrics.print_dot superset results
-    );
+    )
+
+let converge featureset superset =
+  let superset = Features.apply_featureset featureset superset in
+  Features.apply_featurepmap featureset superset
 
 module Program(Conf : Provider)  = struct
   open Conf
+
+  let trim_with f superset =
+    let visited = Addr.Hash_set.create () in
+    let datas = Addr.Hash_set.create () in
+    let rec do_analysis round superset = 
+      if round = options.rounds then superset else
+        let superset = 
+          let superset, pmap = f superset, Addr.Map.empty in
+          Markup.mark_threshold_with_pmap
+            superset ~visited ~datas pmap 
+            options.tp_threshold;
+          Markup.enforce_uncertain
+            superset visited datas (ref pmap);
+          Markup.check_convergence superset visited;
+          Trim.Default.trim superset in
+        do_analysis (round+1) superset in
+    do_analysis 0 superset
 
   let main () =
     Random.self_init ();
@@ -215,6 +236,11 @@ module Program(Conf : Provider)  = struct
     let superset = 
       checkpoint dis_method options.target in
     let superset = trim superset in
+    let superset = trim_with (converge options.featureset) superset in
+    let _ =
+      if options.save_addrs then
+        Superset.export_addrs options.target superset
+      else () in
     let results = apply_setops setops options.setops in
     let results =
       match options.ground_truth_file with
@@ -273,10 +299,12 @@ module Cmdline = struct
 
   let create 
       checkpoint disassembler ground_truth_bin ground_truth_file target
-      metrics_format phases trim_method setops cut save_dot save_gt = 
+      metrics_format phases trim_method setops cut save_dot save_gt
+      save_addrs tp_threshold retain_at rounds partition_method featureset = 
     Fields.create ~checkpoint ~disassembler ~ground_truth_bin
       ~ground_truth_file ~target ~metrics_format ~phases ~trim_method
-      ~setops ~cut ~save_dot ~save_gt
+      ~setops ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold ~
+      retain_at ~rounds ~partition_method ~featureset
 
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
@@ -306,7 +334,9 @@ module Cmdline = struct
     Term.(const create 
           $checkpoint $(disassembler ()) $ground_truth_bin
           $ground_truth_file $target $metrics_format $phases
-          $trim_method $setops $cut $save_dot $save_gt),
+          $trim_method $setops $cut $save_dot $save_gt $save_addrs
+          $tp_threshold $retain_at $rounds $partition_method
+          $featureset),
     Term.info "superset_disasm" ~doc ~man
 
   let parse argv =
