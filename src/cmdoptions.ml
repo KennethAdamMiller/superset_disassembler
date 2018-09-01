@@ -291,13 +291,14 @@ let with_phases superset phases =
           (*let discard_arg ?min_size = 
             Invariants.tag_branch_violations in
             let analyses = Map.add analyses (Map.length analyses)
-              (None, Some(discard_arg), None) in*)
-           let analyses = 
-             Map.add analyses (Map.length analyses)
-               (None, Some(Sheathed.tag_loop_contradictions), None) in
-           (*Map.add analyses (Map.length analyses)
-             (None, Some(tag_grammar), None)*)
-           analyses
+             (None, Some(discard_arg), None) in*)
+          let analyses = 
+            Map.add analyses (Map.length analyses)
+              (None, Some("Tag loop contradictions",
+                          Sheathed.tag_loop_contradictions), None) in
+          analyses
+        (*Map.add analyses (Map.length analyses)
+          (None, Some("Tag grammar", tag_grammar), None)*)
         | Target_not_in_memory -> 
           Map.add analyses Map.(length analyses)
             (Some(("Tag target not in mem", Trim.tag_target_not_in_mem)), None, None)
