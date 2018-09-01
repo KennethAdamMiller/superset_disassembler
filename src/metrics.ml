@@ -41,10 +41,6 @@ module MetricsGatheringReducer(M : MetricsGathererInstance) : Trim.Reducer = str
       )
 end
 
-module MetricsInstrument = struct
-end
-
-
 let print_dot superset colorings =
   (*if not (colorings = String.Map.empty) then*)
   let img = Superset.get_img superset in
@@ -85,6 +81,21 @@ let format_latex metrics =
      | _ -> "Missing trim phases")
   | None -> "No metrics gathered!"
 
+let true_positives_of_ground_truth ?insn_isg superset ground_truth = 
+  let insn_isg = 
+    match insn_isg with 
+    | Some insn_isg -> insn_isg 
+    | None ->
+      let insn_risg = Superset.get_graph superset in
+      Superset_risg.Oper.mirror insn_risg in
+  let true_positives = Addr.Hash_set.create () in
+  Set.iter ground_truth ~f:(fun addr -> 
+      if Superset_risg.G.mem_vertex insn_isg addr then
+        Superset_risg.Dfs.prefix_component 
+          (Hash_set.add true_positives) insn_isg addr;
+    );
+  true_positives
+
 (* implement jmp_of_fp as a map from target to source in *)
 (* True positive set is going to come up short because if it isn't in *)
 (* the isg, it isn't going to be explored *)
@@ -94,19 +105,7 @@ let true_positives ?insn_isg superset f =
   in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
-  let insn_risg = Superset.get_graph superset in
-  let insn_isg = 
-    match insn_isg with 
-    | Some insn_isg -> insn_isg 
-    | None -> 
-      Superset_risg.Oper.mirror insn_risg in
-  let true_positives = Addr.Hash_set.create () in
-  Set.iter ground_truth ~f:(fun addr -> 
-      if Superset_risg.G.mem_vertex insn_isg addr then
-        Superset_risg.Dfs.prefix_component 
-          (Hash_set.add true_positives) insn_isg addr;
-    );
-  true_positives
+  true_positives_of_ground_truth ?insn_isg superset ground_truth
 
 let reduced_occlusion superset tp =
   let fps = Addr.Hash_set.create () in
@@ -161,7 +160,14 @@ let gather_metrics ~bin superset =
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let insn_isg = Superset_risg.Oper.mirror insn_risg in
-  let true_positives = true_positives ~insn_isg superset bin in   
+  let ground_truth = 
+    Set.(filter ground_truth ~f:(fun e ->
+        let img = Superset.get_img superset in
+        Superset.with_img ~accu:false img 
+          ~f:(fun ~accu mem ->
+              accu || Memory.(contains mem e))
+      )) in
+  let true_positives = true_positives_of_ground_truth ~insn_isg superset ground_truth in
   let datas = Addr.Hash_set.create () in
   let detected_insns = Addr.Hash_set.create () in
   let dfs_find_conflicts addr =
@@ -174,8 +180,8 @@ let gather_metrics ~bin superset =
           if Superset_risg.G.(mem_vertex insn_risg d)
           then ro+1 else ro) in
   let num_bytes =
-    Superset.with_img ~accu:0 ~backend:"" Superset.(get_img superset)
-      ~f:(fun ~accu ~backend mem  -> accu + Memory.(length mem)) in
+    Superset.with_img ~accu:0 Superset.(get_img superset)
+      ~f:(fun ~accu mem  -> accu + Memory.(length mem)) in
   let entries = Superset_risg.entries_of_isg insn_risg in
   let branches = Grammar.linear_branch_sweep superset entries in
   let fp_branches, tp_branches = check_tp_set true_positives branches in
@@ -195,13 +201,6 @@ let gather_metrics ~bin superset =
   printf "Reduced occlusion: %d\n" (reduced_occlusion ());
   printf "True positives: %d\n" Hash_set.(length true_positives);
   let fn_entries = check_fn_entries superset ground_truth in
-  let fn_entries = 
-    Set.(filter fn_entries ~f:(fun e ->
-        let img = Superset.get_img superset in
-        Superset.with_img ~accu:false ~backend:"" img 
-          ~f:(fun ~accu ~backend mem ->
-              accu || Memory.(contains mem e))
-      )) in
   if not (Set.length fn_entries = 0) then
     printf "Missed function entrances %s\n" 
       (List.to_string ~f:Addr.to_string @@ Set.to_list fn_entries);

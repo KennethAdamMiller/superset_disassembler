@@ -350,7 +350,7 @@ let superset_of_img ~data ?f ~backend img =
     brancher      = brancher;
     img           = Some img;
   } in
-  with_img ~accu:superset ~backend img
+  with_img ~accu:superset img
     ~f:(fun ~accu mem -> 
         update_with_mem ~backend accu mem ?f
       )
