@@ -234,8 +234,9 @@ let with_phases superset phases =
            let analyses = 
              Map.add analyses (Map.length analyses)
                (None, Some(Sheathed.tag_loop_contradictions), None) in
-           Map.add analyses (Map.length analyses)
-             (None, Some(tag_grammar), None)
+           (*Map.add analyses (Map.length analyses)
+             (None, Some(tag_grammar), None)*)
+           analyses
         | Target_not_in_memory -> 
            Map.add analyses Map.(length analyses)
              (Some(Trim.tag_target_not_in_mem), None, None)

@@ -16,7 +16,30 @@ let make_gatherer accu =
                           end) in
   let module Instance = Trim.Reduction(Instance) in
   Instance.trim 
-       
+
+let make_mark_tracker accu =
+  let module Instance =
+    PerMarkTrackingReducer(
+        struct
+          type acc = (Addr.Set.t Addr.Map.t) ref
+          let accu = accu
+        end) in
+  let module Instance = Trim.Reduction(Instance) in
+  Instance.trim
+
+let build_tracker trim phases = 
+  List.fold phases ~init:(trim,String.Map.empty)
+    ~f:(fun (trim,trackers) phase ->
+      match List.find list_phases ~f:(fun (name,p) ->
+                phase = p
+              ) with
+      | Some (name,p) ->
+         let accu = ref Addr.Map.empty in
+         let instance_trim = make_mark_tracker accu in
+         (fun x -> instance_trim @@ trim x), Map.add trackers name accu
+      | None -> trim,trackers
+    )
+  
 let build_metrics trim phases =
   List.fold phases ~init:(trim,String.Map.empty)
     ~f:(fun (trim,metrics) phase ->
@@ -102,11 +125,13 @@ let take_random superset =
   let rec get_deep () =
     let r = Random.int (Map.length insn_map) in
     let x = List.nth Map.(keys insn_map) r |> Option.value_exn in
-    let depth = Superset_risg.get_depth insn_risg x in
-    if depth < minimum_depth then
-      get_deep ()
-    else
-      x
+    if Superset_risg.G.mem_vertex insn_risg x then
+      let depth = Superset_risg.get_depth insn_risg x in
+      if depth < minimum_depth then
+        get_deep ()
+      else
+        x
+    else get_deep ()
   in get_deep ()
 
 let process_cut superset options results =
@@ -161,7 +186,7 @@ let process_cut superset options results =
    
 module Program(Conf : Provider)  = struct
   open Conf
-     
+
   let main () =
     Random.self_init ();
     let phases = Option.value options.phases ~default:[] in
@@ -202,6 +227,8 @@ module Program(Conf : Provider)  = struct
     in
     let trim = select_trimmer options.trim_method in
     let (trim,metrics) = build_metrics trim phases in
+    let trim = select_trimmer options.trim_method in
+    let (trim,tracker) = build_tracker trim phases in
     let (trim,setops) = build_setops trim options.setops in
     let superset = 
       checkpoint dis_method options.target in
@@ -210,6 +237,7 @@ module Program(Conf : Provider)  = struct
     let results =
       match options.ground_truth_file with
       | Some (gt) ->
+         let insn_risg = Superset.get_graph superset in
          let insn_map = Superset.get_map superset in
          let remaining = Addr.Hash_set.create () in
          Map.iter_keys insn_map ~f:(Hash_set.add remaining);
@@ -243,10 +271,41 @@ module Program(Conf : Provider)  = struct
          print_endline s;
          let s = sprintf "tps: %d" Hash_set.(length tps) in
          print_endline s;
+         let s = sprintf "tracker size: %d" Map.(length tracker) in
+         print_endline s;
+         Map.iteri tracker ~f:(fun ~key ~data ->
+             let d = !data in
+             let s = sprintf "tracker %s size: %d"
+                       key Map.(length d) in
+             print_endline s;
+             Map.iteri !data ~f:(fun ~key ~data ->
+                 if (not Superset_risg.G.(mem_vertex insn_risg key))
+                    && Hash_set.(mem tps key) then (
+                   let memstr =
+                     match Map.find insn_map key with
+                     | Some (mem, _ ) -> Memory.str () mem
+                     | None -> "" in
+                   let s =
+                     sprintf
+                       "marked fn bad with mem %s of removal size %d"
+                       memstr Set.(length data) in
+                   print_endline s;
+                 );
+                 Set.iter data ~f:(fun x ->
+                     let s = sprintf "marked fn bad at %s"
+                               Addr.(to_string key) in
+                     let s = sprintf "%s, ancestor fn at %s"
+                               s Addr.(to_string x) in
+                     print_endline s;
+                   ) ; 
+               )
+           );
          let results = String.Map.add results "True Positives" tps in
          let results = String.Map.add results "False Positives" fps in
          let results = String.Map.add results "False Negatives" fns in
          let s = sprintf "false negatives: %d" Hash_set.(length fns) in
+         print_endline s;
+         let s = sprintf "remaining: %d" Hash_set.(length remaining) in
          print_endline s;
          results
       | None -> results in

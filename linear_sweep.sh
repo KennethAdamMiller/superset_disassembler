@@ -16,9 +16,11 @@ dump_errors() {
   done
 }
 
+dump_errors "Superset Corpora Binaries/stripped"
+
 #dump_errors "../Desktop/linux_binaries/stripped_lib"
 
-dump_errors "../Desktop/linux_binaries/stripped_bin"
+#dump_errors "../Desktop/linux_binaries/stripped_bin"
 
 #dump_errors "hmmer-3.1b2-cygwin32/binaries/"
 #dump_errors "hmmer-3.1b2-cygwin32/binaries/"
