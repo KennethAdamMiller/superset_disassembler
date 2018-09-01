@@ -6,14 +6,14 @@ open Format
 open Cmdoptions
 open Metrics
 open Metrics.Opts
-   
+
 let () = Pervasives.ignore(Plugins.load ())
 
 let make_gatherer accu = 
   let module Instance = MetricsGatheringReducer(struct
-                            type acc = (Addr.Hash_set.t * Superset_risg.t )
-                            let accu = accu
-                          end) in
+      type acc = (Addr.Hash_set.t * Superset_risg.t )
+      let accu = accu
+    end) in
   let module Instance = Trim.Reduction(Instance) in
   Instance.trim 
 
@@ -39,35 +39,35 @@ let build_tracker trim phases =
          (fun x -> instance_trim @@ trim x), Map.add trackers name accu
       | None -> trim,trackers
     )
-  
+
 let build_metrics trim phases =
   List.fold phases ~init:(trim,String.Map.empty)
     ~f:(fun (trim,metrics) phase ->
-      match List.find list_phases ~f:(fun (name,p) ->
-                phase = p
-              ) with
-      | Some (name,p) ->
+        match List.find list_phases ~f:(fun (name,p) ->
+            phase = p
+          ) with
+        | Some (name,p) ->
           let accu = (Addr.Hash_set.create () ,
                       Superset_risg.G.create ()) in
           let instance_trim = make_gatherer accu in         
-         (fun x -> instance_trim @@ trim x), Map.add metrics name accu
-      | None -> trim,metrics
-    )
-       
+          (fun x -> instance_trim @@ trim x), Map.add metrics name accu
+        | None -> trim,metrics
+      )
+
 let build_setops trim setops =
   List.fold setops ~init:(trim,String.Map.empty)
     ~f:(fun (trim,metrics) (colr, (sop, (f1, f2))) ->
-      let add (trim,metrics) f =
-        if Map.mem metrics f then
-          trim, metrics
-        else
-          let accu = (Addr.Hash_set.create () ,
-                      Superset_risg.G.create ()) in
-          let instance_trim = make_gatherer accu in
-          let metrics = Map.add metrics f accu in
-          ((fun x -> instance_trim @@ trim x), metrics) in
-      add (add (trim,metrics) f1) f2
-    )
+        let add (trim,metrics) f =
+          if Map.mem metrics f then
+            trim, metrics
+          else
+            let accu = (Addr.Hash_set.create () ,
+                        Superset_risg.G.create ()) in
+            let instance_trim = make_gatherer accu in
+            let metrics = Map.add metrics f accu in
+            ((fun x -> instance_trim @@ trim x), metrics) in
+        add (add (trim,metrics) f1) f2
+      )
 
 let apply_setops metrics setops =
   let report_err colr f1 =
@@ -75,48 +75,48 @@ let apply_setops metrics setops =
       "Feature %s not found, error for color %s!" f1 colr in
   List.fold setops ~init:String.Map.empty
     ~f:(fun results (colr, (sop, (f1, f2))) -> 
-      match Map.find metrics f1, Map.find metrics f2 with
-      | Some (fmetric1,g1), Some (fmetric2,g2) -> (
-        match sop with
-        | Difference ->
-           let s = Addr.Hash_set.create () in
-           Hash_set.iter fmetric1 ~f:(fun fv ->
-               if not (Hash_set.mem fmetric2 fv) then
-                 Hash_set.add s fv
-             );
-           Map.add results colr s
-        | Union ->
-           let s = Addr.Hash_set.create () in
-           Hash_set.iter fmetric1 ~f:(fun fv ->
-               Hash_set.add s fv
-             );
-           Hash_set.iter fmetric2 ~f:(fun fv ->
-               Hash_set.add s fv
-             );
-           Map.add results colr s
-        | Intersection ->
-           let s = Addr.Hash_set.create () in
-           Hash_set.iter fmetric1 ~f:(fun fv ->
-               if (Hash_set.mem fmetric2 fv) then
-                 Hash_set.add s fv
-             );
-           Hash_set.iter fmetric2 ~f:(fun fv ->
-               if (Hash_set.mem fmetric1 fv) then
-                 Hash_set.add s fv
-             );
-           Map.add results colr s
-      )
-      | None, None ->
-         report_err colr f1;
-         report_err colr f2;
-         results
-      | None, _ ->
-         report_err colr f1;
-         results
-      | _, None ->
-         report_err colr f2;
-         results
-    ) 
+        match Map.find metrics f1, Map.find metrics f2 with
+        | Some (fmetric1,g1), Some (fmetric2,g2) -> (
+            match sop with
+            | Difference ->
+              let s = Addr.Hash_set.create () in
+              Hash_set.iter fmetric1 ~f:(fun fv ->
+                  if not (Hash_set.mem fmetric2 fv) then
+                    Hash_set.add s fv
+                );
+              Map.add results colr s
+            | Union ->
+              let s = Addr.Hash_set.create () in
+              Hash_set.iter fmetric1 ~f:(fun fv ->
+                  Hash_set.add s fv
+                );
+              Hash_set.iter fmetric2 ~f:(fun fv ->
+                  Hash_set.add s fv
+                );
+              Map.add results colr s
+            | Intersection ->
+              let s = Addr.Hash_set.create () in
+              Hash_set.iter fmetric1 ~f:(fun fv ->
+                  if (Hash_set.mem fmetric2 fv) then
+                    Hash_set.add s fv
+                );
+              Hash_set.iter fmetric2 ~f:(fun fv ->
+                  if (Hash_set.mem fmetric1 fv) then
+                    Hash_set.add s fv
+                );
+              Map.add results colr s
+          )
+        | None, None ->
+          report_err colr f1;
+          report_err colr f2;
+          results
+        | None, _ ->
+          report_err colr f1;
+          results
+        | _, None ->
+          report_err colr f2;
+          results
+      ) 
 
 let take_random superset =
   let insn_map = Superset.get_map superset in
@@ -138,54 +138,75 @@ let process_cut superset options results =
   let insn_risg = Superset.get_graph superset in  
   match options.cut with 
   | None ->
-     if options.save_dot then
-       Metrics.print_dot superset results;
+    if options.save_dot then
+      Metrics.print_dot superset results;
   | Some cut -> (
-    let cut =
-      let c, addr, len = cut in
-      let addr =
-        match addr with
-        | "random" -> take_random superset
-        | "lowest" ->
-           let insn_map = Superset.get_map superset in
-           let addr,_ = Map.min_elt insn_map |> Option.value_exn in
-           addr
-        | "highest" ->
-           let insn_map = Superset.get_map superset in
-           let addr,_ = Map.max_elt insn_map |> Option.value_exn in
-           addr
-        | _ -> Addr.of_string addr in
-      c,addr,len in
-    match cut with
-    | DFS, addr, len ->
-       let subgraph = Addr.Hash_set.create () in
-       let depth = ref 0 in
-       let post _ =
-         depth := !depth - 1; in
-       let pre addr =
-         depth := !depth + 1;
-         Hash_set.add subgraph addr in
-       let terminator _ =
-         !depth < len &&
-           Hash_set.(length subgraph) < len in
-       Superset_risg.iter_component ~terminator ~pre ~post insn_risg
-         addr;
-       let sg = Superset_risg.subgraph insn_risg subgraph in
-       let superset = Superset.(rebuild ~insn_risg:sg superset) in
-       Metrics.print_dot superset results
-    | Interval, addr, len ->
-       let subgraph = Addr.Hash_set.create () in
-       let add x =
-         if Addr.(addr <= x) && Addr.(x <= (addr ++ len)) then
-           Hash_set.add subgraph x in
-       Superset_risg.G.iter_vertex add insn_risg;
-       let sg = Superset_risg.subgraph insn_risg subgraph in
-       let superset = Superset.(rebuild ~insn_risg:sg superset) in
-       Metrics.print_dot superset results
-  );
-   
+      let cut =
+        let c, addr, len = cut in
+        let addr =
+          match addr with
+          | "random" -> take_random superset
+          | "lowest" ->
+            let insn_map = Superset.get_map superset in
+            let addr,_ = Map.min_elt insn_map |> Option.value_exn in
+            addr
+          | "highest" ->
+            let insn_map = Superset.get_map superset in
+            let addr,_ = Map.max_elt insn_map |> Option.value_exn in
+            addr
+          | _ -> Addr.of_string addr in
+        c,addr,len in
+      match cut with
+      | DFS, addr, len ->
+        let subgraph = Addr.Hash_set.create () in
+        let depth = ref 0 in
+        let post _ =
+          depth := !depth - 1; in
+        let pre addr =
+          depth := !depth + 1;
+          Hash_set.add subgraph addr in
+        let terminator _ =
+          !depth < len &&
+          Hash_set.(length subgraph) < len in
+        Superset_risg.iter_component ~terminator ~pre ~post insn_risg
+          addr;
+        let sg = Superset_risg.subgraph insn_risg subgraph in
+        let superset = Superset.(rebuild ~insn_risg:sg superset) in
+        Metrics.print_dot superset results
+      | Interval, addr, len ->
+        let subgraph = Addr.Hash_set.create () in
+        let add x =
+          if Addr.(addr <= x) && Addr.(x <= (addr ++ len)) then
+            Hash_set.add subgraph x in
+        Superset_risg.G.iter_vertex add insn_risg;
+        let sg = Superset_risg.subgraph insn_risg subgraph in
+        let superset = Superset.(rebuild ~insn_risg:sg superset) in
+        Metrics.print_dot superset results
+    )
+
+let converge featureset superset =
+  let superset = Features.apply_featureset featureset superset in
+  Features.apply_featurepmap featureset superset
+
 module Program(Conf : Provider)  = struct
   open Conf
+
+  let trim_with f superset =
+    let visited = Addr.Hash_set.create () in
+    let datas = Addr.Hash_set.create () in
+    let rec do_analysis round superset = 
+      if round = options.rounds then superset else
+        let superset = 
+          let superset, pmap = f superset, Addr.Map.empty in
+          Markup.mark_threshold_with_pmap
+            superset ~visited ~datas pmap 
+            options.tp_threshold;
+          Markup.enforce_uncertain
+            superset visited datas (ref pmap);
+          Markup.check_convergence superset visited;
+          Trim.Default.trim superset in
+        do_analysis (round+1) superset in
+    do_analysis 0 superset
 
   let main () =
     Random.self_init ();
@@ -194,6 +215,15 @@ module Program(Conf : Provider)  = struct
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
+    let _ = 
+      if options.save_gt then
+        let gt = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
+            options.target |> ok_exn in
+        let gt = Seq.map gt ~f:Addr.to_string in
+        Seq.iter gt ~f:print_endline;
+        exit 0
+      else
+        () in
     let checkpoint dis_method bin = 
       match options.checkpoint with
       | Some Import -> 
@@ -233,6 +263,11 @@ module Program(Conf : Provider)  = struct
     let superset = 
       checkpoint dis_method options.target in
     let superset = trim superset in
+    let superset = trim_with (converge options.featureset) superset in
+    let _ =
+      if options.save_addrs then
+        Superset.export_addrs options.target superset
+      else () in
     let results = apply_setops setops options.setops in
     let results =
       match options.ground_truth_file with
@@ -310,7 +345,6 @@ module Program(Conf : Provider)  = struct
          results
       | None -> results in
     process_cut superset options results;
-    Superset.export_addrs options.target superset;
     match options.ground_truth_bin with
     | Some bin -> 
       gather_metrics ~bin superset |> format |> print_endline
@@ -324,10 +358,12 @@ module Cmdline = struct
 
   let create 
       checkpoint disassembler ground_truth_bin ground_truth_file target
-      metrics_format phases trim_method setops cut save_dot = 
+      metrics_format phases trim_method setops cut save_dot save_gt
+      save_addrs tp_threshold retain_at rounds partition_method featureset = 
     Fields.create ~checkpoint ~disassembler ~ground_truth_bin
       ~ground_truth_file ~target ~metrics_format ~phases ~trim_method
-      ~setops ~cut ~save_dot
+      ~setops ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold ~
+      retain_at ~rounds ~partition_method ~featureset
 
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
@@ -357,7 +393,9 @@ module Cmdline = struct
     Term.(const create 
           $checkpoint $(disassembler ()) $ground_truth_bin
           $ground_truth_file $target $metrics_format $phases
-          $trim_method $setops $cut $save_dot),
+          $trim_method $setops $cut $save_dot $save_gt $save_addrs
+          $tp_threshold $retain_at $rounds $partition_method
+          $featureset),
     Term.info "superset_disasm" ~doc ~man
 
   let parse argv =

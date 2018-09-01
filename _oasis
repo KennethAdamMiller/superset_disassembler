@@ -31,7 +31,11 @@ Library superset_disassemblers
                         Insn_disasm_benchmark, 
                         Sheathed, 
                         Decision_tree_set,
-                        Cfg_dot_layout
+                        Cfg_dot_layout,
+                        Abstract_ssa,
+                        Markup,
+                        Features,
+                        Report
 
 Executable superset_disasm
   Path:			src/

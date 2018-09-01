@@ -29,7 +29,7 @@ type setop =
   | Difference
   | Union
 [@@deriving sexp]
-           
+
 type checkpoint = 
   | Import
   | Export
@@ -48,6 +48,12 @@ type cut =
   | Interval
 [@@deriving sexp]
 
+type partition =
+  | Window
+  | Component
+  | Brute
+[@@deriving sexp]
+
 type t = {
   checkpoint         : checkpoint option;
   disassembler       : string;
@@ -60,12 +66,67 @@ type t = {
   cut                : (cut * string * int) option;
   setops             : (string * (setop * (string * string))) list;
   save_dot           : bool;
+  save_gt            : bool;
+  save_addrs         : bool;
+  tp_threshold       : float  option;
+  retain_at          : float  option;
+  rounds             : int;
+  partition_method   : partition option;
+  featureset         : string list;
 } [@@deriving sexp, fields]
 
+
+let save_gt =
+  let doc =
+    "Save nothing but the symbols reported by " in
+  Cmdliner.Arg.(value & flag & info ["save_gt"] ~doc)
+
+let save_addrs =
+  let doc = "Save the addrs recovered" in
+  Cmdliner.Arg.(value & flag & info ["save_addrs"] ~doc)
+
+let rounds = 
+  let doc = "Number of analysis cycles" in
+  Cmdliner.Arg.(value & opt int 1 & info ["rounds"] ~doc)
+
+let partition_methods = [
+  "trim_window", Window;
+  "trim_components", Component; 
+  "trim", Brute]
+let partition_method =
+  let doc = 
+    "Specify the method to do analysis with, partitioning the bytes
+  into more manageable sub-sections." in
+  Cmdliner.Arg.(value & 
+                opt (some (enum partition_methods)) (Some Window) & 
+                info ["partition_method"] ~doc)
+
+let featureset = 
+  let doc =
+    "Specify the features to extract for leverage in the probabilistic
+  analysis, used to converge upon the true positive set" in
+  Cmdliner.Arg.(value & opt ((list string)) (Features.default_features)
+                & info ["enable_feature"] ~doc)
+
+let tp_threshold =
+  let doc = 
+    "Used for specifying a tp trimming threshold" in
+  Cmdliner.Arg.(value & opt (some float) (Some 0.99)
+                & info ["tp_threshold"] ~doc)
+
+let retain_at = 
+  let doc = "Specify what minimum probability to retain all at." in
+  Cmdliner.Arg.(value &
+                opt (some float) None
+                & info ["retain_at"] ~doc)
+
 let read_addrs width ic : addr list = 
-  List.filter_map In_channel.(read_lines ic) ~f:(fun x -> 
-      let addr = sprintf "0x%s:%d" String.(strip x) width in
+  List.filter_map In_channel.(read_lines ic) ~f:(fun x ->
       try 
+        Some(Addr.of_string x)
+      with _ ->
+      try
+        let addr = sprintf "0x%s:%d" String.(strip x) width in
         Some(Addr.of_string (addr))
       with _ -> None
     )  
@@ -79,21 +140,21 @@ let fp_of_tp tp od =
   let tp = Addr.Set.of_list tp in
   let od = Addr.Set.of_list od in
   Set.(diff tp od)
-       
+
 let save_dot =
   let doc =
     "Without any cut operations, you can specify to still save the
      entire graph. Not recommended - disassembly tends to be large" in
   Cmdliner.Arg.(value & flag & info ["save_dot"] ~doc)
-       
+
 let list_cuts = [
-    "DFS", DFS;
-    "Interval", Interval; 
-  ]
+  "DFS", DFS;
+  "Interval", Interval; 
+]
 let cut =
   let doc = "Specify a sub-graph, among feature based shallow BFS and address intervals " in
   Cmdliner.Arg.(value & opt (some (t3 (enum list_cuts) string int)) None
-                             & info ["cut"] ~doc)
+                & info ["cut"] ~doc)
 
 
 module type Provider = sig
@@ -171,20 +232,20 @@ let ground_truth_bin =
   Cmdliner.Arg.(
     value & opt (some string) (None) 
     & info ["ground_truth_bin"] ~doc:
-        ("Compare results against a ground truth if desired," ^
-           " of either debug symbols or an unstripped binary"))
+      ("Compare results against a ground truth if desired," ^
+       " of either debug symbols or an unstripped binary"))
 
 let ground_truth_file = 
   Cmdliner.Arg.(
     value & opt (some string) (None) 
     & info ["ground_truth_file"] ~doc:
-        ("Compare results against a file that contains the addresses
+      ("Compare results against a file that contains the addresses
           of true positives"))
-  
+
 let list_setops = [
-    "Intersection", Intersection;
-    "Difference", Difference;
-    "Union", Union;
+  "Intersection", Intersection;
+  "Difference", Difference;
+  "Union", Union;
 ]
 let setops_doc = List.(to_string ~f:fst (list_setops))
 let setops =
@@ -211,10 +272,10 @@ let select_trimmer trim_method =
   | Some Simple | None -> Trim.Default.trim
   (*| Some Memoried -> Trim.*)
   | Some DeadBlockResistant ->
-     Trim.DeadblockTolerant.trim
+    Trim.DeadblockTolerant.trim
   | Some Disabled ->
-     Trim.Disabled.trim
-    
+    Trim.Disabled.trim
+
 let with_phases superset phases =
   let tag_grammar ?min_size = 
     Grammar.tag_by_traversal ?threshold:None in
@@ -222,12 +283,12 @@ let with_phases superset phases =
     List.fold ~init:Int.Map.empty phases ~f:(fun analyses phase -> 
         match phase with
         | Default ->
-           let analyses = 
-             List.foldi ~init:analyses Trim.default_tags
-               ~f:(fun idx analyses tag_func ->
-                 Map.add analyses idx (Some(tag_func), None, None))
-           in
-           (*let discard_arg ?min_size = 
+          let analyses = 
+            List.foldi ~init:analyses Trim.default_tags
+              ~f:(fun idx analyses tag_func ->
+                  Map.add analyses idx (Some(tag_func), None, None))
+          in
+          (*let discard_arg ?min_size = 
             Invariants.tag_branch_violations in
             let analyses = Map.add analyses (Map.length analyses)
               (None, Some(discard_arg), None) in*)
@@ -238,61 +299,60 @@ let with_phases superset phases =
              (None, Some(tag_grammar), None)*)
            analyses
         | Target_not_in_memory -> 
-           Map.add analyses Map.(length analyses)
-             (Some(Trim.tag_target_not_in_mem), None, None)
+          Map.add analyses Map.(length analyses)
+            (Some(("Tag target not in mem", Trim.tag_target_not_in_mem)), None, None)
         | Target_is_bad ->
-           Map.add analyses Map.(length analyses)
-             (Some(Trim.tag_target_is_bad), None, None)
+          Map.add analyses Map.(length analyses)
+            (Some(("Tag target is bad", Trim.tag_target_is_bad)), None, None)
         | Target_within_body -> 
-           Map.add analyses Map.(length analyses) (Some(Trim.tag_target_in_body), None, None)
+          Map.add analyses Map.(length analyses)
+            (Some(("Tag target in body", Trim.tag_target_in_body)), None, None)
         | Invalid_memory_access -> 
-           Map.add analyses Map.(length analyses) (Some(Trim.tag_non_mem_access), None, None)
+          Map.add analyses Map.(length analyses)
+            (Some(("Tag non mem access", Trim.tag_non_mem_access)), None, None)
         | Non_instruction ->
-           Map.add analyses Map.(length analyses) (Some(Trim.tag_non_insn), None, None)
+          Map.add analyses Map.(length analyses)
+            (Some(("Tag non insn", Trim.tag_non_insn)), None, None)
         | Component_body -> 
-           Map.add analyses Map.(length analyses) 
-             (None, Some(Sheathed.tag_loop_contradictions), None)
+          Map.add analyses Map.(length analyses) 
+            (None, Some("Tag loop contradictions", Sheathed.tag_loop_contradictions), None)
         | Cross_layer_invalidation ->
-           let discard_arg ?min_size = 
-             Invariants.tag_branch_violations in
-           Map.add analyses Map.(length analyses)
-             (None, Some(discard_arg), None)
+          let discard_arg ?min_size = 
+            Invariants.tag_branch_violations in
+          Map.add analyses Map.(length analyses)
+            (None, Some("Tag branch violations", discard_arg), None)
         | Grammar_convergent -> 
-           Map.add analyses Map.(length analyses)
-             (None, Some(tag_grammar), None)
+          Map.add analyses Map.(length analyses)
+            (None, Some("Tag grammar", tag_grammar), None)
         | Tree_set -> 
-           Map.add analyses Map.(length analyses)
-             (None, None, Some(Decision_tree_set.decision_trees_of_superset))
+          Map.add analyses Map.(length analyses)
+            (None, None, Some("Decision trees", Decision_tree_set.decision_trees_of_superset))
       ) in
   let analyses = Map.add analyses (1+Map.(length analyses))
-                   (Some(Trim.tag_success),None,None) in
+      (Some("Tag success",Trim.tag_success),None,None) in
   (*let analyses = Map.add analyses (1+Map.(length analyses))
                        (Some(Trim.tag_target_is_bad),None,None) in*)
-  let collect_analyses analyses = 
+  let (tag_funcs, analysis_funcs, make_tree) =
     let x, y, z = 
       Map.fold ~init:([], [], []) analyses 
         ~f:(fun ~key ~data (tag_funcs, analysis_funcs, dset) -> 
-          let (tag_func, analysis_func, make_tree) = data in
-          let tag_func = Option.value tag_func 
-                           ~default:(fun superset _ _ _ -> superset) in
-          let make_tree = Option.value make_tree ~default:(fun _ -> []) in
-          let analysis_func = 
-            Option.value analysis_func 
-              ~default:(fun ?min_size -> ident) in
-          (tag_func :: tag_funcs),
-          (analysis_func :: analysis_funcs),
-          make_tree :: dset
-        ) in
+            let (tag_func, analysis_func, make_tree) = data in
+            let tag_funcs = Option.value_map
+                tag_func ~f:(fun (x,y) -> y :: tag_funcs)
+                ~default:tag_funcs in
+            let make_tree = Option.value_map make_tree
+                ~f:(fun x -> x :: dset) ~default:dset in
+            let analysis_funcs = 
+              Option.value_map analysis_func
+                ~f:(fun x -> x :: analysis_funcs)
+                ~default:analysis_funcs in
+            tag_funcs, analysis_funcs, make_tree
+          ) in
     List.rev x, List.rev y, List.rev z in
-  (* Instructions cannot be saved, so we skip the process of both
-     lifting them and therefore of removing them, since it is
-     assumed that there isn't a need to. *)
-  let (tag_funcs, analysis_funcs, make_tree) =
-    collect_analyses analyses in
   let superset = 
     time ~name:"tagging"
       (Trim.tag_superset  ~invariants:tag_funcs) superset in
   List.foldi ~init:superset analysis_funcs 
-    ~f:(fun idx superset analyze ->
-      let name = sprintf "analysis %d" idx in
-      time ~name analyze superset)
+    ~f:(fun idx superset (analysis, analyze) ->
+        let name = sprintf "analysis %s" analysis in
+        time ~name analyze superset)

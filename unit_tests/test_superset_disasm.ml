@@ -56,14 +56,14 @@ let of_mem arch mem =
   let superset = Superset.Fields.create
       ~arch ~brancher ~img:None ~data:()
       ~insn_map:Addr.Map.empty ~bad ~insn_risg in
-  Superset.update_with_mem superset mem |> ok_exn
+  Superset.update_with_mem superset mem
 
 let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
   let superset = Superset.update_with_mem
-      superset mem ~f:Trim.tag |> ok_exn in
+      superset mem ~f:Trim.tag in
   let superset = Trim.Default.trim superset in
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
   let msg = Superset.isg_to_string superset in
@@ -77,7 +77,7 @@ let test_trims_invalid_jump test_ctxt =
   let memory, arch = make_params bytes in
   let superset = of_mem arch memory in
   let superset = Superset.update_with_mem
-      superset memory ~f:Trim.tag |> ok_exn in
+      superset memory ~f:Trim.tag  in
   let superset = Trim.Default.trim superset in
   let expected_results = [ ] in
   assert_equal ~msg:"lengths unequal"

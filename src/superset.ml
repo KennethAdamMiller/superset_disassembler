@@ -44,7 +44,7 @@ let get_arch superset = superset.arch
 
 let get_graph superset = superset.insn_risg
 
-let mark_bad superset addr = 
+let mark_bad superset addr =
   Hash_set.add superset.bad addr
 
 let num_bad superset =
@@ -63,7 +63,7 @@ let with_bad superset ?visited ~pre ~post accu =
           ?visited ~pre ~post b
       else accu
     )  
-  
+
 let get_map superset = superset.insn_map
 
 let get_base superset =
@@ -128,27 +128,25 @@ let with_data_of_insn superset at ~f =
   let body = Superset_risg.seq_of_addr_range at len in
   Seq.iter body ~f
 
-let mark_descendents_at ?insn_isg ?visited ?datas superset addr = 
-  let insn_isg = 
-    match insn_isg with 
-    | Some insn_isg -> insn_isg 
-    | None -> 
-      let insn_risg = get_graph superset in
-      Superset_risg.Oper.mirror insn_risg in
-  let visited = Option.value visited 
-      ~default:(Addr.Hash_set.create ()) in
+let with_descendents_at ?insn_isg ?visited superset addr ~f =
+  let insn_risg = get_graph superset in
+  if Superset_risg.G.mem_vertex insn_risg addr then
+    let insn_isg = 
+      match insn_isg with 
+      | Some insn_isg -> insn_isg 
+      | None -> 
+        Superset_risg.Oper.mirror insn_risg in
+    Superset_risg.iter_component ?visited ~pre:f insn_isg addr
+
+let mark_descendents_at ?insn_isg ?visited ?datas superset addr =
   let datas = Option.value datas 
       ~default:(Addr.Hash_set.create ()) in
-  if not (Hash_set.mem visited addr) then
-    Superset_risg.Dfs.prefix_component (fun tp -> 
-        let mark_bad addr = 
-          if not Hash_set.(mem visited addr) then
-            if Superset_risg.G.mem_vertex insn_isg addr then
-              mark_bad superset addr in
-        with_data_of_insn superset tp ~f:mark_bad;
-        with_data_of_insn superset tp ~f:(Hash_set.add datas);
-        Hash_set.add visited tp;
-      ) insn_isg addr
+  let mark_bad = mark_bad superset in
+  with_descendents_at ?insn_isg ?visited superset addr
+    ~f:(fun v ->
+        with_data_of_insn superset v ~f:mark_bad;
+        with_data_of_insn superset v ~f:(Hash_set.add datas);
+      )
 
 let create ?insn_map ?insn_risg arch data =
   let insn_map = Option.value insn_map ~default:Addr.Map.empty in
@@ -321,21 +319,22 @@ let export_addrs bin superset =
   let insn_map = get_map superset in
   let addrs = Map.keys insn_map in
   let addrs = List.map addrs ~f:Addr.to_string in
-  let addrs_file = Out_channel.create (bin ^ "_addrs.txt") in
+  let base = Filename.basename bin in
+  let addrs_file = Out_channel.create ("./" ^ base ^ "_addrs.txt") in
   Out_channel.output_lines addrs_file addrs
-  
+
 let update_with_mem ?backend ?f superset mem =
   let update = Option.value f ~default:(fun (m, i) a -> a) in
   let f (mem, insn) superset =
     let superset = add superset mem insn in
     update (mem, insn) superset in
-  disasm ?backend ~accu:superset ~f superset.arch mem
+  disasm ?backend ~accu:superset ~f superset.arch mem |> ok_exn
 
-let with_img ~accu ~backend img ~f =
+let with_img ~accu img ~f =
   let segments = Table.to_sequence @@ Image.segments img in
   Seq.fold segments ~init:accu ~f:(fun accu (mem, segment) ->
       if Image.Segment.is_executable segment then
-        (f ~accu ~backend mem |> ok_exn)
+        f ~accu mem
       else accu 
     )
 
@@ -351,8 +350,8 @@ let superset_of_img ~data ?f ~backend img =
     brancher      = brancher;
     img           = Some img;
   } in
-  with_img ~accu:superset ~backend img
-    ~f:(fun ~accu ~backend mem -> 
+  with_img ~accu:superset img
+    ~f:(fun ~accu mem -> 
         update_with_mem ~backend accu mem ?f
       )
 
@@ -377,7 +376,7 @@ let rebalance superset =
   let superset_risg = get_graph superset in
   Superset_risg.G.iter_vertex (fun vert ->
       if not Map.(mem insn_map vert) then (
-      (*mark_bad superset vert;*)
+        mark_bad superset vert;
       )
     ) superset_risg;
   let insn_map = Map.filteri ~f:(fun ~key ~data -> 
