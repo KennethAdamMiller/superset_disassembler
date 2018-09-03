@@ -26,18 +26,6 @@ let default_features = [
 ]
 let default_features = List.rev default_features
 
-
-let unlikely = 0.05
-let uncertain = 0.5
-let discouraged = 0.35
-let strong_discourage = 0.15
-let disallowed = 0.03
-let moderate_discourage = 0.45
-let moderate_encourage = 0.55
-let encouraged = 0.65
-let strong_encourage = 0.85
-let absolute = 0.97
-
 let transform = Hash_set.fold ~init:Addr.Set.empty ~f:Set.add
 
 let find_free_insns superset = 
@@ -809,31 +797,9 @@ let apply_featureset featureset superset =
       | Some (f, AppSuperset) -> 
         print_endline feature;
         let superset = f superset in
-        (*let superset = Trim.trim superset in*)
+        let superset = Trim.Default.trim superset in
         superset
     ) in
-  (*let factors, superset = List.fold ~init:(factors,superset) featureset ~f:(fun (factors,superset) feature -> 
-      match Map.(find featuremap feature.name) with
-      | None -> factors, superset
-      | Some (f, AppFactors) -> 
-        print_endline feature.name;
-        let factors = f superset feature byte_window factors in
-        let superset = Trim.trim superset in
-        factors, superset
-      | _ -> factors, superset
-    ) in
-    let fg = Dai.new_FactorGraph factors in
-    let fg, superset = List.fold ~init:(fg,superset) featureset ~f:(fun (fg,superset) feature -> 
-      match Map.(find featuremap feature.name) with
-      | None -> fg, superset
-      | Some (f, AppFactorGraph) -> 
-        print_endline feature.name;
-        let fg = f superset feature byte_window fg in
-        let superset = Trim.trim superset in
-        fg, superset
-      | _ -> fg, superset
-    ) in
-    fg, superset*)
   superset
 
 let fdists = String.Map.empty

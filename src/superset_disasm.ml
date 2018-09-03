@@ -20,25 +20,25 @@ let make_gatherer accu =
 let make_mark_tracker accu =
   let module Instance =
     PerMarkTrackingReducer(
-        struct
-          type acc = (Addr.Set.t Addr.Map.t) ref
-          let accu = accu
-        end) in
+    struct
+      type acc = (Addr.Set.t Addr.Map.t) ref
+      let accu = accu
+    end) in
   let module Instance = Trim.Reduction(Instance) in
   Instance.trim
 
 let build_tracker trim phases = 
   List.fold phases ~init:(trim,String.Map.empty)
     ~f:(fun (trim,trackers) phase ->
-      match List.find list_phases ~f:(fun (name,p) ->
-                phase = p
-              ) with
-      | Some (name,p) ->
-         let accu = ref Addr.Map.empty in
-         let instance_trim = make_mark_tracker accu in
-         (fun x -> instance_trim @@ trim x), Map.add trackers name accu
-      | None -> trim,trackers
-    )
+        match List.find list_phases ~f:(fun (name,p) ->
+            phase = p
+          ) with
+        | Some (name,p) ->
+          let accu = ref Addr.Map.empty in
+          let instance_trim = make_mark_tracker accu in
+          (fun x -> instance_trim @@ trim x), Map.add trackers name accu
+        | None -> trim,trackers
+      )
 
 let build_metrics trim phases =
   List.fold phases ~init:(trim,String.Map.empty)
@@ -192,18 +192,18 @@ module Program(Conf : Provider)  = struct
   open Conf
 
   let trim_with f superset =
-    let visited = Addr.Hash_set.create () in
-    let datas = Addr.Hash_set.create () in
+    (*let visited = Addr.Hash_set.create () in
+      let datas = Addr.Hash_set.create () in*)
     let rec do_analysis round superset = 
       if round = options.rounds then superset else
         let superset = 
           let superset, pmap = f superset, Addr.Map.empty in
-          Markup.mark_threshold_with_pmap
+          (*Markup.mark_threshold_with_pmap
             superset ~visited ~datas pmap 
             options.tp_threshold;
-          Markup.enforce_uncertain
+            Markup.enforce_uncertain
             superset visited datas (ref pmap);
-          Markup.check_convergence superset visited;
+            Markup.check_convergence superset visited;*)
           Trim.Default.trim superset in
         do_analysis (round+1) superset in
     do_analysis 0 superset
@@ -252,7 +252,7 @@ module Program(Conf : Provider)  = struct
     let dis_method x =
       let f x = Superset.superset_disasm_of_file
           ~data:() ~backend x
-          (*~f:(Trim.tag ~invariants:[Trim.tag_success]) *) in
+          ~f:(Trim.tag ~invariants:[Trim.tag_success])  in
       time ~name:"disasm binary" f x
     in
     let trim = select_trimmer options.trim_method in
@@ -272,77 +272,77 @@ module Program(Conf : Provider)  = struct
     let results =
       match options.ground_truth_file with
       | Some (gt) ->
-         let insn_risg = Superset.get_graph superset in
-         let insn_map = Superset.get_map superset in
-         let remaining = Addr.Hash_set.create () in
-         Map.iter_keys insn_map ~f:(Hash_set.add remaining);
-         let s = sprintf "metrics - %d" Map.(length metrics) in
-         print_endline s;
-         let s = sprintf "setops - %d" Map.(length setops) in
-         print_endline s;
-         let s = sprintf "results - %d" Map.(length results) in
-         print_endline s;
-         Map.iteri setops ~f:(fun ~key ~data ->
-             let data,_ = data in
-             let s = sprintf "%s - %d" key Hash_set.(length data) in
-             print_endline s;
-             Hash_set.iter data ~f:(Hash_set.remove remaining);
-           );
-         let min_addr,_ = Map.min_elt insn_map |> Option.value_exn in
-         let tp = read_addrs Addr.(bitwidth min_addr) gt in
-         let tps = Addr.Hash_set.create () in
-         List.iter tp ~f:(Hash_set.add tps);
-         let fps = Addr.Hash_set.create () in
-         let _ = Hash_set.iter remaining ~f:(fun key -> 
-                       if not (Hash_set.mem tps key) then
-                         Hash_set.add fps key
-                   ) in
-         let fns = Addr.Hash_set.create () in
-         Hash_set.iter tps ~f:(fun v -> 
-             if not (Hash_set.mem remaining v) then
-               Hash_set.add fns v;
-           );
-         let s = sprintf "fps: %d" Hash_set.(length fps) in
-         print_endline s;
-         let s = sprintf "tps: %d" Hash_set.(length tps) in
-         print_endline s;
-         let s = sprintf "tracker size: %d" Map.(length tracker) in
-         print_endline s;
-         Map.iteri tracker ~f:(fun ~key ~data ->
-             let d = !data in
-             let s = sprintf "tracker %s size: %d"
-                       key Map.(length d) in
-             print_endline s;
-             Map.iteri !data ~f:(fun ~key ~data ->
-                 if (not Superset_risg.G.(mem_vertex insn_risg key))
-                    && Hash_set.(mem tps key) then (
-                   let memstr =
-                     match Map.find insn_map key with
-                     | Some (mem, _ ) -> Memory.str () mem
-                     | None -> "" in
-                   let s =
-                     sprintf
-                       "marked fn bad with mem %s of removal size %d"
-                       memstr Set.(length data) in
-                   print_endline s;
-                 );
-                 Set.iter data ~f:(fun x ->
-                     let s = sprintf "marked fn bad at %s"
-                               Addr.(to_string key) in
-                     let s = sprintf "%s, ancestor fn at %s"
-                               s Addr.(to_string x) in
-                     print_endline s;
-                   ) ; 
-               )
-           );
-         let results = String.Map.add results "True Positives" tps in
-         let results = String.Map.add results "False Positives" fps in
-         let results = String.Map.add results "False Negatives" fns in
-         let s = sprintf "false negatives: %d" Hash_set.(length fns) in
-         print_endline s;
-         let s = sprintf "remaining: %d" Hash_set.(length remaining) in
-         print_endline s;
-         results
+        let insn_risg = Superset.get_graph superset in
+        let insn_map = Superset.get_map superset in
+        let remaining = Addr.Hash_set.create () in
+        Map.iter_keys insn_map ~f:(Hash_set.add remaining);
+        let s = sprintf "metrics - %d" Map.(length metrics) in
+        print_endline s;
+        let s = sprintf "setops - %d" Map.(length setops) in
+        print_endline s;
+        let s = sprintf "results - %d" Map.(length results) in
+        print_endline s;
+        Map.iteri setops ~f:(fun ~key ~data ->
+            let data,_ = data in
+            let s = sprintf "%s - %d" key Hash_set.(length data) in
+            print_endline s;
+            Hash_set.iter data ~f:(Hash_set.remove remaining);
+          );
+        let min_addr,_ = Map.min_elt insn_map |> Option.value_exn in
+        let tp = read_addrs Addr.(bitwidth min_addr) gt in
+        let tps = Addr.Hash_set.create () in
+        List.iter tp ~f:(Hash_set.add tps);
+        let fps = Addr.Hash_set.create () in
+        let _ = Hash_set.iter remaining ~f:(fun key -> 
+            if not (Hash_set.mem tps key) then
+              Hash_set.add fps key
+          ) in
+        let fns = Addr.Hash_set.create () in
+        Hash_set.iter tps ~f:(fun v -> 
+            if not (Hash_set.mem remaining v) then
+              Hash_set.add fns v;
+          );
+        let s = sprintf "fps: %d" Hash_set.(length fps) in
+        print_endline s;
+        let s = sprintf "tps: %d" Hash_set.(length tps) in
+        print_endline s;
+        let s = sprintf "tracker size: %d" Map.(length tracker) in
+        print_endline s;
+        Map.iteri tracker ~f:(fun ~key ~data ->
+            let d = !data in
+            let s = sprintf "tracker %s size: %d"
+                key Map.(length d) in
+            print_endline s;
+            Map.iteri !data ~f:(fun ~key ~data ->
+                if (not Superset_risg.G.(mem_vertex insn_risg key))
+                && Hash_set.(mem tps key) then (
+                  let memstr =
+                    match Map.find insn_map key with
+                    | Some (mem, _ ) -> Memory.str () mem
+                    | None -> "" in
+                  let s =
+                    sprintf
+                      "marked fn bad with mem %s of removal size %d"
+                      memstr Set.(length data) in
+                  print_endline s;
+                );
+                Set.iter data ~f:(fun x ->
+                    let s = sprintf "marked fn bad at %s"
+                        Addr.(to_string key) in
+                    let s = sprintf "%s, ancestor fn at %s"
+                        s Addr.(to_string x) in
+                    print_endline s;
+                  ) ; 
+              )
+          );
+        let results = String.Map.add results "True Positives" tps in
+        let results = String.Map.add results "False Positives" fps in
+        let results = String.Map.add results "False Negatives" fns in
+        let s = sprintf "false negatives: %d" Hash_set.(length fns) in
+        print_endline s;
+        let s = sprintf "remaining: %d" Hash_set.(length remaining) in
+        print_endline s;
+        results
       | None -> results in
     process_cut superset options results;
     match options.ground_truth_bin with
