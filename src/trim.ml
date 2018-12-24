@@ -183,6 +183,7 @@ module Reduction(R : Reducer) = struct
     let post = post superset in
     let pre = R.check_pre superset in
     let _ = Superset.with_bad superset ~pre ~post R.accu in
+    Superset.clear_all_bad superset;
     let trimmed_size = (G.nb_vertex superset_risg) in
     let num_removed = orig_size - trimmed_size in
     printf "%d vertices after trimming, removing %d\n" 

@@ -218,7 +218,14 @@ module Program(Conf : Provider)  = struct
     let _ = 
       if options.save_gt then
         let gt = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
-            options.target |> ok_exn in
+                   options.target |> ok_exn in
+        let img  = Common.img_of_filename options.target in
+        let gt = 
+          Seq.(filter gt ~f:(fun e ->
+                   Superset.with_img ~accu:false img 
+                     ~f:(fun ~accu mem ->
+                       accu || Memory.(contains mem e))
+          )) in
         let gt = Seq.map gt ~f:Addr.to_string in
         Seq.iter gt ~f:print_endline;
         exit 0

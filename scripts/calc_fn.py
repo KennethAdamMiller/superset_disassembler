@@ -22,4 +22,7 @@ print("Number of true positives: ", len(true_positives))
 print("Number of objdump addrs: ", len(objdump_results))
 print("Number of pgm addrs: ", len(pgm_results))
 print("Objdump false negatives: ", len(true_positives.difference(objdump_results)))
+if len(true_positives.difference(objdump_results))!=0:
+    print((true_positives.difference(objdump_results)))
+
 print("pgm false negatives: ", len(true_positives.difference(pgm_results)))
