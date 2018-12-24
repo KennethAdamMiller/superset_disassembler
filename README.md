@@ -1,4 +1,6 @@
-This is the superset disassemblers project, based on probabilistic disassembly. The objective is to disassemble with very high accuracy but with a guarantee of no missing instructions that were intended by the compiler. It is known there are some additional instructions that are not intended by the compiler and which may even overlap with the true instructions. However, the intended use of this disassembler is with superset rewriters on binaries, where there is a mitigation mechanism in place for false positives in general, so that this is not of concern.
+# About
+
+This is the superset disassembler project, based on probabilistic disassembly. The objective is to disassemble a binary or library with very high accuracy but with a guarantee of no missing instructions that were intended by the compiler. It is known there are some additional instructions that are not intended by the compiler and which may even overlap with the true instructions. However, the intended use of this disassembler is with superset rewriters on binaries, where there is a mitigation mechanism in place for false positives in general, so that this is not of concern.
 
 * True positives are instructions intended by the compiler that are correctly in the output of the disassembler.
 * False negatives are instructions intended by the compiler but missed by the disassembler.
@@ -17,16 +19,23 @@ Cons:
 * Requires occlusive false positive mitigation
 
 
-**An existing docker image is provided for you, where this repository and all dependencies are already built for you. Another image, which builds off of the previous, provides the metrics and artifacts referenced in the paper.** It is simple enough to simply pull the docker image superset_disasm_metrics to obtain the metrics with calculate_metrics.py as described below. However, the ability to run the analyses to obtain the results independently in a repeatable, replicable, and reproducibly per the ACM badging policies is of course provided for. The dockerfiles for each are provided with the base image corresponding to 'Dockerfile' and the metrics being in 'Dockerfile.metrics'. The superset_disasm_metrics image is an instance of Dockerfile.metrics having already been run, and if you wish to skip waiting for a run to complete (which takes about at least 8 hours), you can just pull that. 
+**An existing docker image is provided for you, where this repository and all dependencies are already built for you. Another image, which builds off of the previous, provides the metrics and artifacts referenced in the paper.** It is simple enough to *simply pull the docker image kennethadammiller/superset_disasm_metrics* to obtain the metrics with calculate_metrics.py as described below. However, the ability to run the analyses to obtain the results independently in a repeatable, replicable, and reproducible manner per the ACM badging policies is of course provided for. The dockerfiles for each are provided with the base image corresponding to 'Dockerfile' and the metrics being in 'Dockerfile.metrics'. The superset_disasm_metrics image is an instance of Dockerfile.metrics having already been run, and if you wish to skip waiting for a run to complete (which takes about at least 8 hours), you can just pull that. 
 
 # How to build
-    To build for local development, just call make. There is a binary and library produced as main artifacts.
-    You can use an opam pin to locally pin for your own edits if you so desire with:
-       opam pin add superset_disasm ./ -y
-    To build for docker, you can do:
-       docker build . -t superset_disasm
-    Or, you can run the metrics automatically with:
-    	docker build . -f Dockerfile.metrics -t superset_disasm_metrics
+
+To build for local development, just call make. There is a binary and library produced as main artifacts.
+
+You can use an opam pin to locally pin for your own edits if you so desire with:
+
+`opam pin add superset_disasm ./ -y`
+
+To build for docker, you can do:
+
+`docker build . -t superset_disasm`
+
+Or, you can run the metrics automatically with:
+
+`docker build . -f Dockerfile.metrics -t superset_disasm_metrics`
 
 # How to run the scripts manually
 The scripts are in the ./scripts folder. There are lots of helper scripts, so if you looked in to orient yourself, you should likely have to read them to know the structure, which is not advised unless you want to develop with the project. Instead, below you will find the synopsis of each script and how they work. The most important are collect_results.sh and calculate_metrics.py
