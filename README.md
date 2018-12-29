@@ -55,4 +55,20 @@ The other scripts aren't as important, but effectively they can be run in that o
 # Exposition on produced artifacts
 Every binary analyzed by the metrics gathering tool produces many different metrics. These metrics display the number of false positives, the maximum possible total number of occlusive false positives, false negatives, and many other details. This output goes into a file, named by the convention <binary_name>.metrics. These are parsed with grep and awk style tools to retrieve the results.
 
-In so much as the results produced by the actual disassembler, it can yield the following byproducts: the reverse instruction sequence graph, the instruction interval map (BAP insn type cannot be saved, but the most used meta data can be retained), the ground truth address set from the unstripped binary, and the addresses produced by the superset disassembler itself.
+In so much as the results produced by the actual disassembler, it can yield the following byproducts: the reverse instruction sequence graph, the instruction interval map (BAP insn type cannot be saved, but the most used meta data can be retained), the ground truth address set from the unstripped binary, and the addresses produced by the superset disassembler itself. The metrics output is printed to standard output, which in the analysis script is redirected to \*.metrics for each binary analyzed. The artifacts and measurements from the paper are below: 
+
+1. RQ1, we perform four experiments:  
+   1. measure false negatives (missing true positive instructions) false positives (bogus instructions) 
+       * start the docker image superset_disasm_metrics, and run the command `python calculate_metrics.py` in each of the respective folders in `${HOME}/workspace/superset_disasm/` that have a `metrics.txt` file.
+   1. measure the disassembling time
+       * The time and binary size is collected in the files `times.txt` and `mem_size.txt` and these were used to make Fig. 8
+   1. analyze the contributions of each individual kind of probabilistic hints
+       * The folders `${HOME}/workspace/superset_disasm/` that have a `metrics.txt` file were each run with different hints, which are specified in the folder name.
+   1. study the effect of different probability threshold settings.
+       * The folders `${HOME}/workspace/superset_disasm/` that have a `metrics.txt` file include different probability threshold values. That value is in the folder name.
+1. RQ2: Comparison with Superset Disassembly
+   * The files `${HOME}/workspace/multiverse/*_rewrite.txt` contain the output of the rewriter. One of those lines has the percentage blow up in size.
+   * The results of the SPEC CPU benchmark for the original spec binaries and for the rewritten binaries is in `${HOME}/workspace/cpu2006-103/result`, numbered in the order they were run.
+1. RQ3: Handling Data and Code Interleavings - windows binary tests
+1. RQ4: Handling Missing Function Entries
+   * The folder in `${HOME}/workspace/superset_disasm/` that contains the string DiscardEdges as part of it's feature set contains the result of disassembling without any edges to provide for grammar recognition.
