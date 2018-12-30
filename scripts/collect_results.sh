@@ -2,6 +2,7 @@
 cat *.metrics > metrics.txt
 cat metrics.txt| grep "vertices after trimming" | cut -d " " -f6 > total_removed.txt
 cat metrics.txt| grep "Total instructions" | cut -d " " -f4 >  final_total.txt
+cat metrics.txt| grep "disasm binary execution time" | cut -d ":" -f2 > times.txt
 cat metrics.txt| grep "superset_isg_of_mem" | grep length | cut -d " " -f3 > mem_size.txt
 cat metrics.txt| grep "superset_map" | grep length | cut -d " " -f6 > original_superset.txt
 cat metrics.txt| grep "Actual function entrances" | cut -d " " -f4 > total_functions.txt
@@ -21,4 +22,3 @@ cat metrics.txt| grep "Number of possible reduced" | cut -d " " -f7 > tp_byte_sp
 #cat binaries.txt | grep gcc | sed '/^$/d' | cut -f1 > gcc_binaries.txt
 #cat binaries.txt | grep icc | sed '/^$/d' | cut -f1 > icc_binaries.txt
 #cat binaries.txt | grep "Number of possible reduced false" | cut -d " " -f7 > possible_fp.txt
-python3 ../calculate_metrics.py

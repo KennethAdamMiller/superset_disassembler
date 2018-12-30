@@ -64,40 +64,40 @@ print("Average total removed (% of superset): ", "{:.2%}".format(avg(percent_rem
 #print("Average additional reduction (% of phase 1 output): ", sum(additional_savings) / len(additional_savings))
 occlusion_percent = [rate / final_total for rate, final_total in zip(occlusion, final_total_instructions)]
 average_occlusion = avg(occlusion_percent) 
-print("Average *original* occlusion (as rate of total instructions, including the true positive disrupted)", average_occlusion)
+#print("Average *original* occlusion (as rate of total instructions, including the true positive disrupted)", average_occlusion)
 min_false_positive_estimate=average_occlusion / 2
 max_false_positive_estimate=average_occlusion * (15.0/16.0)
-print("Overall estimated false positive rate within occlusion: ", max_false_positive_estimate, min_false_positive_estimate)
+#print("Overall estimated false positive rate within occlusion: ", max_false_positive_estimate, min_false_positive_estimate)
 reduced_occlusion_percent = [rate / final_total for rate, final_total in zip(reduced_occlusion, final_total_instructions)]
 average_reduced_occlusion = avg(reduced_occlusion_percent) 
-print("Overall average *reduced* occlusion (as rate of total instructions to reduced occlusion)", average_reduced_occlusion)
+#print("Overall average *reduced* occlusion (as rate of total instructions to reduced occlusion)", average_reduced_occlusion)
 min_reduced_false_positive_estimate=average_reduced_occlusion / 2
 max_reduced_false_positive_estimate = average_reduced_occlusion * (15.0 / 16.0)
-print("Overall estimated false positive rate within *reduced* occlusion: ", max_reduced_false_positive_estimate, min_reduced_false_positive_estimate)
+#print("Overall estimated false positive rate within *reduced* occlusion: ", max_reduced_false_positive_estimate, min_reduced_false_positive_estimate)
 percent_of_memory=percent_mem
 orig_percent_of_memory=avg(percent_of_memory) 
-print("Overall average original number of instructions within memory percent memory: ", orig_percent_of_memory)
+#print("Overall average original number of instructions within memory percent memory: ", orig_percent_of_memory)
 
 improvement_of_memory = [final / mem for final, mem in zip(final_total_instructions, mem_size)]
 improvement_percent_of_memory=avg(improvement_of_memory) 
-print("Overall Average improvement as percent memory: ", improvement_percent_of_memory)
+#print("Overall Average improvement as percent memory: ", improvement_percent_of_memory)
 
 percent_true_positives=[tp / superset for tp, superset in zip(true_positives, raw_superset)]
 average_true_positives=avg(percent_true_positives) 
-print("Overall Average original percent true positives of superset: ", average_true_positives)
+#print("Overall Average original percent true positives of superset: ", average_true_positives)
 percent_improvement=[tp / final for tp, final in zip(true_positives, final_total_instructions)]
 average_improvement=avg(percent_improvement)
-print("Overall Average improvement as percent true positives of superset: ", average_improvement)
+#print("Overall Average improvement as percent true positives of superset: ", average_improvement)
 
 percent_tp_of_occlusion=[tp / (tp + reduced) for tp, reduced in zip(true_positives, reduced_occlusion)]
 avg_tp_of_occlusion=avg(percent_tp_of_occlusion)
-print("Overall average true positives of reduced occlusion: ", avg_tp_of_occlusion)
+#print("Overall average true positives of reduced occlusion: ", avg_tp_of_occlusion)
 
 percent_tp_of_original=[tp / original for tp, original in zip(true_positives, raw_superset)]
 avg_tp_of_original=avg(percent_tp_of_original)
-print("Average true positives of original: ", avg_tp_of_original)
+#print("Average true positives of original: ", avg_tp_of_original)
 
-print("")
+#print("")
 percent_tp_of_total_bytes = [ tp / (tp + tp_bytes) for tp, tp_bytes in zip(true_positives, possible_fp)]
 avg_percent_tp_of_total_bytes = avg(percent_tp_of_total_bytes)
 print("avg percent true positives of total true positive byte space: ", avg_percent_tp_of_total_bytes)
@@ -109,6 +109,9 @@ percent_reduced_of_tp_bytes = [ (reduced / (tp_bytes)) for reduced, tp_bytes in 
 print("avg percent reduced occlusion of total true positive byte space: ",avg(percent_reduced_of_tp_bytes))
 print("min % reduced occlusion of total true positive byte space: ", min(percent_reduced_of_tp_bytes)) 
 print("max % reduced occlusion of total true positive byte space: ", max(percent_reduced_of_tp_bytes)) 
+
+return
+
 #print("avg percent reduced occlusion of tp byte space (without worst): ", avg(sorted(percent_reduced_of_tp_bytes)[:-1500]))
 worst_reduced_of_tp_bytes = [ "{:.2%}".format(x) for x in sorted(percent_reduced_of_tp_bytes)[-15:] ]
 print("worst reduced occlusion of tp byte space: ", worst_reduced_of_tp_bytes)
