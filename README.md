@@ -33,7 +33,11 @@ To build for docker, you can do:
 
 `docker build . -t superset_disasm`
 
-Or, (after [downloading the CPU 2006 benchmarks](https://drive.google.com/open?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs) modified to run the rewritten binaries by skipping the hash check) you can run the metrics automatically with:
+Or, simply pull from docker hub with:
+
+`docker pull kennethadammiller/superset_disasm`
+
+**Once you have** the `superset_disasm` docker image, ([download the CPU 2006 benchmarks](https://drive.google.com/open?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs) modified to run the rewritten binaries by skipping the hash check) you can run the metrics automatically with:
 
 `docker build . -f Dockerfile.metrics -t superset_disasm_metrics`
 
