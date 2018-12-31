@@ -51,9 +51,9 @@ wait ${j1}
 wait ${j2}
 wait ${j3}
 
-j1=analyze "All Instruction invariants" "TrimLimitedClamped,FixpointSSA,FixpointGrammar" "0.990" &
-j2=analyze "All Instruction invariants" "TrimLimitedClamped,FixpointSSA" "0.990" &
-j3=analyze "All Instruction invariants" "TrimLimitedClamped,FixpointGrammar" "0.990" &
+j1= analyze "All Instruction invariants" "TrimLimitedClamped,FixpointSSA,FixpointGrammar" "0.990" &
+j2= analyze "All Instruction invariants" "TrimLimitedClamped,FixpointSSA" "0.990" &
+j3= analyze "All Instruction invariants" "TrimLimitedClamped,FixpointGrammar" "0.990" &
 wait ${j1}
 wait ${j2}
 wait ${j3}
