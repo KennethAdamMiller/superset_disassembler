@@ -78,7 +78,7 @@ start the docker image superset_disasm_metrics...
    * The files `${HOME}/workspace/multiverse/*_rewrite.txt` contain the output of the rewriter. One of those lines has the percentage blow up in size.
    * The results of the SPEC CPU benchmark for the original spec binaries and for the rewritten binaries is in `${HOME}/workspace/cpu2006-103/result`, numbered in the order they were run which is original and then rewritten. **Table II** is made from this data.
 1. RQ3: Handling Data and Code Interleavings - windows binary tests
-   * This data is
+   * This data is in `${HOME}/workspace/superset_disasm/rq3.txt`
    * **Table III** is made from this data.
 1. RQ4: Handling Missing Function Entries
    * The folder in `${HOME}/workspace/superset_disasm/` that contains the string DiscardEdges as part of it's feature set contains the result of disassembling without any edges to provide for grammar recognition.
