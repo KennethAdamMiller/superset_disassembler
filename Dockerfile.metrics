@@ -30,5 +30,5 @@ WORKDIR /home/bap/workspace/superset_disasm
 
 RUN chmod u+x scripts/*
 RUN scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_analyses.sh
-RUN pushd ${HOME} && git clone https://github.com/KennethAdamMiller/RQ3_binaries.git && popd
-RUN scripts/rq3.sh
+RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/bap/workspace/rq3_binaries
+RUN scripts/rq3.sh > rq3.txt
