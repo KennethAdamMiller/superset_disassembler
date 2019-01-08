@@ -23,7 +23,7 @@ Cons:
 
 # How to build
 
-To build for local development, just call make. There is a binary and library produced as main artifacts.
+To build for local development, just call make while in this repository directory. There is a binary and library produced as main artifacts. All commands below assume you are in this repository directory after having cloned it.
 
 You can use an opam pin to locally pin for your own edits if you so desire with:
 
@@ -31,15 +31,15 @@ You can use an opam pin to locally pin for your own edits if you so desire with:
 
 To build for docker, you can do:
 
-`docker build . -t superset_disasm`
+`sudo docker build . -t superset_disasm`
 
 Or, simply pull from docker hub with:
 
-`docker pull kennethadammiller/superset_disasm`
+`sudo docker pull kennethadammiller/superset_disasm`
 
-**Once you have** the `superset_disasm` docker image, ([download the CPU 2006 benchmarks](https://drive.google.com/open?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs) modified to run the rewritten binaries by skipping the hash check) you can run the metrics automatically with:
+**Once you have** the `superset_disasm` docker image, you can run the metrics automatically with:
 
-`docker build . -f Dockerfile.metrics -t superset_disasm_metrics`
+`sudo docker build . -f Dockerfile.metrics -t superset_disasm_metrics`
 
 
 # How to run the scripts manually
