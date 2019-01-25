@@ -31,9 +31,11 @@ let transform = Hash_set.fold ~init:Addr.Set.empty ~f:Set.add
 let find_free_insns superset = 
   let insn_map = Superset.get_map superset in
   let insns = Map.to_sequence insn_map in
+  let insn_risg = Superset.get_graph superset in
+  let mem = Superset_risg.G.mem_vertex insn_risg in
   let to_clamp = Seq.fold ~init:Addr.Set.empty ~f:(fun to_clamp (addr,_) ->
-      let conflicts = Superset_risg.conflicts_within_insn_at 
-          insn_map addr in
+      let conflicts = Superset_risg.conflicts_within_insn_at
+                        ~mem insn_map addr in
       let no_conflicts = Set.length conflicts = 0 in
       if no_conflicts then Set.add to_clamp addr else to_clamp
     ) insns in

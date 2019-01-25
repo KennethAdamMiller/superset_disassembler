@@ -1,0 +1,4 @@
+Applying for status: Replicated
+
+
+We believe that replicated is the appropriate status to apply for, since our code is publicly available and because there are carefully written and tested Dockerfiles for obtaining an installation of the code and for running the software on a series of artifacts. Because we did this, and because the author can simply follow the directions in the README to reproduce our results, we believe that others can use our artifacts (source code and test binary corpora) to obtain the results presented in the paper.

@@ -114,13 +114,14 @@ let risg_of_raw_superset ?superset_risg raw_superset =
     );
   superset_risg
 
-let conflicts_within_insn_at ?conflicts insn_map addr =
+let conflicts_within_insn_at ?mem ?conflicts insn_map addr =
+  let mem = Option.value mem ~default:(Map.mem insn_map) in
   let conflicts = Option.value conflicts ~default:Addr.Set.empty in
   let rec within_insn conflicts insn_map cur_addr len =
     if Addr.(cur_addr >= (addr ++ len)) then
       conflicts
     else
-      let conflicts = if Map.mem insn_map cur_addr then
+      let conflicts = if mem cur_addr then
           let conflicts = Set.add conflicts addr in
           Set.add conflicts cur_addr
         else conflicts in 
@@ -134,14 +135,16 @@ let conflicts_within_insn_at ?conflicts insn_map addr =
 
 let conflicts_within_insns insn_map keep =
   Set.fold keep ~init:Addr.Set.empty
-    ~f:(fun to_remove addr -> 
+    ~f:(fun conflicts addr -> 
         conflicts_within_insn_at 
-          ~conflicts:to_remove insn_map addr
+          ~conflicts insn_map addr
       )
 
-let find_all_conflicts insn_map =
-  let addrs = Addr.Set.of_list @@ Addr.Map.keys insn_map in
-  conflicts_within_insns insn_map addrs
+let find_all_conflicts ?mem insn_map =
+  List.fold Map.(keys insn_map) ~init:Addr.Set.empty
+    ~f:(fun conflicts addr -> 
+      conflicts_within_insn_at ?mem ~conflicts insn_map addr
+    )
 
 let seq_of_addr_range addr len = 
   let open Seq.Generator in

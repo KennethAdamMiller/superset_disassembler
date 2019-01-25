@@ -1,0 +1,12 @@
+
+You must clone the repository:
+https://github.com/KennethAdamMiller/superset_disassembler
+
+You must download the CPU 2006 benchmarks, modified to run the rewritten binaries by skipping the hash check, *into the code repository directory*.
+https://drive.google.com/open?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs 
+
+The Dockerfile contains all the steps necessary to install the package via opam, but if you wish to install locally instead of by doing a build you may. The README.md file in the repository explains both how to build using the docker file and how to install locally. The docker file is recommended, but it takes a very long time to finish running, upwards of at least 8 hours. There may be indications of memory exhaustion in the running output of the docker build, but those are expected, unpredictable, and checked for in the script run_analyses.sh so that they are re-run automatically until completion.
+
+We run our docker builds on a machine with 16GB of memory and an i7, so a machine with at least those specifications is necessary.
+
+These instructions should include notes illustrating a very basic usage example or a method to test the installation. This could be, for instance, on what output to expect that confirms that the code is installed and working; and the code is doing something interesting and useful.

@@ -110,7 +110,7 @@ print("avg percent reduced occlusion of total true positive byte space: ",avg(pe
 print("min % reduced occlusion of total true positive byte space: ", min(percent_reduced_of_tp_bytes)) 
 print("max % reduced occlusion of total true positive byte space: ", max(percent_reduced_of_tp_bytes)) 
 
-return
+exit(0)
 
 #print("avg percent reduced occlusion of tp byte space (without worst): ", avg(sorted(percent_reduced_of_tp_bytes)[:-1500]))
 worst_reduced_of_tp_bytes = [ "{:.2%}".format(x) for x in sorted(percent_reduced_of_tp_bytes)[-15:] ]
