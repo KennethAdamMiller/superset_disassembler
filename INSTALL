@@ -1,6 +1,7 @@
-
 You must clone the repository:
 https://github.com/KennethAdamMiller/superset_disassembler
+
+Follow the directions in the README.md to install or build.
 
 You must download the CPU 2006 benchmarks, modified to run the rewritten binaries by skipping the hash check, *into the code repository directory*.
 https://drive.google.com/open?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs 

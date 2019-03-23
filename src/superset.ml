@@ -17,7 +17,8 @@ type 'a t = {
   (* TODO: needs to become an array *)
   insn_risg : Superset_risg.t;
   bad       : Addr.Hash_set.t;
-  (* marked truth *)
+  keep      : Addr.Hash_set.t;
+  (* TODO registerable per-feature info? *)
   (* marked data  *)
   (* visited *)
   (* union_find *)
@@ -159,6 +160,7 @@ let create ?insn_map ?insn_risg arch data =
     insn_map = insn_map;
     insn_risg = insn_risg;
     bad      = Addr.Hash_set.create ();
+    keep      = Addr.Hash_set.create ();
     data = data;
   }
 
@@ -174,6 +176,7 @@ let rebuild ?data ?insn_map ?insn_risg superset =
     data      = data;
     insn_risg = insn_risg;
     insn_map  = insn_map;
+    keep      = superset.keep;
   }
 
 let drop superset =
@@ -349,6 +352,7 @@ let superset_of_img ~data ?f ~backend img =
     insn_map      = Addr.Map.empty;
     brancher      = brancher;
     img           = Some img;
+    keep          = Addr.Hash_set.create ();
   } in
   with_img ~accu:superset img
     ~f:(fun ~accu mem -> 

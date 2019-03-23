@@ -79,16 +79,7 @@ let tag_callsites visited ?callsites superset =
       ~default:(Superset.get_callsites ~threshold:6 superset) in
   let insn_isg  = Superset_risg.Oper.mirror insn_risg in
   Hash_set.iter callsites ~f:(fun callsite ->
-      if not (Hash_set.mem visited callsite) then (
-        Superset_risg.Dfs.prefix_component (fun tp -> 
-            let mark_bad addr =
-              if Superset_risg.G.mem_vertex insn_risg addr then (
-                Superset.mark_bad superset addr
-              ) in
-            Superset.with_data_of_insn superset tp ~f:mark_bad;
-            Hash_set.add visited tp;
-          ) insn_isg callsite;
-      )
+      Superset_risg.iter_component ~visited insn_isg callsite;
     );
   superset
 

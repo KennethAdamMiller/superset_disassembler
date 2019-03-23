@@ -33,13 +33,24 @@ let find_free_insns superset =
   let insns = Map.to_sequence insn_map in
   let insn_risg = Superset.get_graph superset in
   let mem = Superset_risg.G.mem_vertex insn_risg in
-  let to_clamp = Seq.fold ~init:Addr.Set.empty ~f:(fun to_clamp (addr,_) ->
-      let conflicts = Superset_risg.conflicts_within_insn_at
-                        ~mem insn_map addr in
-      let no_conflicts = Set.length conflicts = 0 in
-      if no_conflicts then Set.add to_clamp addr else to_clamp
-    ) insns in
-  Set.diff to_clamp Superset_risg.(find_all_conflicts insn_map)
+  let all_conflicts = Addr.Hash_set.create () in
+  let to_clamp =
+    Seq.fold ~init:(Addr.Set.empty)
+      ~f:(fun (to_clamp) (addr,(memory,_)) ->
+        let len = Memory.length memory in
+        let conflicts = Superset_risg.range_seq_of_conflicts
+                          ~mem addr len in
+        let no_conflicts = Seq.is_empty conflicts in
+        Seq.iter conflicts ~f:(fun c ->
+            Hash_set.add all_conflicts c);
+        if no_conflicts && not Hash_set.(mem all_conflicts addr) then
+          Set.add to_clamp addr
+        else (
+          to_clamp
+        )
+      ) insns in
+  to_clamp
+(*Hash_set.fold all_conflicts ~init:to_clamp ~f:Set.remove*)
 
 let restricted_clamp superset = 
   let insn_risg = Superset.get_graph superset in
@@ -283,16 +294,23 @@ let extract_trim_clamped superset =
         Superset.clear_bad superset d
     );
   Markup.check_convergence superset visited;
-  (*let base = Daiconv.get_base superset in
-    clamp_tp to_clamp base 0 fg;*)
   superset
 
+let time ?(name="") f x =
+  let t = Sys.time() in
+  let fx = f x in
+  let s = sprintf "%s execution time: %fs\n" name (Sys.time() -. t) in
+  print_endline s;
+  fx
+  
 let extract_trim_limited_clamped superset = 
   let visited = Addr.Hash_set.create () in
   let callsites = Superset.get_callsites ~threshold:0 superset in
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let f s = Grammar.tag_callsites visited ~callsites s in
+  let superset = time ~name:"tagging callsites: " f superset in
   let () = Markup.clear_bad superset in
-  let superset = extract_trim_clamped superset in
+  let superset = time ~name:"extract_trim_clamped "
+                   extract_trim_clamped superset in
   Markup.check_convergence superset visited;
   superset
 

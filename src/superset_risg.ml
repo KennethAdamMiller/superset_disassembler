@@ -163,22 +163,24 @@ let range_seq insn_map =
       seq_of_addr_range addr (Memory.length mem)
     )
 
-let range_seq_of_conflicts insn_map addr len = 
+let range_seq_of_conflicts ~mem addr len = 
   let range_seq = seq_of_addr_range addr len in
-  Seq.filter range_seq ~f:Addr.Map.(mem insn_map)
+  Seq.filter range_seq ~f:mem
 
 (* TODO do not need to use insn_cfg. Could use superset type *)
 let seq_of_all_conflicts insn_map insn_isg = 
   let insn_map_seq = Addr.Map.to_sequence insn_map in
+  let check_mem = Addr.Map.(mem insn_map) in
   Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 
-      range_seq_of_conflicts insn_map addr (Memory.length mem)
+      range_seq_of_conflicts ~mem:check_mem addr (Memory.length mem)
     )
 
-let conflict_seq_at insn_map addr = 
+let conflict_seq_at insn_map addr =
+  let check_mem = Addr.Map.(mem insn_map) in
   match Map.find insn_map addr with
   | Some(mem, _) -> 
     let len = Memory.length mem  in
-    range_seq_of_conflicts insn_map addr len
+    range_seq_of_conflicts ~mem:check_mem addr len
   | None -> Seq.empty
 
 let parent_conflict_at insn_risg insn_map addr =
