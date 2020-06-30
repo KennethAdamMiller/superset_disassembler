@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 let visit ?visited ~pre ~post superset entries =
@@ -33,7 +33,7 @@ let visit_by_block superset
       let is_branch = Superset_risg.is_branch insn_risg target in
       let is_jmp_edge = not (Superset.is_fall_through superset src target) in
       if is_branch && is_jmp_edge then
-        (Map.add jmps src target, Set.add targets target)
+        (Map.set jmps src target, Set.add targets target)
       else (jmps, targets)
     ) insn_risg (Addr.Map.empty,Addr.Set.empty) in
   (*let loop_addrs = Superset_risg.get_loop_addrs insn_risg in

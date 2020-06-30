@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 let static_successors brancher mem insn =
@@ -29,7 +29,8 @@ let find_non_mem_accesses superset =
       check_return_addr r addr
   end)
 
-let accesses_non_mem superset mem insn _ = 
+let accesses_non_mem superset mem insn _ =
+  (* TODO keep lifter across superset *)
   let arch = Superset.get_arch superset in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
@@ -58,7 +59,7 @@ let tag_target_not_in_mem superset mem insn targets =
         match target with 
         | Some(target) -> 
           if not (Superset.contains_addr superset target) then
-            Superset.mark_bad superset target
+            Superset.mark_bad superset (Memory.min_addr mem)
         | None -> ()
       );
   superset
@@ -76,7 +77,6 @@ let tag_target_is_bad superset mem insn targets =
       );
   superset
 
-(* TODO need to add a unit test *)
 let tag_target_in_body superset mem insn targets =
   let src = Memory.min_addr mem in
   List.iter targets
@@ -127,6 +127,7 @@ let tag_success superset mem insn targets =
       | None -> ());
   superset
 
+(* TODO need to add a unit test for each tag *)
 let default_tags = ["Tag non insn", tag_non_insn;
                     "Tag non mem access", tag_non_mem_access;
                     "Tag target not in mem", tag_target_not_in_mem;

@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel.Std
+open Core_kernel
 
 module type InvariantApplicator = sig
   val apply : 'a Superset.t -> 'a Superset.t

@@ -1,6 +1,6 @@
 PKG cmdliner
 PKG bap
-PKG ounit
+PKG ounit2
 PKG bap.plugins
 PKG ocamlgraph
 

@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel.Std
+open Core_kernel
 
 let img_of_filename filename = 
   let img, errs = Image.create filename |> ok_exn in

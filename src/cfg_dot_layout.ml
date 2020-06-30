@@ -1,11 +1,11 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Graphlib.Std
 
 module Cfg = Graphs.Cfg
 
 type colored_superset = Superset_risg.t * Addr.Hash_set.t String.Map.t
-         * Superset.elem Addr.Map.t
+                        * Superset.elem Addr.Map.t
 
 module Make(T : sig val instance : colored_superset end) = struct
   open T
@@ -29,16 +29,16 @@ module Make(T : sig val instance : colored_superset end) = struct
       Superset_risg.G.iter_edges_e f g
 
     let graph_attributes _ = [
-        `Fontsize 14;
-      ]
+      `Fontsize 14;
+    ]
     let default_vertex_attributes gr = [
-        `Shape `Box; 
-        (*`Height 1.0*.Memory.(length mem);*)
-        `Fontsize 14;
-        `Fontcolor 0x666699;
-        `Fontname "Monospace";
-        `Width 1.0
-      ]
+      `Shape `Box; 
+      (*`Height 1.0*.Memory.(length mem);*)
+      `Fontsize 14;
+      `Fontcolor 0x666699;
+      `Fontname "Monospace";
+      `Width 1.0
+    ]
 
     let red = 0xff0000
     let green = 0x009900
@@ -64,7 +64,7 @@ module Make(T : sig val instance : colored_superset end) = struct
       let contains name =
         match Map.find colors name with
         | Some(s) ->
-           Hash_set.mem s v
+          Hash_set.mem s v
         | None -> false in
       let find_update default_attrs name color =
         if contains name then
@@ -79,24 +79,24 @@ module Make(T : sig val instance : colored_superset end) = struct
       let default_attrs =
         match List.hd default_attrs with
         | Some (`Color _) -> 
-           default_attrs
+          default_attrs
         | _ -> `Color 0X660000 :: default_attrs  in
       match Map.find insn_map v with
       | Some(mem,insn) ->
-         let len = float_of_int Memory.(length mem) in
-         `Height (1.0 *. len) ::
-           default_attrs
+        let len = float_of_int Memory.(length mem) in
+        `Height (1.0 *. len) ::
+        default_attrs
       | None -> default_attrs
 
 
     let get_subgraph _ = None
     let default_edge_attributes _ = [
-        `Penwidth 1.0;
-        `Arrowsize 0.5;
-        `Headport `N;
-        `Tailport `S;
-        `Labelfloat true;
-      ]
+      `Penwidth 1.0;
+      `Arrowsize 0.5;
+      `Headport `N;
+      `Tailport `S;
+      `Labelfloat true;
+    ]
 
     let edge_attributes (src,dst) =
       (*let color,weight = match kind,arity with
@@ -110,6 +110,6 @@ module Make(T : sig val instance : colored_superset end) = struct
       ]
   end
   module Dot = Graph.Graphviz.Dot(Dottable)
-             
+
   include Dot
 end

@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel.Std
+open Core_kernel
 open Or_error
 open Cmdliner
 
@@ -18,7 +18,8 @@ let read_addrs ic : addr list =
   List.t_of_sexp Addr.t_of_sexp @@ Sexp.input_sexp ic
 
 let ground_truth_of_unstripped_bin bin : addr seq Or_error.t =
-  let tmp = Filename.temp_file "bw_" ".symbol" in
+  let name = Filename.basename bin in
+  let tmp = Filename.temp_dir_name ^ "bw_" ^ name ^ ".symbol" in
   let cmd = sprintf "bap-byteweight dump -i symbols %S > %S" 
       bin tmp in
   if Sys.command cmd = 0

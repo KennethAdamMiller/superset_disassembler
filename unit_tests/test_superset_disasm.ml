@@ -1,15 +1,17 @@
 open OUnit2
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Or_error
 open Common
-open Bap_plugins.Std
 open Superset_risg
 open Superset
+open Bap_plugins.Std
 
 let () = Pervasives.ignore(Plugins.load ())
+let _ = Bap_main.init ()
 
-let arch = Option.value ~default:`x86_64 @@ Arch.of_string "x86_64";;
+
+let arch = `x86
 
 let segments = Table.empty
 
@@ -20,10 +22,11 @@ let init () =
   let insn_map = Addr.Map.empty in
   insn_map, insn_isg
 
-let make_params ?(min_addr=0) bytes =
-  let arch = Arch.(`x86) in
-  let addr_size= Size.in_bits @@ Arch.addr_size arch in
-  let min_addr = Addr.of_int addr_size min_addr in
+let min_addr = 1
+let addr_size= Size.in_bits @@ Arch.addr_size arch
+let min_addr = Addr.of_int addr_size min_addr
+
+let make_params ?(mina=min_addr) bytes =
   let memory = create_memory arch min_addr bytes |> ok_exn in
   memory, arch
 
@@ -37,7 +40,8 @@ let check_results sizes expected_results =
           expected_size)  
 
 let superset_to_length_list superset =
-  List.map superset ~f:(fun (mem, insn) -> (Memory.length mem))
+  List.map superset
+    ~f:(fun (mem, insn) -> (Memory.length mem))
 
 (* This test affirms that both the order and the inner sequences of a set of bytes
    will be interpreted appropriately by the superset conservative disassembler *)
@@ -53,10 +57,25 @@ let of_mem arch mem =
   let brancher = Brancher.of_bil arch in
   let insn_risg = (Superset_risg.G.create ()) in
   let bad = Addr.Hash_set.create () in
+  let img,_ = Image.of_string @@ Memory.to_string mem |> ok_exn in
+  let img = Some img in
   let superset = Superset.Fields.create
-      ~arch ~brancher ~img:None ~data:()
+      ~arch ~brancher ~img ~data:() ~keep:Addr.Hash_set.(create ())
       ~insn_map:Addr.Map.empty ~bad ~insn_risg in
   Superset.update_with_mem superset mem
+
+let debug_msg superset =
+  let msg = Superset.isg_to_string superset in
+  (*let pattern = ": " in
+    let msi =
+    String.substr_index mems ~pattern |> Option.value_exn in
+    let start = (msi+(String.length pattern)) in
+    let finish = String.((length mems)) - start in
+    let ms = String.sub mems start finish in*)
+  let mapl = Map.length @@ Superset.get_map superset in
+  sprintf "%s\nmap len: %d" msg mapl
+
+(* TODO make default initialization from bytes much shorter *)
 
 let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
@@ -64,13 +83,153 @@ let test_trim test_ctxt =
   let superset = of_mem arch mem in
   let superset = Superset.update_with_mem
       superset mem ~f:Trim.tag in
+  let superset =
+    Trim.tag_superset superset in
+  let tgt = Memory.min_addr mem in
+  let dbg = debug_msg superset in
+  let bads =
+    List.to_string ~f:Addr.to_string @@
+    Hash_set.to_list superset.bad in
+  let explanation =
+    sprintf "trim did not mark bad at %s, bad: %s"
+      Addr.(to_string tgt) bads in
+  let msg = sprintf "%s\n%s"
+      dbg explanation in
+  let is_bad = Hash_set.mem superset.bad tgt in
+  assert_bool msg is_bad;
   let superset = Trim.Default.trim superset in
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
-  let msg = Superset.isg_to_string superset in
   (* After refactoring, it may be that some targets that fall outside
      the memory bounds are still in the graph, but this only accounts
      for one edge, so it is negligible. *)
   assert_equal ~msg 1 @@ G.nb_vertex superset.insn_risg
+
+let test_can_lift test_ctxt =
+  let bytes = "\x2d\xdd\xc3\x54\x55" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let arch = Superset.get_arch superset in
+  let module Target = (val target_of_arch arch) in
+  let lifter = Target.lift in
+  try
+    let m = Superset.get_map superset in
+    Map.iter m ~f:(fun (mem, insn) ->
+        let bil = Superset.lift_insn lifter (mem, insn) in
+        let msg =
+          sprintf "couldn't lift at %s" (Memory.to_string mem) in
+        match bil with
+        | Some _ -> ()
+        | _ ->
+          assert_bool msg false
+      ) 
+  with _ -> ()  
+
+(* TODO want a bil language oriented way to specify the construction of a superset *)
+
+(* TODO after obtaining the bil language oriented construction of *)
+(* superset, build tag_non_mem *)
+let test_tag_non_mem_access test_ctxt = 
+  let bytes = "\x2d\xdd\xc3\x54\x55" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let f = (Trim.tag ~invariants:[Trim.tag_non_mem_access]) in
+  let superset = Superset.update_with_mem
+      superset mem ~f in
+  let msg = debug_msg superset in
+  let g = Superset.get_graph superset in
+  let offset_one =
+    Superset_risg.G.mem_vertex g Addr.(succ min_addr) in
+  assert_bool msg (not offset_one)
+
+let test_static_successors_includes_fall_through test_ctxt =
+  let bytes = "\x54\x55" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let m = Superset.(get_map superset) in
+  let maddr = Memory.(min_addr mem) in
+  match Map.find m maddr with
+  | Some (mem, insn) ->
+    let tgts =
+      Trim.static_successors superset.brancher mem insn in
+    let b = List.fold ~init:false tgts ~f:(fun status (addro, e) ->
+        match addro with
+        | Some addr -> status || Addr.(addr = (succ maddr))
+        | None -> status 
+      ) in
+    assert_bool "static successors doesn't contain fall through" b
+  | None -> assert_bool "insn expected here" false
+
+
+let test_successor_calculation test_ctxt =
+  let bytes = "\x2d\xdd\xc3\x54\x55" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let m = Superset.(get_map superset) in
+  let mn_addr = Memory.(min_addr mem) in
+  let mx_addr = Memory.(max_addr mem) in
+  match Map.find m mn_addr with
+  | Some (mem, insn) ->
+    let tgts =
+      Trim.static_successors superset.brancher mem insn in
+    let b = List.fold ~init:false tgts ~f:(fun status (addro, e) ->
+        match addro with
+        | Some addr ->
+          status ||
+          (Addr.(addr > (mx_addr)) && (not Memory.(contains mem addr)))
+        | None -> status 
+      ) in
+    let b = b && (List.length tgts > 0) in
+    assert_bool "static successors doesn't contain fall through" b
+  | None -> assert_bool "insn expected here" false
+
+let test_superset_contains_addr test_ctxt =
+  let bytes = "\x2d\xdd\xc3\x54\x55" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let m = Superset.(get_map superset) in
+  let mn_addr = Memory.(min_addr mem) in
+  match Map.find m mn_addr with
+  | Some (mem, insn) ->
+    let tgts =
+      Trim.static_successors superset.brancher mem insn in
+    let b = List.fold ~init:false tgts ~f:(fun status (addro, e) ->
+        match addro with
+        | Some addr ->
+          status ||
+          (not (Superset.contains_addr superset addr))
+        | None -> status 
+      ) in
+    let b = b && (List.length tgts > 0) in
+    assert_bool "static successors doesn't contain fall through" b
+  | None -> assert_bool "insn expected here" false
+
+
+let test_target_not_in_mem test_ctxt = 
+  let bytes = "\x2d\xdd\xc3\x54\x55" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let invariants = [Trim.tag_target_not_in_mem] in
+  let f = (Trim.tag ~invariants) in
+  let superset = Superset.update_with_mem
+      superset mem ~f in
+  let superset =
+    Trim.tag_superset ~invariants superset in
+  let tgt = Memory.min_addr mem in
+  let dbg = debug_msg superset in
+  let explanation =
+    sprintf "target not in mem did not mark bad at %s"
+      Addr.(to_string tgt) in
+  let msg = sprintf "%s\n%s"
+      dbg explanation in
+  let is_bad = Hash_set.mem superset.bad tgt in
+  assert_bool msg is_bad;
+  let superset = Trim.Default.trim superset in
+  let msg = sprintf "%s\n%s"
+      dbg "target not in mem is not true here" in
+  match Map.find Superset.(get_map superset) tgt with
+  | Some (mem, insn) -> 
+    assert_bool msg false
+  | None -> ()
 
 let test_trims_invalid_jump test_ctxt =
   let bytes = "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
@@ -79,6 +238,7 @@ let test_trims_invalid_jump test_ctxt =
   let superset = Superset.update_with_mem
       superset memory ~f:Trim.tag  in
   let superset = Trim.Default.trim superset in
+  let superset = Superset.rebalance superset in
   let expected_results = [ ] in
   assert_equal ~msg:"lengths unequal"
     (G.nb_vertex superset.insn_risg)
@@ -88,8 +248,8 @@ let test_addr_map test_ctxt =
   let addr_size = Size.in_bits @@ Arch.addr_size Arch.(`x86_64) in
   let min_addr  = Addr.of_int addr_size 0 in
   let insn_map  = Addr.Map.empty in
-  let insn_map  = Addr.Map.add insn_map min_addr () in
-  let insn_map  = Addr.Map.add insn_map min_addr () in
+  let insn_map  = Addr.Map.set insn_map min_addr () in
+  let insn_map  = Addr.Map.set insn_map min_addr () in
   let msg = "expected length to be one" in
   assert_bool msg ((Addr.Map.length insn_map) = 1)
 
@@ -123,11 +283,11 @@ let construct_loop insn_map insn_isg start finish =
        condition back up to the loop body entry, here all the edges are
        reversed in the spirit of the disassembled insn_isg. *)
     Superset_risg.G.add_edge insn_isg start finish;
-    let junk_data = String.create 1 in
+    let junk_data = String.of_char ' ' in
     let start_mem = create_memory arch start junk_data |> ok_exn in
-    let insn_map = Addr.Map.add insn_map start (start_mem, None) in
+    let insn_map = Addr.Map.set insn_map start (start_mem, None) in
     let finish_mem = create_memory arch finish junk_data |> ok_exn in
-    let insn_map = Addr.Map.add insn_map finish (finish_mem, None) in
+    let insn_map = Addr.Map.set insn_map finish (finish_mem, None) in
     let one  = (Addr.of_int 1 ~width) in
     let two  = (Addr.of_int 2 ~width) in
     let rec construct_loop_body insn_map start finish = 
@@ -143,9 +303,10 @@ let construct_loop insn_map insn_isg start finish =
            start *)
         Superset_risg.G.add_edge insn_isg step start;
         (* Because the algorithm at this point relies on the graph
-           and map entirely, it doesn't matter the contents of the memory. *)
-        let junk_data = String.create @@ (Addr.to_int dist |> ok_exn) in
-        let insn_map = Addr.Map.add insn_map ~key:start
+           and map entirely, it doesn't matter the contents of the
+           memory. *)
+        let junk_data = String.make (Addr.to_int dist |> ok_exn) ' ' in
+        let insn_map = Addr.Map.set insn_map ~key:start
             ~data:(create_memory arch start junk_data |> ok_exn, None) in
         construct_loop_body insn_map step finish 
       else insn_map, insn_isg in
@@ -153,17 +314,17 @@ let construct_loop insn_map insn_isg start finish =
   ) else insn_map, insn_isg
 
 let construct_entry_conflict insn_map insn_isg at conflict_len = 
-  let junk_data = String.create conflict_len in
+  let junk_data = String.make conflict_len ' ' in
   let conflict = Addr.(at ++ conflict_len) in
   Superset_risg.G.add_edge insn_isg at conflict;
   Superset_risg.G.add_edge insn_isg Addr.(at ++ 1) Addr.(conflict ++ 1);
-  let insn_map = Addr.Map.add insn_map ~key:at 
+  let insn_map = Addr.Map.set insn_map ~key:at 
       ~data:(create_memory arch at junk_data |> ok_exn, None) in
-  let insn_map = Addr.Map.add insn_map ~key:conflict
+  let insn_map = Addr.Map.set insn_map ~key:conflict
       ~data:(create_memory arch conflict junk_data |> ok_exn, None) in
-  let insn_map = Addr.Map.add insn_map ~key:Addr.(conflict ++1)
+  let insn_map = Addr.Map.set insn_map ~key:Addr.(conflict ++1)
       ~data:(create_memory arch Addr.(conflict ++1) junk_data |> ok_exn, None) in
-  let insn_map = Addr.Map.add insn_map ~key:Addr.(at ++ 1) 
+  let insn_map = Addr.Map.set insn_map ~key:Addr.(at ++ 1) 
       ~data:(create_memory arch Addr.(at ++ 1) junk_data |> ok_exn, None) in
   insn_map, insn_isg
 
@@ -179,17 +340,17 @@ let construct_tail_conflict
     | Some (mem, _) -> insn_map, Memory.length mem
     | None -> 
       let tail_len = 1 in
-      let tail_data = String.create tail_len in
+      let tail_data = String.make tail_len ' ' in
       let mem = create_memory arch tail_addr tail_data |> ok_exn in
-      let insn_map = Addr.Map.add insn_map ~key:tail_addr
+      let insn_map = Addr.Map.set insn_map ~key:tail_addr
           ~data:(mem, None) in
       insn_map, tail_len in 
   let rec make_tail_options insn_map conflict_count =
     if conflict_count > 0 then
-      let junk_data = String.create conflict_count in
+      let junk_data = String.make conflict_count ' ' in
       let conflict_addr = Addr.(tail_addr -- conflict_count) in
       Superset_risg.G.add_edge insn_isg tail_addr conflict_addr;
-      let insn_map = Addr.Map.add insn_map ~key:conflict_addr 
+      let insn_map = Addr.Map.set insn_map ~key:conflict_addr 
           ~data:(create_memory arch conflict_addr junk_data |> ok_exn,
                  None) in
       make_tail_options insn_map (conflict_count - 1)
@@ -413,7 +574,7 @@ let test_trim_scc test_ctxt =
       if not (Hash_set.mem loop_points vert) then 
         Hash_set.add conflicts_added vert) insn_isg;
   let superset =
-    Superset.Fields.create ~insn_map ~insn_risg ~arch
+    Superset.Fields.create ~insn_map ~insn_risg ~arch ~keep:Addr.Hash_set.(create ())
       ~bad:Addr.Hash_set.(create ()) ~img:None ~brancher ~data:() in
   let components = Superset_risg.StrongComponents.scc_list insn_isg in
   assert_bool "Should have a component" 
@@ -465,8 +626,8 @@ let test_topological_revisit ctxt =
     match Map.find visit_count addr with
     | Some (count) -> 
       let visit_count = Map.remove visit_count addr in
-      Map.add visit_count addr (count+1)
-    | None -> Map.add visit_count addr 1 in
+      Map.set visit_count addr (count+1)
+    | None -> Map.set visit_count addr 1 in
   let visit_count = Topological.fold 
       update_count insn_risg Addr.Map.empty in
   Map.iteri visit_count (fun ~key ~data -> assert_equal ~ctxt data 1)
@@ -525,9 +686,9 @@ let rec extend_back insn_map insn_isg ?(step=1) addr num =
   let make_link len =
     let dest = Addr.(addr -- len) in
     Superset_risg.G.add_edge insn_isg addr dest;
-    let junk_data = String.create len in
+    let junk_data = String.make len ' ' in
     let mem = create_memory arch dest junk_data |> ok_exn in
-    let insn_map = Map.add insn_map dest (mem, None) in
+    let insn_map = Map.set insn_map dest (mem, None) in
     (insn_map, insn_isg) in
   if not (num = 0) then 
     let (insn_map, insn_isg) = make_link step in
@@ -618,15 +779,15 @@ let test_extended_cross_layer_pruning test_ctxt =
 
 let construct_branch insn_map insn_risg branch_at incr = 
   let left = Addr.(branch_at ++ incr) in
-  let junk_data = String.create incr in
+  let junk_data = String.make incr ' ' in
   let left_mem = create_memory arch left junk_data |> ok_exn in
-  let insn_map = Map.add insn_map left (left_mem, None) in
+  let insn_map = Map.set insn_map left (left_mem, None) in
   let right = Addr.(left ++ incr) in
   let right_mem = create_memory arch right junk_data |> ok_exn in
-  let insn_map = Map.add insn_map right (right_mem, None) in
+  let insn_map = Map.set insn_map right (right_mem, None) in
   let rejoin = Addr.(right ++ incr) in
   let rejoin_mem = create_memory arch rejoin junk_data |> ok_exn in
-  let insn_map = Map.add insn_map rejoin (rejoin_mem, None) in
+  let insn_map = Map.set insn_map rejoin (rejoin_mem, None) in
   Superset_risg.G.add_edge insn_risg left branch_at;
   Superset_risg.G.add_edge insn_risg right branch_at;
   Superset_risg.G.add_edge insn_risg rejoin right;
@@ -752,6 +913,13 @@ let () =
       "test_overlay_construction" >:: test_overlay_construction;
       "test_find_all_conflicts" >:: test_find_all_conflicts;
       "test_graph_edge_behavior" >:: test_graph_edge_behavior;
+      (*"test_tag_non_mem_access" >:: test_tag_non_mem_access;*)
+      "test_target_not_in_mem" >:: test_target_not_in_mem;
+      "test_can_lift" >:: test_can_lift;
+      "test_static_successors_includes_fall_through" >::
+      test_static_successors_includes_fall_through;
+      "test_successor_calculation" >:: test_successor_calculation;
+      "test_superset_contains_addr" >:: test_superset_contains_addr;
     ] in
   run_test_tt_main suite
 ;;

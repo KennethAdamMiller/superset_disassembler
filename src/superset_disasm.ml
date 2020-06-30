@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Bap_plugins.Std
 open Or_error
@@ -36,7 +36,7 @@ let build_tracker trim phases =
         | Some (name,p) ->
           let accu = ref Addr.Map.empty in
           let instance_trim = make_mark_tracker accu in
-          (fun x -> instance_trim @@ trim x), Map.add trackers name accu
+          (fun x -> instance_trim @@ trim x), Map.set trackers name accu
         | None -> trim,trackers
       )
 
@@ -50,7 +50,7 @@ let build_metrics trim phases =
           let accu = (Addr.Hash_set.create () ,
                       Superset_risg.G.create ()) in
           let instance_trim = make_gatherer accu in         
-          (fun x -> instance_trim @@ trim x), Map.add metrics name accu
+          (fun x -> instance_trim @@ trim x), Map.set metrics name accu
         | None -> trim,metrics
       )
 
@@ -64,7 +64,7 @@ let build_setops trim setops =
             let accu = (Addr.Hash_set.create () ,
                         Superset_risg.G.create ()) in
             let instance_trim = make_gatherer accu in
-            let metrics = Map.add metrics f accu in
+            let metrics = Map.set metrics f accu in
             ((fun x -> instance_trim @@ trim x), metrics) in
         add (add (trim,metrics) f1) f2
       )
@@ -84,7 +84,7 @@ let apply_setops metrics setops =
                   if not (Hash_set.mem fmetric2 fv) then
                     Hash_set.add s fv
                 );
-              Map.add results colr s
+              Map.set results colr s
             | Union ->
               let s = Addr.Hash_set.create () in
               Hash_set.iter fmetric1 ~f:(fun fv ->
@@ -93,7 +93,7 @@ let apply_setops metrics setops =
               Hash_set.iter fmetric2 ~f:(fun fv ->
                   Hash_set.add s fv
                 );
-              Map.add results colr s
+              Map.set results colr s
             | Intersection ->
               let s = Addr.Hash_set.create () in
               Hash_set.iter fmetric1 ~f:(fun fv ->
@@ -104,7 +104,7 @@ let apply_setops metrics setops =
                   if (Hash_set.mem fmetric1 fv) then
                     Hash_set.add s fv
                 );
-              Map.add results colr s
+              Map.set results colr s
           )
         | None, None ->
           report_err colr f1;
@@ -218,14 +218,14 @@ module Program(Conf : Provider)  = struct
     let _ = 
       if options.save_gt then
         let gt = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
-                   options.target |> ok_exn in
+            options.target |> ok_exn in
         let img  = Common.img_of_filename options.target in
         let gt = 
           Seq.(filter gt ~f:(fun e ->
-                   Superset.with_img ~accu:false img 
-                     ~f:(fun ~accu mem ->
-                       accu || Memory.(contains mem e))
-          )) in
+              Superset.with_img ~accu:false img 
+                ~f:(fun ~accu mem ->
+                    accu || Memory.(contains mem e))
+            )) in
         let gt = Seq.map gt ~f:Addr.to_string in
         Seq.iter gt ~f:print_endline;
         exit 0
@@ -342,9 +342,9 @@ module Program(Conf : Provider)  = struct
                   ) ; 
               )
           );
-        let results = String.Map.add results "True Positives" tps in
-        let results = String.Map.add results "False Positives" fps in
-        let results = String.Map.add results "False Negatives" fns in
+        let results = String.Map.set results "True Positives" tps in
+        let results = String.Map.set results "False Positives" fps in
+        let results = String.Map.set results "False Negatives" fns in
         let s = sprintf "false negatives: %d" Hash_set.(length fns) in
         print_endline s;
         let s = sprintf "remaining: %d" Hash_set.(length remaining) in

@@ -1,5 +1,5 @@
 open Cmdliner
-open Core_kernel.Std
+open Core_kernel
 open Metrics
 open Bap.Std
 
@@ -286,52 +286,52 @@ let with_phases superset phases =
           let analyses = 
             List.foldi ~init:analyses Trim.default_tags
               ~f:(fun idx analyses tag_func ->
-                  Map.add analyses idx (Some(tag_func), None, None))
+                  Map.set analyses idx (Some(tag_func), None, None))
           in
           (*let discard_arg ?min_size = 
             Invariants.tag_branch_violations in
-            let analyses = Map.add analyses (Map.length analyses)
+            let analyses = Map.set analyses (Map.length analyses)
              (None, Some(discard_arg), None) in*)
           let analyses = 
-            Map.add analyses (Map.length analyses)
+            Map.set analyses (Map.length analyses)
               (None, Some("Tag loop contradictions",
                           Sheathed.tag_loop_contradictions), None) in
           analyses
-        (*Map.add analyses (Map.length analyses)
+        (*Map.set analyses (Map.length analyses)
           (None, Some("Tag grammar", tag_grammar), None)*)
         | Target_not_in_memory -> 
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (Some(("Tag target not in mem", Trim.tag_target_not_in_mem)), None, None)
         | Target_is_bad ->
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (Some(("Tag target is bad", Trim.tag_target_is_bad)), None, None)
         | Target_within_body -> 
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (Some(("Tag target in body", Trim.tag_target_in_body)), None, None)
         | Invalid_memory_access -> 
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (Some(("Tag non mem access", Trim.tag_non_mem_access)), None, None)
         | Non_instruction ->
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (Some(("Tag non insn", Trim.tag_non_insn)), None, None)
         | Component_body -> 
-          Map.add analyses Map.(length analyses) 
+          Map.set analyses Map.(length analyses) 
             (None, Some("Tag loop contradictions", Sheathed.tag_loop_contradictions), None)
         | Cross_layer_invalidation ->
           let discard_arg ?min_size = 
             Invariants.tag_branch_violations in
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (None, Some("Tag branch violations", discard_arg), None)
         | Grammar_convergent -> 
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (None, Some("Tag grammar", tag_grammar), None)
         | Tree_set -> 
-          Map.add analyses Map.(length analyses)
+          Map.set analyses Map.(length analyses)
             (None, None, Some("Decision trees", Decision_tree_set.decision_trees_of_superset))
       ) in
-  let analyses = Map.add analyses (1+Map.(length analyses))
+  let analyses = Map.set analyses (1+Map.(length analyses))
       (Some("Tag success",Trim.tag_success),None,None) in
-  (*let analyses = Map.add analyses (1+Map.(length analyses))
+  (*let analyses = Map.set analyses (1+Map.(length analyses))
                        (Some(Trim.tag_target_is_bad),None,None) in*)
   let (tag_funcs, analysis_funcs, make_tree) =
     let x, y, z = 

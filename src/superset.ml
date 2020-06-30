@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 open Or_error
@@ -103,7 +103,7 @@ let get_non_fall_through_edges superset =
   Superset_risg.G.fold_edges
     (fun child parent jmps -> 
        if is_fall_through superset parent child then
-         Map.add jmps child parent
+         Map.set jmps child parent
        else jmps
     ) g Addr.Map.empty
 
@@ -189,7 +189,7 @@ let remove superset addr =
 let add_to_map superset mem insn = 
   let insn_map = get_map superset in
   let addr = (Memory.min_addr mem) in
-  let insn_map = Addr.Map.add insn_map addr (mem, insn) in
+  let insn_map = Addr.Map.set insn_map addr (mem, insn) in
   rebuild ~insn_map superset
 
 let add_to_graph superset mem insn =
@@ -253,7 +253,7 @@ let lift arch insns =
         match lift_insn lifter (mem, insn) with
         | Some (mem, bil) -> 
           let addr = Memory.min_addr mem in 
-          Map.add lifted_superset ~key:addr
+          Map.set lifted_superset ~key:addr
             ~data:(bil, Memory.length mem)
         | None -> lifted_superset
       )

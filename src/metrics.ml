@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel.Std
+open Core_kernel
 
 
 type format_as   = | Latex
@@ -14,7 +14,7 @@ type metrics = {
   detected_entries    : int;
   actual_entries      : int;
   trimmed             : int list;
-}
+} (* TODO deriving protobuf *)
 
 module InvariantTrackingApplicator = struct
 end
@@ -45,38 +45,38 @@ module type PerMarkTracker = sig
   type acc = (Addr.Set.t Addr.Map.t) ref
   val accu : acc
 end
-                                                                           
+
 module PerMarkTrackingReducer(M : PerMarkTracker) : Trim.Reducer =
-  struct
-    type acc = M.acc
-    let accu = M.accu
-    let cur_root = ref None
-    let check_pre superset accu addr =
-      (match !cur_root with
-      | Some x ->
-         accu :=
-           Map.update !accu x ~f:(fun s ->
-               match s with
-               | None -> Addr.Set.empty
-               | Some s -> Set.add s addr
-             );
-      | None -> cur_root:=Some(addr));
-      accu
-    let check_post superset (accu : acc) addr =
-      (match !cur_root with
-      | None -> ()
-      | Some x -> if x = addr then cur_root := None);
-      accu
-    let check_elim _ _ _ = true
-    let mark superset accu addr =
-      let cur_root = Option.value_exn !cur_root in
-      accu :=
-        Map.update !accu cur_root ~f:(fun s ->
-            match s with
-            | None -> Addr.Set.empty
-            | Some s -> Set.add s addr
-          );
-  end
+struct
+  type acc = M.acc
+  let accu = M.accu
+  let cur_root = ref None
+  let check_pre superset accu addr =
+    (match !cur_root with
+     | Some x ->
+       accu :=
+         Map.update !accu x ~f:(fun s ->
+             match s with
+             | None -> Addr.Set.empty
+             | Some s -> Set.add s addr
+           );
+     | None -> cur_root:=Some(addr));
+    accu
+  let check_post superset (accu : acc) addr =
+    (match !cur_root with
+     | None -> ()
+     | Some x -> if x = addr then cur_root := None);
+    accu
+  let check_elim _ _ _ = true
+  let mark superset accu addr =
+    let cur_root = Option.value_exn !cur_root in
+    accu :=
+      Map.update !accu cur_root ~f:(fun s ->
+          match s with
+          | None -> Addr.Set.empty
+          | Some s -> Set.add s addr
+        );
+end
 
 let print_dot superset colorings =
   (*if not (colorings = String.Map.empty) then*)

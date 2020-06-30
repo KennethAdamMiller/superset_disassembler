@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Graphlib.Std
 open Graph
@@ -66,7 +66,7 @@ let tails_of_conflicts conflicts insn_isg =
           | _ -> 
             let added_choices =
               Set.inter added_choices (Addr.Set.of_list sheath) in
-            (Addr.Map.add tails ~key:possible_tail ~data:sheath, added_choices)
+            (Addr.Map.set tails ~key:possible_tail ~data:sheath, added_choices)
         ) possible_tails in 
   tails
 
@@ -192,7 +192,7 @@ let calculate_deltas superset ?entries is_option =
         delta := Some(insns, datas);
         insns, datas in
     if is_option addr then (
-      deltas := Addr.Map.add !deltas addr (insns, datas);
+      deltas := Addr.Map.set !deltas addr (insns, datas);
       delta := None
     ) else (
       add_data_of_insn datas addr;

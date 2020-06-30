@@ -25,6 +25,9 @@ remove: [
 
 depends: [
     "bap"
+    "core_kernel"
+    "cmdliner"
+    "ocamlgraph"
 ]
 
 depexts: [

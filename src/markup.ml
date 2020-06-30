@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel.Std
+open Core_kernel
 
 let mark_threshold_with_pmap ?visited ?datas superset pmap threshold = 
   let visited = Option.value visited 

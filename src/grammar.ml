@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 let identify_branches superset =
@@ -18,7 +18,7 @@ let identify_branches superset =
             let ft = Superset.fall_through_of superset addr in
             if not Addr.(ft = child) && 
                not Addr.(addr = child) then
-              deferred := Map.add !deferred ft (child, addr)
+              deferred := Map.set !deferred ft (child, addr)
         );
   in
   let confirm_branches addr = 

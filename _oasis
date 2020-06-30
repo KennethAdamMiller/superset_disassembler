@@ -42,11 +42,11 @@ Executable superset_disasm
   Install:        	true
   MainIs:	  	superset_disasm.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, bap.plugins, cmdliner, threads, superset_disassemblers
+  BuildDepends:   	core_kernel, bap, cmdliner, threads, superset_disassemblers
 
 Executable test_superset
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, bap.plugins, ocamlgraph
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, ocamlgraph
   CompiledObject:	best

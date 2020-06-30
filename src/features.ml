@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 module Dis = Disasm_expert
@@ -37,18 +37,18 @@ let find_free_insns superset =
   let to_clamp =
     Seq.fold ~init:(Addr.Set.empty)
       ~f:(fun (to_clamp) (addr,(memory,_)) ->
-        let len = Memory.length memory in
-        let conflicts = Superset_risg.range_seq_of_conflicts
-                          ~mem addr len in
-        let no_conflicts = Seq.is_empty conflicts in
-        Seq.iter conflicts ~f:(fun c ->
-            Hash_set.add all_conflicts c);
-        if no_conflicts && not Hash_set.(mem all_conflicts addr) then
-          Set.add to_clamp addr
-        else (
-          to_clamp
-        )
-      ) insns in
+          let len = Memory.length memory in
+          let conflicts = Superset_risg.range_seq_of_conflicts
+              ~mem addr len in
+          let no_conflicts = Seq.is_empty conflicts in
+          Seq.iter conflicts ~f:(fun c ->
+              Hash_set.add all_conflicts c);
+          if no_conflicts && not Hash_set.(mem all_conflicts addr) then
+            Set.add to_clamp addr
+          else (
+            to_clamp
+          )
+        ) insns in
   to_clamp
 (*Hash_set.fold all_conflicts ~init:to_clamp ~f:Set.remove*)
 
@@ -100,7 +100,7 @@ let extract_loop_addrs superset =
         if List.length loop >= 2 then
           Option.value ~default:addrs 
             Option.(map List.(hd loop) ~f:(fun addr -> 
-                Map.add addrs addr loop))
+                Map.set addrs addr loop))
         else addrs
       )
 
@@ -118,7 +118,7 @@ let extract_constants superset =
     ~f:(fun constants (m, constant) -> 
         if Superset.contains_addr superset constant
         && Superset_risg.G.(mem_vertex insn_risg constant) then
-          Map.add constants Memory.(min_addr m) constant
+          Map.set constants Memory.(min_addr m) constant
         else constants
       )
 
@@ -144,7 +144,7 @@ let pre_ssa superset lift factors var_use addr =
     Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
         let use_vars = Abstract_ssa.use_ssa bil in
         Set.iter use_vars ~f:(fun use_var -> 
-            var_use := Map.add !var_use use_var addr
+            var_use := Map.set !var_use use_var addr
           )
       )
   | None -> ()
@@ -156,7 +156,7 @@ let pre_freevarssa superset lift factors var_use addr =
     Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
         let use_vars = Abstract_ssa.use_freevars bil in
         Set.iter use_vars ~f:(fun use_var -> 
-            var_use := Map.add !var_use use_var addr
+            var_use := Map.set !var_use use_var addr
           )
       )
   | None -> ()
@@ -214,7 +214,7 @@ let extract_ssa_to_map superset =
   let var_use = ref Exp.Map.empty in
   let defuse_map = ref Addr.Map.empty in
   let add_to_map def use = 
-    defuse_map := Map.add !defuse_map def use in
+    defuse_map := Map.set !defuse_map def use in
   let module Target = (val target_of_arch 
                           Superset.(get_arch superset)) in  
   let lift (mem, insn) = 
@@ -234,7 +234,7 @@ let extract_freevarssa_to_map superset =
   let var_use = ref Var.Map.empty in
   let defuse_map = ref Addr.Map.empty in
   let add_to_map def use = 
-    defuse_map := Map.add !defuse_map def use in
+    defuse_map := Map.set !defuse_map def use in
   let module Target = (val target_of_arch 
                           Superset.(get_arch superset)) in  
   let lift (mem, insn) = 
@@ -269,7 +269,7 @@ let extract_cross_section_jmps superset =
              let ft2 = Superset.is_fall_through superset dst src in
              if (ft1 || ft2) then (
                Superset_risg.G.remove_edge insn_risg src dst;
-               Map.add csedges src dst
+               Map.set csedges src dst
              ) else csedges
            else csedges
          | _, _ -> csedges
@@ -302,7 +302,7 @@ let time ?(name="") f x =
   let s = sprintf "%s execution time: %fs\n" name (Sys.time() -. t) in
   print_endline s;
   fx
-  
+
 let extract_trim_limited_clamped superset = 
   let visited = Addr.Hash_set.create () in
   let callsites = Superset.get_callsites ~threshold:0 superset in
@@ -310,7 +310,7 @@ let extract_trim_limited_clamped superset =
   let superset = time ~name:"tagging callsites: " f superset in
   let () = Markup.clear_bad superset in
   let superset = time ~name:"extract_trim_clamped "
-                   extract_trim_clamped superset in
+      extract_trim_clamped superset in
   Markup.check_convergence superset visited;
   superset
 
@@ -351,7 +351,7 @@ let fixpoint_map superset feature_pmap =
             | None -> ()
             | Some(p) ->
               prev :=  List.append p  !prev;
-              feature_pmap := Map.add !feature_pmap v !prev;
+              feature_pmap := Map.set !feature_pmap v !prev;
           ) ~visited insn_isg cur;
         !feature_pmap
       else feature_pmap
@@ -425,13 +425,13 @@ let unfiltered _ = ident
 let exfiltset : (unit setexfilt) String.Map.t = String.Map.empty
 let exfiltmap : ((unit, Addr.t) mapexfilt) String.Map.t = String.Map.empty
 
-let exfiltset = String.Map.add exfiltset "FixpointGrammar"
+let exfiltset = String.Map.set exfiltset "FixpointGrammar"
     ((fun x -> transform (fixpoint_grammar x 0)), unfiltered)
-let exfiltset = String.Map.add exfiltset "FixpointTails"
+let exfiltset = String.Map.set exfiltset "FixpointTails"
     ((fun x -> transform (fixpoint_tails x)), unfiltered)
-let exfiltset = String.Map.add exfiltset "FixpointFreevarSSA"
+let exfiltset = String.Map.set exfiltset "FixpointFreevarSSA"
     ((fun x -> transform (fixpoint_freevarssa x 0)), unfiltered)
-let exfiltmap = String.Map.add
+let exfiltmap = String.Map.set
     exfiltmap "SSA" (extract_ssa_to_map, unfiltered)
 let get_branches superset = 
   let insn_risg = Superset.get_graph superset in
@@ -448,12 +448,12 @@ let branch_map_of_branches superset branches =
       let target = 
         List.find_exn Superset_risg.G.(pred insn_risg fpbranch) 
           ~f:Superset.(is_fall_through superset fpbranch) in
-      Map.add fpbranchmap fpbranch target
+      Map.set fpbranchmap fpbranch target
     )
 let extract_fp_branches superset = 
   let branches = get_branches superset in
   branch_map_of_branches superset branches
-let exfiltmap = String.Map.add
+let exfiltmap = String.Map.set
     exfiltmap "FalseBranchMap" (extract_fp_branches, unfiltered)
 let extract_fp_branches superset = 
   let branches = get_branches superset in
@@ -469,19 +469,19 @@ let extract_filter_fp_branches superset =
   let _ = Markup.clear_bad superset in
   let branches = Set.diff branches (transform violations) in
   branch_map_of_branches superset branches
-let exfiltmap = String.Map.add
+let exfiltmap = String.Map.set
     exfiltmap "FilteredFalseBranchMap" (extract_filter_fp_branches, unfiltered)
-let exfiltmap = String.Map.add
+let exfiltmap = String.Map.set
     exfiltmap "FreeVarSSA" (extract_freevarssa_to_map, unfiltered)
-let exfiltmap = String.Map.add
+let exfiltmap = String.Map.set
     exfiltmap "SSA" (extract_ssa_to_map, unfiltered)
 let linear_grammar superset =
   let insn_risg = Superset.get_graph superset in
   let entries = Superset_risg.entries_of_isg insn_risg in
   transform Grammar.(linear_branch_sweep superset entries)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "LinearGrammar" (linear_grammar, unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "UnfilteredGrammar" (get_branches, unfiltered)
 let classic_grammar superset =
   transform Grammar.(identify_branches superset)
@@ -490,20 +490,20 @@ let branch_violations superset =
   let violations = Markup.collect_bad superset in
   let _ = Markup.clear_bad superset in
   transform violations
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "BranchViolations" (branch_violations, unfiltered)
 let layer_violations superset = 
   let superset = Invariants.tag_layer_violations superset in
   let violations = Markup.collect_bad superset in
   let _ = Markup.clear_bad superset in
   transform violations
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "LayerViolations" (layer_violations, unfiltered)
 let filtered_grammar superset = 
   let violations = (layer_violations superset) in
   let branches = Set.diff (get_branches superset) violations in
   Set.diff branches (branch_violations superset)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "FilteredGrammar" (filtered_grammar, unfiltered)
 let loop_grammar superset =
   let superset = Invariants.tag_layer_violations superset in
@@ -523,17 +523,17 @@ let loop_grammar superset =
         else addrs
       ) in
   Set.filter branches ~f:(fun x -> Set.(mem loop_addrs x))
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "LoopGrammar" (loop_grammar, unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "ClassicGrammar" (classic_grammar, unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "Callsites3" ((fun x -> transform (Superset.get_callsites ~threshold:6 x)), unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "Clamped" (find_free_insns, unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "RestrictedClamped" (restricted_clamp, unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "ExtendedClamped" (extended_clamp, unfiltered)
 let extract_loops superset = 
   let loop_addrs = extract_loop_addrs superset in
@@ -542,7 +542,7 @@ let extract_loops superset =
         List.fold ~init:addrs data ~f:Set.add
       else addrs
     )
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "UnfilteredSCC" (extract_loops,unfiltered)
 let extract_filter_loops superset = 
   let loop_addrs = extract_filtered_loop_addrs superset in
@@ -562,9 +562,9 @@ let extract_loops_with_break superset =
             ) in
       if has_break then Set.union loops loop else loops
     ) 
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "LoopsWithBreak" (extract_loops_with_break,unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "SCC" (extract_filter_loops,unfiltered)
 let extract_mirror_filter_loops superset = 
   let insn_risg = Superset.get_graph superset in
@@ -574,7 +574,7 @@ let extract_mirror_filter_loops superset =
   Map.fold ~init:Addr.Set.empty loop_addrs ~f:(fun ~key ~data addrs -> 
       List.fold ~init:addrs data ~f:Set.add
     )  
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "MirrorSCC" (extract_mirror_filter_loops,unfiltered)
 let extract_constants_to_set superset = 
   let constants = extract_constants superset in
@@ -608,9 +608,9 @@ let collect_descendants superset ?insn_isg ?visited ?datas targets =
         Superset.mark_descendents_at ~insn_isg ~visited ~datas superset v      
     )
 
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "NoExit" (extract_exitless, unfiltered)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "Constant" (extract_constants_to_set,unfiltered)
 let extract_union_find_compatible superset =  
   Addr.Set.empty
@@ -618,7 +618,7 @@ let extract_union_find_compatible superset =
     that can be merged together tenatively. Add the clamped, constants and
     unfiltered grammar. For all added, maintain an Int.Map from union
     find id to number of features.  *)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "UnionFindCompatible" (extract_union_find_compatible,unfiltered)
 let extract_union_find_branches superset =
   (*let insn_risg = Superset.get_graph superset in
@@ -641,7 +641,7 @@ let extract_union_find_branches superset =
             insns, datas
           )
     )*)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "UnionFindBranches" (extract_union_find_branches,unfiltered)
 let extract_img_entry superset = 
   let img = Superset.get_img superset in
@@ -649,7 +649,7 @@ let extract_img_entry superset =
       Addr.(to_string Image.(entry_point img)) in
   print_endline s;
   Set.add Addr.Set.empty Image.(entry_point img)
-let exfiltset = String.Map.add
+let exfiltset = String.Map.set
     exfiltset "ImgEntry" (extract_img_entry, unfiltered)
 let extract_trim_callsites superset =
   let visited = Addr.Hash_set.create () in
@@ -776,37 +776,37 @@ let discard_edges superset =
   superset
 
 let featuremap : ((unit Superset.t -> unit Superset.t) * fkind) String.Map.t = String.Map.empty
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "Callsites3" (extract_trim_callsites,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "DiscardEdges" (discard_edges,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "LoopsWithBreak" (extract_trim_loops_with_break,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "ImgEntry" (extract_trim_entry,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "BranchViolations" (extract_trim_branch_violations,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "LayerViolations" (extract_trim_layer_violations,AppSuperset)
-(*let featuremap = String.Map.add
+(*let featuremap = String.Map.set
     featuremap "SCC" (extract_tag_loops,AppFactors)*)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "NoExit" (extract_trim_noexit,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "TrimClamped" (extract_trim_clamped,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "TrimLimitedClamped"
     (extract_trim_limited_clamped,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "TrimFixpointGrammar"
     (extract_trim_fixpoint_grammar,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "TrimFixpointSSA"
     (extract_trim_fixpoint_ssa,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "TrimFixpointFreevarSSA"
     (extract_trim_fixpoint_freevarssa,AppSuperset)
-let featuremap = String.Map.add
+let featuremap = String.Map.set
     featuremap "TrimFixpointTails"
     (extract_trim_fixpoint_tails,AppSuperset)
 
@@ -823,8 +823,8 @@ let apply_featureset featureset superset =
   superset
 
 let fdists = String.Map.empty
-let fdists = String.Map.add fdists "FixpointGrammar" 5
-let fdists = String.Map.add fdists "FixpointFreevarSSA" 3
+let fdists = String.Map.set fdists "FixpointGrammar" 5
+let fdists = String.Map.set fdists "FixpointFreevarSSA" 3
 
 let make_featurepmap featureset superset = 
   List.fold ~f:(fun (feature_pmap) feature -> 

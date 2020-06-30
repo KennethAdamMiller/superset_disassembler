@@ -1,6 +1,6 @@
 open Bap.Std
 open Graph
-open Core_kernel.Std
+open Core_kernel
 
 module G = Imperative.Digraph.ConcreteBidirectional(struct 
     type t = Addr.t 
@@ -143,8 +143,8 @@ let conflicts_within_insns insn_map keep =
 let find_all_conflicts ?mem insn_map =
   List.fold Map.(keys insn_map) ~init:Addr.Set.empty
     ~f:(fun conflicts addr -> 
-      conflicts_within_insn_at ?mem ~conflicts insn_map addr
-    )
+        conflicts_within_insn_at ?mem ~conflicts insn_map addr
+      )
 
 let seq_of_addr_range addr len = 
   let open Seq.Generator in
