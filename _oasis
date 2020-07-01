@@ -5,9 +5,9 @@ Synopsis:    A whole program, superset disassembler equipped to discriminate mor
 Authors:     Kenneth Adam Miller <kennethadammiller@gmail.com>
 Maintainers: Kenneth Adam Miller <kennethadammiller@gmail.com>
 License:     MIT
-Plugins:     META (0.4)
+Plugins:     META (0.4), DevFiles (0.4)
 AlphaFeatures: ocamlbuild_more_args
-BuildTools: ocamlbuild, camlp4o
+BuildTools: ocamlbuild
 XOCamlbuildExtraArgs: -j 5
 BuildDepends:
               core_kernel,
@@ -37,6 +37,15 @@ Library superset_disassemblers
                         Features,
                         Report
 
+Document "superset_disassemblers_api"
+  Type: ocamlbuild (0.4)
+  BuildTools: ocamldoc
+  Title: API reference for FooB
+  XOCamlbuildPath: .
+  XOCamlbuildExtraArgs:
+    "-docflags '-colorize-code -short-functors -charset utf-8'"
+  XOCamlbuildLibraries: superset_disassemblers
+
 Executable superset_disasm
   Path:			src/
   Install:        	true
@@ -48,5 +57,5 @@ Executable test_superset
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, ocamlgraph
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, ocamlgraph, ppx_deriving, ppx_deriving_protobuf
   CompiledObject:	best

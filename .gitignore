@@ -9,3 +9,11 @@
 *.zip
 *.graph
 *.txt
+/src/superset_disassemblers.mldylib
+/src/superset_disassemblers.mllib
+/superset_disassemblers_api.docdir
+/_tags
+/src/superset_disassembler.plugin
+/configure
+/myocamlbuild.ml
+/src/META

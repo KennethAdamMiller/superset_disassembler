@@ -3,6 +3,7 @@ open Bap.Std
 open Regular.Std
 open Format
 open Bap_knowledge.Knowledge
+open Bap_future.Std
 
 include Self()
 
@@ -23,7 +24,9 @@ let () =
       (* the superset disassembler can't be registered as a pass
          because by that time the original disassembler has already run and
          built the IR *)
-      Config.
-        let f = Stream.next (Project.Info.file proj) in
-        Project.register_pass ~deps (Superset.disasm)
+      let superdisasm proj =
+        Stream.observe Project.Info.code (fun code ->
+            ()
+          ) in
+      Project.register_pass' ~deps (superdisasm)
     )

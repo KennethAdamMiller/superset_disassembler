@@ -14,7 +14,7 @@ type metrics = {
   detected_entries    : int;
   actual_entries      : int;
   trimmed             : int list;
-} (* TODO deriving protobuf *)
+} [@@deriving sexp, bin_io]
 
 module InvariantTrackingApplicator = struct
 end
