@@ -17,11 +17,6 @@ module P = Persistent.Digraph.ConcreteBidirectional(struct
     let equal = Addr.equal
   end)
 
-module Kruskal = Kruskal.Make(G)(struct
-    type t = G.E.label
-    let compare _ _ = 0
-  end)
-
 module Topological = Topological.Make(G)
 module Dominator = Dominator.Make(G)
 module Oper = Oper.I(G)

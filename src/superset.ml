@@ -12,13 +12,15 @@ type 'a t = {
   arch      : arch;
   img       : Image.t option;
   brancher  : Brancher.t;
+  (* TODO registerable per-feature info, perhaps using the polymorphic
+     data??  *)
   data      : 'a;
+
+  (* TODO: needs to become an hash map *)
   insn_map  : (mem * (Dis.full_insn option)) Addr.Map.t;
-  (* TODO: needs to become an array *)
   insn_risg : Superset_risg.t;
   bad       : Addr.Hash_set.t;
   keep      : Addr.Hash_set.t;
-  (* TODO registerable per-feature info? *)
   (* marked data  *)
   (* visited *)
   (* union_find *)

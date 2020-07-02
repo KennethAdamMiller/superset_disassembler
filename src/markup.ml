@@ -32,8 +32,6 @@ let collect_bad superset =
       ~pre:(fun _ _ -> ()) ~post:(fun _ _ -> ()) () in
   visited
 
-let clear_bad superset = Superset.clear_all_bad superset
-
 (* TODO need to do more to make sure that those are actually
    retained, since it may be the case that a descendant identifies as
    bad as well.

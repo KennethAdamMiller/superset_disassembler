@@ -144,7 +144,7 @@ let collect_set_report
     r in
   let extp = pick_addr (inter tps filtered) in
   let exfp = pick_addr (inter fps filtered) in
-  Markup.clear_bad superset;
+  Superset.clear_all_bad superset;
   let total_cases_identified = Hash_set.length filtered in
   {
     actual_tp_cases;
