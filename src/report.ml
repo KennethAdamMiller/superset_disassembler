@@ -75,21 +75,21 @@ let collect_set_report
       ) in
   let visited = Addr.Hash_set.create () in
   let outbound = Addr.Hash_set.create () in
-  let insn_risg = Superset.get_graph superset in
-  let insn_isg  = Superset_risg.Oper.mirror insn_risg in
   Addr.Set.iter filtered 
     ~f:(fun e -> 
         if not Hash_set.(mem tps e) && not Hash_set.(mem fps e) then (
           if not (Hash_set.mem visited e) && 
-             Superset_risg.G.mem_vertex insn_isg e then
-            Superset_risg.Dfs.prefix_component (fun tp -> 
+             Superset.Core.mem superset e then
+            Superset.with_descendents_at ~f:(fun tp -> 
                 let mark_bad addr = 
-                  if Superset_risg.G.mem_vertex insn_isg addr then
-                    Superset.mark_bad superset addr in
-                Superset.with_data_of_insn superset tp ~f:mark_bad;
-                Superset.with_data_of_insn superset tp ~f:(Hash_set.add outbound);
+                  if Superset.Core.mem superset addr then
+                    Superset.Core.mark_bad superset addr in
+                Superset.Occlusion.with_data_of_insn
+                  superset tp ~f:mark_bad;
+                Superset.Occlusion.with_data_of_insn
+                  superset tp ~f:(Hash_set.add outbound);
                 Hash_set.add visited tp;
-              ) insn_isg e
+              ) ?post:None superset e
         )
       );
   let outbound_inflicted_fn =
@@ -144,7 +144,7 @@ let collect_set_report
     r in
   let extp = pick_addr (inter tps filtered) in
   let exfp = pick_addr (inter fps filtered) in
-  Superset.clear_all_bad superset;
+  Superset.Core.clear_all_bad superset;
   let total_cases_identified = Hash_set.length filtered in
   {
     actual_tp_cases;

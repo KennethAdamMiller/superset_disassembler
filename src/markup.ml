@@ -6,25 +6,22 @@ let mark_threshold_with_pmap ?visited ?datas superset pmap threshold =
       ~default:(Addr.Hash_set.create ()) in
   let datas = Option.value datas
       ~default:(Addr.Hash_set.create ()) in
-  let insn_risg = Superset.get_graph superset in
-  let insn_isg = Superset_risg.Oper.mirror insn_risg in
   Map.iteri pmap ~f:(fun ~key ~data ->
       let addr = key in
       let p = data in
       if p > threshold then (
-        if Superset_risg.G.mem_vertex insn_risg addr then
-          Superset.mark_descendents_at
-            ~datas ~visited ~insn_isg superset addr;
+        if Superset.Core.mem superset addr then
+          Superset.mark_descendent_bodies_at
+            ~datas ~visited superset addr;
       )
     )
 
 let mark_tps superset visited = 
-  let insn_risg = Superset.get_graph superset in
   (*if Superset_risg.G.mem_vertex insn_risg bad then*)
   Hash_set.iter visited 
     ~f:(fun tp -> 
-        if Superset_risg.G.mem_vertex insn_risg tp then
-          Superset.clear_bad superset tp)
+        if Superset.Core.mem superset tp then
+          Superset.Core.clear_bad superset tp)
 
 let collect_bad superset =
   let visited = Addr.Hash_set.create () in
@@ -43,13 +40,14 @@ let enforce_uncertain superset visited datas pmap =
       let addr = key in
       let prob = data in      
       let mark_good addr =
-        Superset.clear_bad superset addr in
+        Superset.Core.clear_bad superset addr in
       if prob >= 0.85 then
         mark_good addr
     )
 
+(* TODO this should just be a modular implicit on the iter function *)
 let check_convergence superset visited =
   Hash_set.iter visited ~f:(fun tp -> 
-      Superset.clear_bad superset tp
+      Superset.Core.clear_bad superset tp
     )
 

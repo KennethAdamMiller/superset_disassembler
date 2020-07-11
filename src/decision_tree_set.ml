@@ -10,14 +10,14 @@ open Graph
       graph with which it is paired with other members of the
       enclosing decision_tree_set *)
 
-let conflicts_of_entries entries insn_map =
+let conflicts_of_entries superset entries =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
     (fun conflicted_entries entry -> 
        if not (Hash_set.mem visited_entries entry) then (
          Hash_set.add visited_entries entry;
          let in_entry_conflicts = 
-           Superset_risg.conflicts_within_insn_at insn_map entry in
+           Superset.Occlusion.conflicts_within_insn_at superset entry in
          let conflicts = Addr.Hash_set.create () in
          Hash_set.add conflicts entry;
          Set.iter in_entry_conflicts 
@@ -35,8 +35,8 @@ let conflicts_of_entries entries insn_map =
        ) else conflicted_entries
     )
 
-let tails_of_conflicts conflicts insn_isg = 
-  let possible_tails = Superset_risg.mergers_of_isg insn_isg in
+let tails_of_conflicts superset conflicts = 
+  let possible_tails = Superset.mergers superset in
   (* This tail is the particular instruction
      that is the fall through target of several potential
      competitors. We use this instruction against the
@@ -51,15 +51,13 @@ let tails_of_conflicts conflicts insn_isg =
           let f sheath poss_conflict =
             let not_added = not (Set.mem added_choices poss_conflict) in
             let is_conflict = Set.mem conflicts poss_conflict in
-            let is_connected = 
-              match Superset_risg.G.find_all_edges
-                      insn_isg possible_tail poss_conflict with
-              | [] -> false | _ -> true in
+            let is_connected = Superset.check_connected
+                superset possible_tail poss_conflict in
             if not_added && is_conflict && is_connected then
               poss_conflict :: sheath
             else sheath in
           let sheath = List.fold_left
-              (Superset_risg.G.succ insn_isg possible_tail) ~init:[] ~f
+              (Superset.ISG.ancestors superset possible_tail) ~init:[] ~f
           in
           match sheath with
           | [] | _ :: []-> tails, added_choices
@@ -70,7 +68,7 @@ let tails_of_conflicts conflicts insn_isg =
         ) possible_tails in 
   tails
 
-let decision_tree_of_entries conflicted_entries entries tails insn_isg =
+let decision_tree_of_entries superset conflicted_entries entries tails =
   let visited = Addr.Hash_set.create () in
   let visited_choices = Addr.Hash_set.create () in
   let add_choices decision_tree current_vert = 
@@ -114,7 +112,8 @@ let decision_tree_of_entries conflicted_entries entries tails insn_isg =
     in
     (* Would like to have fold_component; not available in this
        version *)
-    Superset_risg.Dfs.prefix_component link_choices insn_isg entry;
+    Superset.with_ancestors_at superset entry ?post:None ~f:link_choices;
+    (*Superset_risg.Dfs.prefix_component link_choices insn_isg entry;*)
   in
   let conflicted_trees = 
     List.filter_map conflicted_entries ~f:(fun conflicted ->
@@ -143,17 +142,14 @@ let decision_tree_of_entries conflicted_entries entries tails insn_isg =
 (** Accepts a per instruction control flow graph, and a map from addr *)
 (** to (mem, insn) *)
 let decision_trees_of_superset superset = 
-  let open Superset in
-  let insn_map = Superset.get_map superset in
-  let insn_risg = Superset.get_graph superset in
   (* Here, for each vertex, look up the insn from the map and *)
   (* identify conflicts. *)
-  let conflicts = Superset_risg.find_all_conflicts insn_map in
+  let conflicts = Superset.Occlusion.find_all_conflicts superset in
   (* entries variable:
      We want to know the superset of all nodes that could be the
      terminating point that would otherwise be the return instruction
      of a function. *)
-  let entries = Superset_risg.entries_of_isg insn_risg in  
+  let entries = Superset.entries_of_isg superset in  
   (*
      we need to keep track of the subset of potential choices 
      that fall in line with the normal control flow graph, and
@@ -162,23 +158,41 @@ let decision_trees_of_superset superset =
      instructions to check for conflicts, we know which are tails
      in order to properly construct the sheath type.
   *)
-  let tails = tails_of_conflicts conflicts insn_risg in
+  let tails = tails_of_conflicts superset conflicts in
   (* It may be that some entries are accidental indirections that *)
   (* happen to preside at the intended entry. These must map to to an *)
   (* entirely distinct interpretation. *)
-  let conflicted_entries = conflicts_of_entries entries insn_map in
+  let conflicted_entries = conflicts_of_entries superset entries in
   (* For each of the potentially conflicting entries, construct a *)
   (* decision tree. *)
   let decision_trees = decision_tree_of_entries
-      conflicted_entries entries tails insn_risg in
+      superset conflicted_entries entries tails in
   decision_trees
 
+let insn_is_option superset addr = 
+  let open Superset in
+  let len = Superset.Inspection.len_at superset addr in
+  let bound = Addr.(addr ++ len) in
+  let previous = Superset.ISG.descendants superset addr in
+  List.fold ~init:false previous ~f:(fun current descedant -> 
+      if not current then
+        let further = Superset.ISG.ancestors superset descedant in
+        List.fold ~init:current further ~f:(fun current opt -> 
+            if not current then
+              if Addr.(addr <= opt) && Addr.(opt < bound) then
+                true
+              else false
+            else current
+          )
+      else current
+    )
+
 let calculate_deltas superset ?entries is_option = 
-  let insn_risg = Superset.get_graph superset in
   let entries = Option.value entries 
-      ~default:(Superset_risg.entries_of_isg insn_risg) in
+      ~default:(Superset.entries_of_isg superset) in
   let add_data_of_insn dataset at = 
-    Superset.with_data_of_insn superset at ~f:(Hash_set.add dataset)
+    Superset.Occlusion.with_data_of_insn
+      superset at ~f:(Hash_set.add dataset)
   in
   let deltas = ref Addr.Map.empty in
   let delta = ref None in
@@ -202,26 +216,6 @@ let calculate_deltas superset ?entries is_option =
   in
   let visited = Addr.Hash_set.create () in
   Hash_set.iter entries 
-    ~f:(Superset_risg.iter_component ~visited ~post:make_deltas insn_risg);
+    ~f:(Superset.with_ancestors_at
+          ~visited ~post:make_deltas ?f:None superset);
   !deltas
-
-(* TODO Need to find some way to cache results *)
-(* TODO could split this into tail_options *)
-let insn_is_option superset addr = 
-  let open Superset in
-  let len = Superset.len_at superset addr in
-  let bound = Addr.(addr ++ len) in
-  let insn_risg = Superset.get_graph superset in
-  let previous = Superset_risg.G.pred insn_risg addr in
-  List.fold ~init:false previous ~f:(fun current descedant -> 
-      if not current then
-        let further = Superset_risg.G.succ insn_risg descedant in
-        List.fold ~init:current further ~f:(fun current opt -> 
-            if not current then
-              if Addr.(addr <= opt) && Addr.(opt < bound) then
-                true
-              else false
-            else current
-          )
-      else current
-    )

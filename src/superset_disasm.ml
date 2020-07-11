@@ -11,7 +11,7 @@ let () = Pervasives.ignore(Plugins.load ())
 
 let make_gatherer accu = 
   let module Instance = MetricsGatheringReducer(struct
-      type acc = (Addr.Hash_set.t * Superset_risg.t )
+      type acc = (Addr.Hash_set.t )
       let accu = accu
     end) in
   let module Instance = Trim.Reduction(Instance) in
@@ -47,8 +47,7 @@ let build_metrics trim phases =
             phase = p
           ) with
         | Some (name,p) ->
-          let accu = (Addr.Hash_set.create () ,
-                      Superset_risg.G.create ()) in
+          let accu = (Addr.Hash_set.create ()) in
           let instance_trim = make_gatherer accu in         
           (fun x -> instance_trim @@ trim x), Map.set metrics name accu
         | None -> trim,metrics
@@ -61,8 +60,7 @@ let build_setops trim setops =
           if Map.mem metrics f then
             trim, metrics
           else
-            let accu = (Addr.Hash_set.create () ,
-                        Superset_risg.G.create ()) in
+            let accu = (Addr.Hash_set.create ()) in
             let instance_trim = make_gatherer accu in
             let metrics = Map.set metrics f accu in
             ((fun x -> instance_trim @@ trim x), metrics) in
@@ -76,7 +74,7 @@ let apply_setops metrics setops =
   List.fold setops ~init:String.Map.empty
     ~f:(fun results (colr, (sop, (f1, f2))) -> 
         match Map.find metrics f1, Map.find metrics f2 with
-        | Some (fmetric1,g1), Some (fmetric2,g2) -> (
+        | Some (fmetric1), Some (fmetric2) -> (
             match sop with
             | Difference ->
               let s = Addr.Hash_set.create () in
@@ -118,41 +116,18 @@ let apply_setops metrics setops =
           results
       ) 
 
-let take_random superset =
-  let insn_map = Superset.get_map superset in
-  let insn_risg = Superset.get_graph superset in
-  let minimum_depth = 200 in
-  let rec get_deep () =
-    let r = Random.int (Map.length insn_map) in
-    let x = List.nth Map.(keys insn_map) r |> Option.value_exn in
-    if Superset_risg.G.mem_vertex insn_risg x then
-      let depth = Superset_risg.get_depth insn_risg x in
-      if depth < minimum_depth then
-        get_deep ()
-      else
-        x
-    else get_deep ()
-  in get_deep ()
-
 let process_cut superset options results =
-  let insn_risg = Superset.get_graph superset in  
   match options.cut with 
   | None ->
     if options.save_dot then
-      Metrics.print_dot superset results;
+      Cfg_dot_layout.print_dot superset results;
   | Some cut -> (
       let cut =
         let c, addr, len = cut in
         let addr =
           match addr with
-          | "random" -> take_random superset
           | "lowest" ->
-            let insn_map = Superset.get_map superset in
-            let addr,_ = Map.min_elt insn_map |> Option.value_exn in
-            addr
-          | "highest" ->
-            let insn_map = Superset.get_map superset in
-            let addr,_ = Map.max_elt insn_map |> Option.value_exn in
+            let addr = Superset.Inspection.get_base superset in
             addr
           | _ -> Addr.of_string addr in
         c,addr,len in
@@ -168,20 +143,22 @@ let process_cut superset options results =
         let terminator _ =
           !depth < len &&
           Hash_set.(length subgraph) < len in
-        Superset_risg.iter_component ~terminator ~pre ~post insn_risg
-          addr;
-        let sg = Superset_risg.subgraph insn_risg subgraph in
-        let superset = Superset.(rebuild ~insn_risg:sg superset) in
-        Metrics.print_dot superset results
+        (* TODO want to use Graphlib's filtered here *)
+        Superset.iter_component ~terminator ~pre ~post superset addr;
+        let sg = Superset.subgraph superset subgraph in ()
+      (* TODO restore dot printing *)
+      (*let superset = Superset.(of_components ~insn_risg:sg superset) in
+        Cfg_dot_layout.print_dot superset results*)
       | Interval, addr, len ->
         let subgraph = Addr.Hash_set.create () in
         let add x =
           if Addr.(addr <= x) && Addr.(x <= (addr ++ len)) then
             Hash_set.add subgraph x in
-        Superset_risg.G.iter_vertex add insn_risg;
-        let sg = Superset_risg.subgraph insn_risg subgraph in
-        let superset = Superset.(rebuild ~insn_risg:sg superset) in
-        Metrics.print_dot superset results
+        Superset.ISG.iter_vertex superset add;
+        let sg = Superset.subgraph superset subgraph in ()
+        (* TODO restore dot printing *)
+        (*let superset = Superset.(rebuild ~insn_risg:sg superset) in
+          Cfg_dot_layout.print_dot superset results*)
     )
 
 let converge featureset superset =
@@ -219,13 +196,6 @@ module Program(Conf : Provider)  = struct
       if options.save_gt then
         let gt = Insn_disasm_benchmark.ground_truth_of_unstripped_bin
             options.target |> ok_exn in
-        let img  = Common.img_of_filename options.target in
-        let gt = 
-          Seq.(filter gt ~f:(fun e ->
-              Superset.with_img ~accu:false img 
-                ~f:(fun ~accu mem ->
-                    accu || Memory.(contains mem e))
-            )) in
         let gt = Seq.map gt ~f:Addr.to_string in
         Seq.iter gt ~f:print_endline;
         exit 0
@@ -257,8 +227,7 @@ module Program(Conf : Provider)  = struct
         with_phases superset phases
     in
     let dis_method x =
-      let f x = Superset.superset_disasm_of_file
-          ~data:() ~backend x
+      let f x = Superset.superset_disasm_of_file ~backend x
           ~f:(Trim.tag ~invariants:[Trim.tag_success])  in
       time ~name:"disasm binary" f x
     in
@@ -279,10 +248,12 @@ module Program(Conf : Provider)  = struct
     let results =
       match options.ground_truth_file with
       | Some (gt) ->
-        let insn_risg = Superset.get_graph superset in
-        let insn_map = Superset.get_map superset in
         let remaining = Addr.Hash_set.create () in
-        Map.iter_keys insn_map ~f:(Hash_set.add remaining);
+        let remaining = 
+          Superset.Core.fold superset ~init:remaining
+            ~f:(fun ~key ~data remaining ->
+                Hash_set.add remaining key; remaining
+              ) in
         let s = sprintf "metrics - %d" Map.(length metrics) in
         print_endline s;
         let s = sprintf "setops - %d" Map.(length setops) in
@@ -290,12 +261,11 @@ module Program(Conf : Provider)  = struct
         let s = sprintf "results - %d" Map.(length results) in
         print_endline s;
         Map.iteri setops ~f:(fun ~key ~data ->
-            let data,_ = data in
             let s = sprintf "%s - %d" key Hash_set.(length data) in
             print_endline s;
             Hash_set.iter data ~f:(Hash_set.remove remaining);
           );
-        let min_addr,_ = Map.min_elt insn_map |> Option.value_exn in
+        let min_addr = Superset.Inspection.get_base superset in
         let tp = read_addrs Addr.(bitwidth min_addr) gt in
         let tps = Addr.Hash_set.create () in
         List.iter tp ~f:(Hash_set.add tps);
@@ -321,10 +291,10 @@ module Program(Conf : Provider)  = struct
                 key Map.(length d) in
             print_endline s;
             Map.iteri !data ~f:(fun ~key ~data ->
-                if (not Superset_risg.G.(mem_vertex insn_risg key))
+                if (not Superset.Core.(mem superset key))
                 && Hash_set.(mem tps key) then (
                   let memstr =
-                    match Map.find insn_map key with
+                    match Superset.Core.lookup superset key with
                     | Some (mem, _ ) -> Memory.str () mem
                     | None -> "" in
                   let s =

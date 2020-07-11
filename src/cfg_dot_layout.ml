@@ -113,3 +113,19 @@ module Make(T : sig val instance : colored_superset end) = struct
 
   include Dot
 end
+
+let print_dot superset colorings =
+  (*if not (colorings = String.Map.empty) then*)
+  let fout = Out_channel.create @@ Option.value_exn
+      Superset.Inspection.(filename superset) ^ ".dot" in
+  Superset.ISG.with_graph superset ~f:(fun superset_risg ->
+      let superset_isg = Superset_risg.Oper.mirror superset_risg in
+      (* TODO *)
+      let insn_map = Addr.Map.empty (*Superset.get_map superset*) in
+      let module Layout =
+        Make(struct
+          let instance = (superset_isg, colorings, insn_map)
+        end) in
+      Layout.Dot.output_graph fout (superset_isg, colorings, insn_map)
+    )
+

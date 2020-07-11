@@ -2,7 +2,7 @@ open Bap.Std
 open Core_kernel
 
 module type InvariantApplicator = sig
-  val apply : 'a Superset.t -> 'a Superset.t
+  val apply : Superset.t -> Superset.t
 end
 
 
@@ -27,22 +27,17 @@ let mark_nonexclusive superset insn_delta data_delta ~mark =
   List.iter data_violators ~f:mark;
   List.iter insn_violators ~f:mark
 
-(* Unfortunately, I can't build this with functional programming in *)
-(* mind, because the ocamlgraph function (fold) required to do so is *)
-(* missing from the DFS module. *) 
 let tag_layer_violations superset = 
-  let insn_risg = Superset.get_graph superset in
-  let insn_map = Superset.get_map superset in
   let add_data_of_insn dataset at = 
-    Superset.with_data_of_insn superset at ~f:(Hash_set.add dataset)
+    Superset.Occlusion.with_data_of_insn superset at ~f:(Hash_set.add dataset)
   in
   let remove_data_of_insn dataset at =
-    Superset.with_data_of_insn superset at ~f:(Hash_set.remove dataset)
+    Superset.Occlusion.with_data_of_insn superset at ~f:(Hash_set.remove dataset)
   in
-  let conflicts = Superset_risg.find_all_conflicts insn_map in
-  let entries = Superset_risg.entries_of_isg insn_risg in
-  let tails = Decision_tree_set.tails_of_conflicts
-      conflicts insn_risg in
+  let conflicts = Superset.Occlusion.find_all_conflicts superset in
+  let entries = Superset.entries_of_isg superset in
+  let tails = Decision_tree_set.tails_of_conflicts superset
+      conflicts in
   let options = Map.fold tails ~init:Addr.Set.empty ~f:
       (fun ~key ~data options -> 
          List.fold ~init:options data ~f:Set.add) in
@@ -57,12 +52,12 @@ let tag_layer_violations superset =
     match Map.find deltas addr with
     | Some (insn_delta, data_delta) -> 
       Hash_set.iter insn_delta ~f:(fun insn -> 
-          let inbound = Superset_risg.G.pred insn_risg insn in
+          let inbound = Superset.ISG.descendants superset insn in
           (* TODO what if we encounter a predecessor we haven't *)
           (* visited before? *)
           List.iter inbound ~f:(fun src -> 
               if Hash_set.mem data_delta src then (
-                Superset.mark_bad superset insn;
+                Superset.Core.mark_bad superset insn;
               ) (*else if Hash_set.mem datas src then (
                   Superset.mark_bad superset insn;
                   )*)
@@ -81,13 +76,14 @@ let tag_layer_violations superset =
   superset
 
 let tag_branch_violations superset = 
-  let insn_risg = Superset.get_graph superset in
   let add_data_of_insn dataset at = 
-    Superset.with_data_of_insn superset at ~f:(Hash_set.add dataset)
+    Superset.Occlusion.with_data_of_insn
+      superset at ~f:(Hash_set.add dataset)
   in
   (* TODO removing should move to an alternate set to track discrete lineages *)
   let remove_data_of_insn dataset at =
-    Superset.with_data_of_insn superset at ~f:(Hash_set.remove dataset)
+    Superset.Occlusion.with_data_of_insn
+      superset at ~f:(Hash_set.remove dataset)      
   in
   let insns = Addr.Hash_set.create () in
   let datas = Addr.Hash_set.create () in
@@ -95,15 +91,15 @@ let tag_branch_violations superset =
     add_data_of_insn datas addr;
     Hash_set.add insns addr;
     if Hash_set.mem datas addr then (
-      Superset.mark_bad superset addr;
+      Superset.Core.mark_bad superset addr;
     );
-    let inbound = Superset_risg.G.pred insn_risg addr in
+    let inbound = Superset.ISG.descendants superset addr in
     List.iter inbound ~f:(fun target -> 
         let ft = Superset.is_fall_through
             superset addr target in
         if not ft then (
           if Hash_set.mem datas target then
-            Superset.mark_bad superset addr;
+            Superset.Core.mark_bad superset addr;
         )
       )
   in
@@ -112,6 +108,6 @@ let tag_branch_violations superset =
        alternate lineages *)
     Hash_set.remove insns addr;
     remove_data_of_insn datas addr in
-  let entries = Superset_risg.entries_of_isg insn_risg in
+  let entries = Superset.entries_of_isg superset in
   Traverse.visit ~pre ~post superset entries;
   superset

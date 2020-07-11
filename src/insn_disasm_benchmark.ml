@@ -28,6 +28,7 @@ let ground_truth_of_unstripped_bin bin : addr seq Or_error.t =
       "failed to fetch symbols from unstripped binary, command `%s'
   failed" cmd
 
+  (* TODO very suboptimal *)
 let linear_of_ground_truth bin = 
   let entrances = ground_truth_of_unstripped_bin bin |> ok_exn in
   let img = Common.img_of_filename bin in

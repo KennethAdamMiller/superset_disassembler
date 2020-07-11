@@ -1,23 +1,11 @@
 open Core_kernel
 open Bap.Std
 
-let static_successors brancher mem insn =
-  match insn with 
-  | None -> [None, `Fall]
-  | Some insn -> 
-    try 
-      Brancher.resolve brancher mem insn
-    with _ -> (
-        print_endline @@ 
-        "Target resolve failed on memory at " ^ Memory.to_string mem; 
-        [None, `Fall]
-      )
-
 let find_non_mem_accesses superset = 
   let check_return_addr r addr = 
     match addr with
     | Bil.Int(addr) -> 
-      if Superset.contains_addr superset addr then
+      if Superset.Inspection.contains_addr superset addr then
         r
       else r.return(Some(false))
     | _ -> r in
@@ -30,12 +18,8 @@ let find_non_mem_accesses superset =
   end)
 
 let accesses_non_mem superset mem insn _ =
-  (* TODO keep lifter across superset *)
-  let arch = Superset.get_arch superset in
-  let module Target = (val target_of_arch arch) in
-  let lifter = Target.lift in
   try
-    let bil = Superset.lift_insn lifter (mem, insn) in
+    let bil = Superset.Core.lift_insn superset ((mem, insn)) in
     let _, bil = Option.value ~default:(mem,[]) bil in
     let status = List.fold bil ~init:None ~f:(fun status _stmt -> 
         Option.value_map status ~default:(Some(false)) ~f:(fun status ->
@@ -49,8 +33,7 @@ let accesses_non_mem superset mem insn _ =
 
 (* TODO Does this belong in Superset? *)
 let tag_with ~f (mem, insn) superset = 
-  let open Superset in
-  let targets = static_successors superset.brancher mem insn in
+  let targets = Superset.Inspection.static_successors superset mem insn in
   f superset mem insn targets
 
 let tag_target_not_in_mem superset mem insn targets =
@@ -58,8 +41,8 @@ let tag_target_not_in_mem superset mem insn targets =
     ~f:(fun (target,_) ->
         match target with 
         | Some(target) -> 
-          if not (Superset.contains_addr superset target) then
-            Superset.mark_bad superset (Memory.min_addr mem)
+          if not (Superset.Inspection.contains_addr superset target) then
+            Superset.Core.mark_bad superset (Memory.min_addr mem)
         | None -> ()
       );
   superset
@@ -72,7 +55,7 @@ let tag_target_is_bad superset mem insn targets =
         match target with 
         | Some(target) -> 
           if Addr.(target = z) then
-            Superset.mark_bad superset target
+            Superset.Core.mark_bad superset target
         | None -> ()
       );
   superset
@@ -85,7 +68,7 @@ let tag_target_in_body superset mem insn targets =
         | Some(target) -> 
           if (Memory.contains mem target) && 
              not Addr.(src = target) then
-            Superset.mark_bad superset src
+            Superset.Core.mark_bad superset src
         | None -> ()
       );
   superset
@@ -100,7 +83,7 @@ let tag_non_mem_access superset mem insn targets =
   let src  = Memory.min_addr mem in
   if accesses_non_mem superset mem insn targets then (
     (* The instruction reads or writes to memory that is not mapped *)
-    Superset.mark_bad superset src
+    Superset.Core.mark_bad superset src
   );
   superset
 
@@ -108,7 +91,7 @@ let tag_non_insn superset mem insn targets =
   let src  = Memory.min_addr mem in
   if Option.is_none insn then (
     (* Wasn't a parseable instruction *)
-    Superset.mark_bad superset src
+    Superset.Core.mark_bad superset src
   );
   superset
 
@@ -117,13 +100,12 @@ let tag_non_insn superset mem insn targets =
 (* could merge add_to_map and tag_success *)
 let tag_success superset mem insn targets =
   let src = Memory.min_addr mem in
-  let insn_risg = Superset.get_graph superset in
   (*let superset = Superset.add superset mem insn in*)
   (* TODO perhaps the below should be merged with Superset.add *)
   List.iter targets ~f:(fun (target,_) -> 
       match target with
       | Some (target) -> 
-        Superset_risg.G.add_edge insn_risg target src
+        Superset.ISG.link superset target src
       | None -> ());
   superset
 
@@ -153,43 +135,39 @@ let tag ?invariants =
 module type Reducer = sig
   type acc
   val accu : acc
-  val check_pre : 'a Superset.t -> acc -> addr -> acc
-  val check_elim : 'a Superset.t -> acc -> addr -> bool
-  val check_post : 'a Superset.t -> acc -> addr -> acc
-  val mark  : 'a Superset.t -> acc -> addr -> unit
+  val check_pre : Superset.t -> acc -> addr -> acc
+  val check_elim : Superset.t -> acc -> addr -> bool
+  val check_post : Superset.t -> acc -> addr -> acc
+  val mark  : Superset.t -> acc -> addr -> unit
 end
 
 module type ReducerInstance = sig
   include Reducer
-  val post : 'a Superset.t -> acc -> addr -> acc
+  val post : Superset.t -> acc -> addr -> acc
 end
 
 module Reduction(R : Reducer) = struct
 
   let post superset accu addr =
-    let module G = Superset_risg.G in
-    let superset_risg = Superset.get_graph superset in
+    let module G = Superset.ISG in
     if R.check_elim superset accu addr then (
       R.mark superset accu addr;
-      G.remove_vertex superset_risg addr;
+      G.remove superset addr;
     );
     R.check_post superset accu addr
 
   let trim superset =
-    print_endline "trimming...";
-    let superset_risg = Superset.get_graph superset in
-    let module G = Superset_risg.G in
-    let superset = Superset.rebalance superset in
-    let orig_size = (G.nb_vertex superset_risg) in
+    let superset = Superset.Core.rebalance superset in
+    (* let orig_size = (G.nb_vertex superset_risg) in *)
     let post = post superset in
     let pre = R.check_pre superset in
     let _ = Superset.with_bad superset ~pre ~post R.accu in
-    Superset.clear_all_bad superset;
-    let trimmed_size = (G.nb_vertex superset_risg) in
-    let num_removed = orig_size - trimmed_size in
-    printf "%d vertices after trimming, removing %d\n" 
-      trimmed_size num_removed;
-    Superset.rebalance superset
+    Superset.Core.clear_all_bad superset;
+    (*let trimmed_size = (G.nb_vertex superset_risg) in
+      let num_removed = orig_size - trimmed_size in
+      printf "%d vertices after trimming, removing %d\n" 
+      trimmed_size num_removed;*)
+    Superset.Core.rebalance superset
 
 end
 
@@ -217,7 +195,7 @@ module DeadblockTolerantReducer : Reducer
     match accu with 
     | Some _ -> accu
     | None -> (
-        match Map.find Superset.(get_map superset) addr with
+        match Superset.Core.lookup superset addr with
         | Some (mem,insn) -> (
             match insn with
             | Some i -> 
@@ -247,21 +225,20 @@ module DeadblockTolerant = Reduction(DeadblockTolerantReducer)
 
 let tag_superset ?invariants superset = 
   let invariants = Option.value invariants ~default:default_funcs in
-  let insn_map = Superset.get_map superset in
   let f superset mem insn targets =
     List.fold ~init:superset invariants
       ~f:(fun superset invariant -> 
           invariant superset mem insn targets) in
-  Addr.Map.fold ~init:superset insn_map ~f:(fun ~key ~data superset -> 
+  Superset.Core.fold ~init:superset superset ~f:(fun ~key ~data superset -> 
       let mem, insn = data in
       tag_with ~f (mem, insn) superset
     )
 
-let tagged_disasm_of_file ~data ?f ?invariants ~backend file =
+let tagged_disasm_of_file ?f ?invariants ~backend file =
   let invariants = Option.value invariants ~default:default_funcs in
   let f = Option.value f ~default:[] in
   let invariants = Some(List.append f invariants) in
-  Superset.superset_disasm_of_file ~data ~backend file ~f:(tag ?invariants)
+  Superset.superset_disasm_of_file ~backend file ~f:(tag ?invariants)
 
-let trimmed_disasm_of_file ~data ?f ~backend file =
-  Default.trim (tagged_disasm_of_file ~data ?f ~backend file)
+let trimmed_disasm_of_file ?f ~backend file =
+  Default.trim (tagged_disasm_of_file ?f ~backend file)

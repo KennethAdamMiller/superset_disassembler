@@ -3,14 +3,13 @@ open Bap.Std
 
 let identify_branches superset =
   let deferred = ref Addr.Map.empty in
-  let insn_risg = Superset.get_graph superset in
-  let entries = Superset_risg.entries_of_isg insn_risg in
+  let entries = Superset.entries_of_isg superset in
   (* need to create a sequence of non-fall through edges *)
   let insns = Addr.Hash_set.create () in
   let branches = Addr.Hash_set.create () in
   let tag_branches addr =
-    if Superset_risg.G.in_degree insn_risg addr = 2 then
-      let inbound = Superset_risg.G.pred insn_risg addr in
+    if Superset.is_branch superset addr then
+      let inbound = Superset.ISG.descendants superset addr in
       List.iter inbound ~f:(fun child -> 
           (* check for edges between instructions that are not
              fall through, but for which  *)
@@ -74,12 +73,11 @@ let linear_branch_sweep superset entries =
   final_jmps
 
 let tag_callsites visited ?callsites superset =
-  let insn_risg = Superset.get_graph superset in
   let callsites = Option.value callsites 
       ~default:(Superset.get_callsites ~threshold:6 superset) in
-  let insn_isg  = Superset_risg.Oper.mirror insn_risg in
   Hash_set.iter callsites ~f:(fun callsite ->
-      Superset_risg.iter_component ~visited insn_isg callsite;
+      Superset.with_descendents_at ~visited
+        ?post:None ~f:(fun _ -> ()) superset callsite;
     );
   superset
 
@@ -93,16 +91,14 @@ let tag_callsites visited ?callsites superset =
 (* sequences must branch at some point only to reify at a common *)
 (* point, expressing a path by which they can finally rejoin. *)
 let tag_by_traversal ?(threshold=8) superset =
-  let insn_risg = Superset.get_graph superset in
   let visited = Addr.Hash_set.create () in
   (* TODO should be either in it's own module and designated function *)
   let callsites = Superset.get_callsites ~threshold:6 superset in
   let superset = tag_callsites visited ~callsites superset in
   let superset = Invariants.tag_layer_violations superset in
   let superset = Invariants.tag_branch_violations superset in
-  let insn_isg  = Superset_risg.Oper.mirror insn_risg in
-  let entries = Superset_risg.entries_of_isg insn_risg in
-  let branches = Superset_risg.get_branches insn_risg in
+  let entries = Superset.entries_of_isg superset in
+  let branches = Superset.get_branches superset in
   (*let branches = identify_branches superset in*)
   (*let branches = linear_branch_sweep superset entries in*)
   (* TODO should delete this printf *)
@@ -150,16 +146,16 @@ let tag_by_traversal ?(threshold=8) superset =
   let visited = Addr.Hash_set.create () in
   Hash_set.iter tps ~f:(fun tp -> 
       if not (Hash_set.mem visited tp) then (
-        Superset_risg.Dfs.prefix_component (fun tp -> 
+        Superset.with_descendents_at superset tp ~f:(fun tp -> 
             let mark_bad addr =
-              if Superset_risg.G.mem_vertex insn_risg addr then (
-                Superset.mark_bad superset addr
+              if Superset.ISG.mem_vertex superset addr then (
+                Superset.Core.mark_bad superset addr
               ) in
-            Superset.with_data_of_insn superset tp ~f:mark_bad;
+            Superset.Occlusion.with_data_of_insn superset tp ~f:mark_bad;
             Hash_set.add visited tp;
-          ) insn_isg tp;
+          ) ;
       )
     );
   Hash_set.iter visited 
-    ~f:(fun tp -> Superset.clear_bad superset tp);
+    ~f:(fun tp -> Superset.Core.clear_bad superset tp);
   superset

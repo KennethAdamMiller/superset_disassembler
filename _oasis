@@ -11,13 +11,14 @@ BuildTools: ocamlbuild
 XOCamlbuildExtraArgs: -j 5
 BuildDepends:
               core_kernel,
-              bap
+              bap,
+              ppx_inline_test
 
 Library superset_disassemblers
   Path:                 src/
   Install:		true
   CompiledObject:	best
-  BuildDepends:		bap, core_kernel, cmdliner, ocamlgraph
+  BuildDepends:		bap, core_kernel, cmdliner, ocamlgraph, ppx_inline_test
   Modules:		
                         Superset_risg,
                         Superset,
@@ -35,7 +36,8 @@ Library superset_disassemblers
                         Abstract_ssa,
                         Markup,
                         Features,
-                        Report
+                        Report,
+                        Superset_impl
 
 Document "superset_disassemblers_api"
   Type: ocamlbuild (0.4)
