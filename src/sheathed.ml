@@ -1,8 +1,5 @@
 open Core_kernel
 open Bap.Std
-open Graphlib.Std
-open Graph
-
 
 let parents_of_insns superset component = 
   Set.fold component ~init:Addr.Set.empty ~f:(fun potential_parents addr -> 
@@ -15,22 +12,22 @@ let parents_of_insns superset component =
           ) 
     )
 
-let filter_components ?(min_size=20) components = 
-  List.fold_left components ~init:Addr.Set.empty
-    ~f:(fun keep  component ->
-        let component = Addr.Set.of_list component in
-        if Set.length component > min_size then
-          Addr.Set.(union keep component)
-        else
-          keep
-      )
+let addrs_of_loops loops =
+  List.fold_left loops ~init:Addr.Set.empty
+    ~f:(fun keep loop ->
+      Addr.Set.(union keep (of_list loop))
+    )
+  
+let filter_loops ?(min_size=20) loops =
+  let loops =
+    List.filter loops ~f:(fun l -> List.length l > min_size) in
+  addrs_of_loops loops
 
-let filtered_loops ?(min_size=20) superset =
-  filter_components ~min_size @@ Superset.ISG.raw_loops superset
-
+let addrs_of_filtered_loops ?(min_size=20) superset =
+  filter_loops ~min_size @@ Superset.ISG.raw_loops superset
 
 let tag_loop_contradictions ?(min_size=20) superset =
-  let keep = filtered_loops ~min_size superset in
+  let keep = addrs_of_filtered_loops ~min_size superset in
   (* Here we have to be careful; we only want to find instructions
      that occur within a loop that produce a self-contradiction *)
   let parents = parents_of_insns superset keep in
@@ -38,10 +35,6 @@ let tag_loop_contradictions ?(min_size=20) superset =
     Superset.Occlusion.conflicts_within_insns superset keep in
   let to_remove = Set.inter to_remove parents in
   let to_remove = Set.diff to_remove keep in
-  printf "tagged %d contradictions of %d parents of %d to keep\n" 
-    Set.(length to_remove)
-    Set.(length parents)
-    Set.(length keep);
   Set.iter to_remove ~f:(Superset.Core.mark_bad superset);
   superset
 

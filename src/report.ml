@@ -95,7 +95,7 @@ let collect_set_report
         if not Hash_set.(mem tps e) && not Hash_set.(mem fps e) then (
           if not (Hash_set.mem visited e) && 
              Superset.Core.mem superset e then
-            Superset.with_descendents_at ~f:(fun tp -> 
+            Superset.with_descendents_at ~pre:(fun tp -> 
                 let mark_bad addr = 
                   if Superset.Core.mem superset addr then
                     Superset.Core.mark_bad superset addr in

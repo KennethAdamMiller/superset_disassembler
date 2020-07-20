@@ -102,8 +102,8 @@ let true_positives_of_ground_truth superset ground_truth =
   Set.iter ground_truth ~f:(fun addr -> 
       if Superset.ISG.mem_vertex superset addr then
         Superset.with_descendents_at
-          ~visited:true_positives ~f:(fun _ -> ()) ?post:None
-          superset addr
+          ~visited:true_positives
+          superset addr;
     );
   true_positives
 
@@ -171,7 +171,7 @@ let gather_metrics ~bin superset =
   let detected_insns = Addr.Hash_set.create () in
   let dfs_find_conflicts addr =
     Superset.with_descendents_at ~visited:detected_insns superset addr
-      ~f:(fun v -> Superset.Occlusion.with_data_of_insn superset v
+      ~pre:(fun v -> Superset.Occlusion.with_data_of_insn superset v
              ~f:(fun x -> Hash_set.add datas x)) in
   let reduced_occlusion () = Hash_set.fold ~init:0 datas
       ~f:(fun ro d ->

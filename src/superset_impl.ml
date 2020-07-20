@@ -2,21 +2,15 @@ open Bap.Std
 open Regular.Std
 open Core_kernel
 open Or_error
-open Graph
-
+open Graphlib.Std
+   
 module Dis = Disasm_expert.Basic
 
 type elem = mem * (Dis.full_insn option)
 
-module G = 
-  Imperative.Digraph.ConcreteBidirectional(struct 
-      type t = Addr.t 
-      let compare = Addr.compare
-      let hash = Addr.hash
-      let equal = Addr.equal
-    end)
+module G = Graphlib.Make(Addr)(Unit)
+module I = Graph.Imperative.Digraph.ConcreteBidirectional(Addr)
 
-          
 type t = {
   arch        : arch;
   filename    : string option;
@@ -41,11 +35,11 @@ let of_components
   let insn_risg =
     match insn_risg with
     | Some insn_risg -> insn_risg
-    | None -> G.create () in
+    | None -> Graphlib.create (module G) () in
   let segments = Option.value segments ~default:Memmap.empty in
   let insn_map  = Option.value insn_map ~default:Addr.Map.empty in
   let balanced =
-    Map.(length insn_map) = (G.nb_vertex insn_risg) in
+    Map.(length insn_map) = (G.number_of_nodes insn_risg) in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
   {
@@ -63,83 +57,105 @@ let of_components
     keep        = Addr.Hash_set.create ();
   }
 
+module M = struct
+  module G = struct
+    include G
+    module V = G.Node
+    type vertex = V.t
+    module E = G.Edge
+  end
+  include Graphlib.To_ocamlgraph(G)
+  let empty = G.empty
+  let iter_vertex f g =
+    Seq.iter (G.nodes g) ~f
+  let iter_succ f g v =
+    Seq.iter (G.Node.succs v g) ~f
+  let fold_succ f g v init =
+    Seq.fold ~init (G.Node.succs v g) ~f:(fun v g -> f g v)
+  let fold_vertex f g init =
+    Seq.fold ~init (G.nodes g) ~f:(fun v g -> f g v)
+  let is_directed = true
 
-module P = Persistent.Digraph.ConcreteBidirectional(struct
-    type t = Addr.t
-    let compare = Addr.compare
-    let hash = Addr.hash
-    let equal = Addr.equal
-  end)
-         
-module Topological = Topological.Make(G)
-module Oper = Oper.I(G)
-module StrongComponents = Components.Make(G)
+  let iter_edges_e f g =
+    Seq.iter (G.edges g) ~f
+  let iter_edges f g =
+    Seq.iter (G.edges g) ~f:(fun e ->
+        f (G.Edge.src e) (G.Edge.dst e)
+      )
+  let remove_edge e g =
+    G.Edge.remove e g
+  let remove_edge_e v1 v2 g =
+    let e = G.Edge.create v1 v2 () in
+    remove_edge e g
+  let add_edge e g =
+    G.Edge.insert e g
+  let add_edge_e v1 v2 g =
+    let e = G.Edge.create v1 v2 () in
+    add_edge e g
+  let remove_vertex v g =
+    G.Node.remove v g
+  let add_vertex v g = G.Node.insert v g
+  let copy g =
+    let gcpy = Graphlib.create (module G) () in
+    Seq.fold ~init:gcpy G.(edges g) ~f:(fun gcpy e ->
+        add_edge e gcpy
+      )
+end
+
+module Topological =
+  Graph.Topological.Make(M)
+module StrongComponents = Graph.Components.Make(M)
 (*module DiscreteComponents = Components.Undirected(G)*)
-module Dfs        = Graph.Traverse.Dfs(G)
-module GmlOut     = Gml.Print(G)(struct 
-    let node (label : G.V.label) = 
-      [ "addr", Gml.String (Addr.to_string label) ]
+module P = Graph.Builder.P(Graphlib.To_ocamlgraph(G))
+module Oper = Graph.Oper.Make(P)
+module Dfs        = Graph.Traverse.Dfs(M)
+module GmlOut     = Graph.Gml.Print(M)(struct 
+    let node (label : M.V.label) = 
+      [ "addr", Graph.Gml.String (Addr.to_string label) ]
     let edge _ = []
   end)
-module B = struct
-  module G = struct
-    include P
-  end
-  include P
-  let copy g = g
-  let empty () = P.empty
-end
-module GmlIn      = Gml.Parse(B)(struct
-    let node (labels : Gml.value_list) = 
+module GmlIn = Graph.Gml.Parse(P)(struct
+    let node (labels : Graph.Gml.value_list) = 
       match labels with
       | [] -> assert false
       | fail :: [] -> assert false
       | (id, idval) :: (s, gmlval) :: _ -> 
         match idval, gmlval with
-        | Gml.Int(idval), Gml.String(addr) -> 
-          B.G.V.label Addr.(of_string addr)
+        | Graph.Gml.Int(idval), Graph.Gml.String(addr) -> 
+          M.V.label Addr.(of_string addr)
         | _ -> assert false
 
-    let edge (labels : Gml.value_list) = ()
+    let edge (labels : Graph.Gml.value_list) = ()
   end)
+
 module Gml = struct
   include GmlIn
   include GmlOut
-  let parse gmlstr = 
-    let pgraph = parse gmlstr in
-    let igraph = G.create () in
-    P.iter_edges (fun src target -> 
-        let src    = B.G.V.create src in
-        let target = B.G.V.create target in
-        G.add_edge igraph src target;
-      ) pgraph;
-    igraph
 end
-
   
 type colored_superset = G.t * Addr.Hash_set.t String.Map.t
                         * elem Addr.Map.t
-
+                      
 module Make(T : sig val instance : colored_superset end) = struct
   open T
   module Dottable = struct
     type t = colored_superset
 
     module V = struct
-      type t = G.V.t
+      type t = M.V.t
     end
 
     module E = struct
-      type t = G.E.t
-      let src (s,_) = s
-      let dst (_,d) = d
+      type t = M.E.t
+      let src = M.E.src
+      let dst = M.E.dst
     end
 
     let iter_vertex f (g, _, _) =
-      G.iter_vertex f g
+      M.iter_vertex f g
 
     let iter_edges_e f (g, _, _) =
-      G.iter_edges_e f g
+      M.iter_edges_e f g
 
     let graph_attributes _ = [
       `Fontsize 14;
@@ -211,7 +227,8 @@ module Make(T : sig val instance : colored_superset end) = struct
       `Labelfloat true;
     ]
 
-    let edge_attributes (src,dst) =
+    let edge_attributes e =
+      let (src,dst) = M.E.src e,M.E.dst e in
       (*let color,weight = match kind,arity with
         | `Fall,`Many -> 0x660000, 4
         | `Fall,`Mono -> 0x000066, 8
@@ -223,7 +240,6 @@ module Make(T : sig val instance : colored_superset end) = struct
       ]
   end
   module Dot = Graph.Graphviz.Dot(Dottable)
-  include Dot
 end
 
 let fold_component ?visited ~pre ~post g accu addr =
@@ -242,7 +258,7 @@ let fold_component ?visited ~pre ~post g accu addr =
     match Stack.pop s with
     | Some v ->
       let acc = pre acc v in
-      G.iter_succ push g v;
+      M.iter_succ push g v;
       loop @@ post acc v
     | None -> acc
   in

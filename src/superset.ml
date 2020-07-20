@@ -2,6 +2,7 @@ open Bap.Std
 open Regular.Std
 open Core_kernel
 open Or_error
+open Graphlib.Std   
 
 module Dis = Disasm_expert.Basic
 open Superset_impl
@@ -19,39 +20,40 @@ let add_to_map superset mem insn =
   let insn_map = Addr.Map.set insn_map addr (mem, insn) in
   { superset with insn_map }
 
+module OG = Graphlib.To_ocamlgraph(G)
+  
 let add_to_graph superset mem insn =
   let addr = Memory.min_addr mem in
-  G.add_vertex superset.insn_risg addr;
-  superset
+  let insn_risg = OG.add_vertex superset.insn_risg addr in
+  { superset with insn_risg }
 
 module ISG = struct
-  module G = Superset_impl.G
   let ancestors superset =
-    G.succ superset.insn_risg
+    OG.succ superset.insn_risg
 
   let descendants superset =
-    G.pred superset.insn_risg
+    OG.pred superset.insn_risg
 
   let iter_vertex superset f =
-    G.iter_vertex f superset.insn_risg
+    OG.iter_vertex f superset.insn_risg
 
   let fold_edges superset f =
     let insn_risg = superset.insn_risg in 
-    G.fold_edges f insn_risg
+    OG.fold_edges f insn_risg
 
-  let link superset = 
-    G.add_edge superset.insn_risg
+  let link superset v1 v2 = 
+    let insn_risg = OG.add_edge superset.insn_risg v1 v2 in
+    { superset with insn_risg }
 
-  let unlink superset = 
-    G.remove_edge superset.insn_risg
+  let unlink superset v1 v2 = 
+    let insn_risg = OG.remove_edge superset.insn_risg v1 v2 in
+    { superset with insn_risg }
 
   let remove superset addr =
-    G.remove_vertex superset.insn_risg addr
+    let insn_risg = OG.remove_vertex superset.insn_risg addr in
+    { superset with insn_risg } 
 
-  let with_graph superset ~f =
-    f superset.insn_risg
-
-  let mem_vertex superset = G.mem_vertex superset.insn_risg
+  let mem_vertex superset = OG.mem_vertex superset.insn_risg
 
   let raw_loops superset = 
     StrongComponents.scc_list superset.insn_risg
@@ -63,7 +65,8 @@ module ISG = struct
     (*if not (colorings = String.Map.empty) then*)
     let colorings = Option.value colorings ~default:String.Map.empty in
     let fout =
-      Out_channel.create @@ Option.value_exn superset.filename ^ ".dot" in
+      Out_channel.create @@ Option.value_exn superset.filename
+                            ^ ".dot" in
     let superset_isg = Oper.mirror superset.insn_risg in
     let insn_map = superset.insn_map in
     let module Layout =
@@ -83,20 +86,23 @@ module ISG = struct
 
   let filter superset subgraph =
     let insn_risg = superset.insn_risg in
-    let g = G.create () in
-    Hash_set.iter subgraph ~f:(fun addr ->
-        G.add_vertex g addr;
-        G.iter_succ
-          (fun s ->
-            if Hash_set.mem subgraph s then
-              G.add_edge g addr s
-          ) insn_risg addr;
-        G.iter_pred
-          (fun s ->
-            if Hash_set.mem subgraph s then
-              G.add_edge g s addr
-          ) insn_risg addr;
-      );
+    let g = Graphlib.create (module G) () in
+    let g =
+      Hash_set.fold subgraph ~init:g ~f:(fun g addr ->
+          let g = OG.add_vertex g addr in
+          let g = OG.fold_succ
+                    (fun s g ->
+                      if Hash_set.mem subgraph s then
+                        OG.add_edge g addr s
+                      else g
+                    ) insn_risg addr g in
+          let g = OG.fold_pred
+                    (fun s g ->
+                      if Hash_set.mem subgraph s then
+                        OG.add_edge g s addr
+                      else g
+                    ) insn_risg addr g in g
+        ) in 
     { superset with insn_risg =g; }
 
 end
@@ -121,7 +127,7 @@ module Core = struct
       lifter;
       balanced = true;
       insn_map = Addr.Map.empty;
-      insn_risg = G.create ();
+      insn_risg = Graphlib.create (module G) ();
       bad         = Addr.Hash_set.create ();
       keep        = Addr.Hash_set.create ();
     }
@@ -130,7 +136,7 @@ module Core = struct
     Map.find superset.insn_map addr
 
   let mem superset addr =
-    G.mem_vertex superset.insn_risg addr
+    OG.mem_vertex superset.insn_risg addr
 
   let fold superset =
     Addr.Map.fold superset.insn_map
@@ -198,7 +204,7 @@ module Core = struct
   let rebalance superset =
     let insn_map = get_map superset in
     let superset_risg = get_graph superset in
-    G.iter_vertex (fun vert ->
+    OG.iter_vertex (fun vert ->
         if not Map.(mem insn_map vert) then (
           mark_bad superset vert;
         )
@@ -207,7 +213,7 @@ module Core = struct
         let vert = key in
         (*let (mem, insn) = data in
           Option.is_some insn && *)
-        G.(mem_vertex superset_risg vert)
+        OG.(mem_vertex superset_risg vert)
       ) insn_map in
     { superset with insn_risg =superset_risg; insn_map; }
 
@@ -223,13 +229,13 @@ module Inspection = struct
   let total_bytes superset =
     Seq.fold (Memmap.to_sequence superset.sections) ~init:0
       ~f:(fun total (mem,_) -> (total + (Memory.length mem)))
-  let count superset = G.nb_vertex superset.insn_risg
+  let count superset = OG.nb_vertex superset.insn_risg
   let count_unbalanced superset = Map.length superset.insn_map
   let unbalanced_diff superset =
     let kys = (Map.keys superset.insn_map) in
     let mapaddrs =
       List.fold kys ~init:Addr.Set.empty ~f:Set.add in
-    let gaddrs = G.fold_vertex (fun x s -> Set.add s x)
+    let gaddrs = OG.fold_vertex (fun x s -> Set.add s x)
         superset.insn_risg Addr.Set.empty in
     Set.diff mapaddrs gaddrs, Set.diff gaddrs mapaddrs
   let get_memmap superset = superset.sections
@@ -317,26 +323,19 @@ module Occlusion = struct
     Seq.iter body ~f
 
   let conflicts_within_insn_at superset ?mem ?conflicts addr =
-    let default = (G.mem_vertex superset.insn_risg) in
+    let default = (OG.mem_vertex superset.insn_risg) in
     let mem = Option.value mem ~default in
     let conflicts = Option.value conflicts ~default:Addr.Set.empty in
-    (* TODO range seq at. here *)
-    let rec within_insn conflicts cur_addr len =
-      if Addr.(cur_addr >= (addr ++ len)) then
-        conflicts
-      else
-        let conflicts = if mem cur_addr then
-            let conflicts = Set.add conflicts addr in
-            Set.add conflicts cur_addr
-          else conflicts in 
-        within_insn conflicts Addr.(cur_addr ++ 1) len in
     match Core.lookup superset addr with
-    | Some ((mem, _)) ->
-      (* look within the body for instructions *)
-      let len = (Memory.length mem) in
-      within_insn conflicts Addr.(addr ++ 1) len
+    | Some ((m, _)) ->
+       let len = (Memory.length m) in
+       let rng = range_seq_of_conflicts ~mem addr len in
+       let conflicts =
+         if not (Seq.is_empty rng) then
+           Set.add conflicts addr
+         else conflicts in
+       Seq.fold rng ~init:conflicts ~f:Set.add
     | None -> conflicts
-
 
   let find_all_conflicts ?mem superset =
     let insn_map = superset.insn_map in
@@ -379,12 +378,12 @@ end
 
 let is_entry superset addr =
   let insn_isg = superset.insn_risg in
-  G.in_degree insn_isg addr  = 0 &&
-  G.out_degree insn_isg addr > 0
+  OG.in_degree insn_isg addr  = 0 &&
+  OG.out_degree insn_isg addr > 0
 
 let entries_of_isg superset =
   let insn_isg = superset.insn_risg in
-  G.fold_vertex (fun addr accu ->
+  OG.fold_vertex (fun addr accu ->
       if is_entry superset addr then
         (Hash_set.add accu addr; accu)
       else accu)
@@ -392,13 +391,13 @@ let entries_of_isg superset =
 
 let mergers superset =
   let insn_risg= superset.insn_risg in
-  G.fold_vertex (fun addr mergers ->
-      if G.out_degree insn_risg addr > 1 then
+  OG.fold_vertex (fun addr mergers ->
+      if OG.out_degree insn_risg addr > 1 then
         Addr.Set.add mergers addr
       else mergers) insn_risg Addr.Set.empty
 
 let is_branch superset addr =
-  G.in_degree superset.insn_risg addr = 2
+  OG.in_degree superset.insn_risg addr = 2
 
 let get_branches superset =
   let branches = Addr.Hash_set.create () in
@@ -409,7 +408,7 @@ let get_branches superset =
   branches
 
 let check_connected superset e1 e2 =
-  match G.find_all_edges
+  match OG.find_all_edges
           superset.insn_risg e1 e2 with
   | [] -> false | _ -> true
 
@@ -420,10 +419,10 @@ let check_connected superset e1 e2 =
    pre:('c -> addr -> 'd) ->
    post:('d -> addr -> 'c) -> 'c -> 'c
 *)
-let with_bad superset ~pre ~post accu =
+let with_bad superset ?visited ~pre ~post accu =
   Hash_set.fold ~init:accu superset.bad ~f:(fun accu b -> 
-      if G.mem_vertex superset.insn_risg b then
-        ISG.dfs_fold superset
+      if OG.mem_vertex superset.insn_risg b then
+        ISG.dfs_fold superset ?visited
           ~pre ~post accu b
       else accu
     )  
@@ -438,16 +437,16 @@ let is_fall_through superset parent child =
 
 let get_callers superset addr =
   let g = (get_graph superset) in
-  if G.mem_vertex g addr &&
-     G.out_degree g addr > 0 then
-    let callers = G.succ g addr in
+  if OG.mem_vertex g addr &&
+     OG.out_degree g addr > 0 then
+    let callers = OG.succ g addr in
     List.filter callers ~f:(fun caller ->
         not (is_fall_through superset caller addr))
   else []
 
 let get_non_fall_through_edges superset = 
   let g = (get_graph superset) in
-  G.fold_edges
+  OG.fold_edges
     (fun child parent jmps -> 
        if is_fall_through superset parent child then
          Map.set jmps child parent
@@ -493,8 +492,6 @@ let get_depth f =
     ) ~pre:(fun _ _ -> ()) f;
   !deepest
 
-(* TODO remove terminator for Graphlib filter *)
-(* TODO keep default values of arguments? *)
 let dfs ?(terminator=(fun _ -> true))
     ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) explore g v =
   let visited = Option.value visited 
@@ -513,15 +510,13 @@ let iter_component ?(terminator=(fun _ -> true))
     ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ())  =
   dfs ~terminator ?visited ~pre ~post ISG.ancestors
 
-(* TODO replace f with pre, and ~ with ? *)
-let with_descendents_at ?visited ?post ~f superset addr =
+let with_descendents_at ?visited ?post ?pre superset addr =
   if Core.mem superset addr then
-    dfs ?visited ?post ~pre:f ISG.descendants superset addr
+    dfs ?visited ?post ?pre ISG.descendants superset addr
 
-(* TODO replace f with pre *)
-let with_ancestors_at ?visited ?post ?f superset addr =
+let with_ancestors_at ?visited ?post ?pre superset addr =
   if Core.mem superset addr then
-    dfs ?visited ?post ?pre:f ISG.ancestors superset addr
+    dfs ?visited ?post ?pre ISG.ancestors superset addr
 
 
 let mark_descendent_bodies_at ?visited ?datas superset addr =
@@ -529,7 +524,7 @@ let mark_descendent_bodies_at ?visited ?datas superset addr =
       ~default:(Addr.Hash_set.create ()) in
   let mark_bad = Core.mark_bad superset in
   with_descendents_at ?visited superset addr
-    ~f:(fun v ->
+    ~pre:(fun v ->
         Occlusion.with_data_of_insn superset v ~f:mark_bad;
         Occlusion.with_data_of_insn superset v ~f:(Hash_set.add datas);
       )
@@ -626,7 +621,3 @@ let superset_of_img ?f ~backend img =
 let superset_disasm_of_file ?(backend="llvm") ?f binary =
   let img  = Common.img_of_filename binary in
   superset_of_img ~backend img ?f
-
-let with_graph superset f =
-  let insn_risg = superset.insn_risg in
-  f insn_risg

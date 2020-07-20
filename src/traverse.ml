@@ -9,7 +9,7 @@ let visit ?visited ~pre ~post superset entries =
     pre addr in
   Hash_set.iter entries ~f:(fun addr ->
       if not (Hash_set.mem visited addr) then
-        Superset.with_ancestors_at superset ~visited ~f:pre ~post addr
+        Superset.with_ancestors_at superset ~visited ~pre ~post addr
     )
 
 let visit_with_deltas ?pre ?post ~is_option superset entries =
@@ -44,10 +44,10 @@ let visit_by_block superset
         else jmps
       | None -> jmps
     ) in*)
-  Map.iteri jmps ~f:(fun ~key ~data -> 
-      Superset.ISG.unlink superset key data;
-    );
-  (* TODO *)
+  let superset = 
+    Map.fold jmps ~init:superset ~f:(fun ~key ~data superset -> 
+        Superset.ISG.unlink superset key data;
+      ) in
   let entries = Superset.entries_of_isg superset in
   let visited = Addr.Hash_set.create () in
   let rec visit v =
@@ -62,7 +62,7 @@ let visit_by_block superset
     post jmps targets v;
   in 
   Hash_set.iter entries ~f:visit;
-  Map.iteri jmps ~f:(fun ~key ~data -> 
+  Map.fold jmps ~init:superset ~f:(fun ~key ~data superset -> 
       Superset.ISG.link superset key data;
     )
 

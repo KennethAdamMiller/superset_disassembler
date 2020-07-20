@@ -12,13 +12,14 @@ XOCamlbuildExtraArgs: -j 5
 BuildDepends:
               core_kernel,
               bap,
-              ppx_inline_test
+              ppx_inline_test,
+              graphlib
 
 Library superset_disassemblers
   Path:                 src/
   Install:		true
   CompiledObject:	best
-  BuildDepends:		bap, core_kernel, cmdliner, ocamlgraph, ppx_inline_test
+  BuildDepends:		bap, core_kernel, cmdliner, graphlib, ppx_inline_test
   Modules:		
                         Superset,
                         Metrics,
@@ -56,5 +57,5 @@ Executable test_superset
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, ocamlgraph, ppx_deriving, ppx_deriving_protobuf
+  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, graphlib, ppx_inline_test
   CompiledObject:	best

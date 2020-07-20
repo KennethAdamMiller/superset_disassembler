@@ -20,8 +20,11 @@ type phase =
   | Tree_set
 [@@deriving sexp]
 
-(* TODO tree set should be a separate option *)
-
+type decision_tree =
+  | Tails
+  | Deltas
+[@@deriving sexp]
+  
 type setop =
   | Intersection
   | Difference
@@ -267,11 +270,14 @@ let select_trimmer trim_method =
   | Some Disabled ->
     Trim.Disabled.trim
 
+(* TODO Having a variant type the is part of the cmdline that is
+ * parsed to could be supported with a module and some derived
+ * functions for collecting over matched strings and corresponding
+ * functions to prevent having to rebuild matching an option with an
+ * associated operation. *)
 let with_phases superset phases =
   let tag_grammar ?min_size = 
     Grammar.tag_by_traversal ?threshold:None in
-  (* TODO could fold a string and variant pair list instead of
-     manually matching the variant with *)
   let analyses = 
     List.fold ~init:Int.Map.empty phases ~f:(fun analyses phase -> 
         match phase with

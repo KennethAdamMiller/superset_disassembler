@@ -3,15 +3,15 @@ open Bap.Std
 open Graphlib.Std
 open Graph
 
-module G = Superset.ISG.G
-   
+module G = Graphlib.Make(Addr)(Unit)
+
+         
 (** The decision set represents a set of potentially inter-dependent
       decision trees and potential requirements of selection at each
       node. Although a graph is used, the actual structure is acyclic.
       The addr -> terminal map expresses relationships between the
       graph with which it is paired with other members of the
       enclosing decision_tree_set *)
-
 let conflicts_of_entries superset entries =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
@@ -70,6 +70,14 @@ let tails_of_conflicts superset conflicts =
         ) possible_tails in 
   tails
 
+let add_edge g v1 v2 = 
+  let e = G.Edge.create v1 v2 () in
+  G.Edge.insert e g
+
+let mem_edge g v1 v2 =
+  let e = G.Edge.create v1 v2 () in
+  G.Edge.mem e g
+
 let decision_tree_of_entries superset conflicted_entries entries tails =
   let visited = Addr.Hash_set.create () in
   let visited_choices = Addr.Hash_set.create () in
@@ -80,61 +88,63 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
       let possible_tail = current_vert in
       match Addr.Map.find tails possible_tail with
       | Some(sheath) ->
-        List.iter sheath ~f:(fun competitor ->
+        List.fold sheath ~init:decision_tree ~f:(fun decision_tree competitor ->
             Hash_set.add visited_choices competitor;
-            G.add_edge decision_tree possible_tail
-              competitor;
+            add_edge decision_tree possible_tail competitor
           );
-      | _ -> ()
-    else ();
+      | _ -> decision_tree
+    else decision_tree;
   in
+  (* TODO zero needs to get removed in favor of module type and api *)
   let link_zero decision_tree entry =
     let width = Addr.bitwidth entry in
     let zero = Addr.(of_int ~width 0) in
-    G.add_edge decision_tree zero entry
-  in
+    add_edge decision_tree zero entry in
   let f decision_tree entry =
     let width = Addr.bitwidth entry in
+    (* TODO get rid of zero *)
     let saved_vert = ref @@
       Addr.of_int ~width 0 in
-    let link_choices current_vert =
-      add_choices decision_tree entry;
-      let contained = G.mem_vertex
-          decision_tree current_vert in
+    let link_choices decision_tree current_vert =
+      let decision_tree = add_choices decision_tree entry in 
+      let contained = G.Node.mem current_vert decision_tree in
       let is_new = Hash_set.mem visited current_vert in
-      if contained && is_new then (
-        if not @@ G.mem_edge decision_tree !saved_vert
-            current_vert then (
-          G.add_edge decision_tree !saved_vert
-            current_vert;
-        );
-        saved_vert := current_vert;
-      );
-      Hash_set.add visited current_vert
+      let decision_tree = 
+        if contained && is_new then (
+          let decision_tree = 
+            if not @@ mem_edge decision_tree !saved_vert
+                        current_vert then (
+              add_edge decision_tree !saved_vert
+                current_vert
+            ) else decision_tree in
+          saved_vert := current_vert;
+          decision_tree
+        ) else decision_tree in
+      Hash_set.add visited current_vert;
+      decision_tree
     in
-    (* Would like to have fold_component; not available in this
-       version *)
-    Superset.with_ancestors_at superset entry ?post:None ~f:link_choices;
-    (*Dfs.prefix_component link_choices insn_isg entry;*)
+    Superset.ISG.dfs_fold superset decision_tree entry ~post:(fun g v -> g) ~pre:link_choices
   in
   let conflicted_trees = 
     List.filter_map conflicted_entries ~f:(fun conflicted ->
         if Hash_set.length conflicted > 0 then
-          let decision_tree = G.create () in
-          let f entry = 
+          let decision_tree = Graphlib.create (module G) () in
+          let f decision_tree entry = 
             if not (Hash_set.mem visited entry) then (
-              link_zero decision_tree entry;
-              f decision_tree entry) in
-          Hash_set.iter conflicted ~f;
+              let decision_tree = link_zero decision_tree entry in
+              f decision_tree entry) else decision_tree
+          in
+          let decision_tree =
+            Hash_set.fold ~init:decision_tree conflicted ~f in
           Some(decision_tree)
         else None
       ) in
   Hash_set.fold entries ~init:conflicted_trees 
     ~f:(fun all_trees entry ->
         if not (Hash_set.mem visited entry) then
-          let decision_tree = G.create () in
-          f decision_tree entry;
-          if G.nb_vertex decision_tree > 0 then
+          let decision_tree = Graphlib.create (module G) () in
+          let decision_tree = f decision_tree entry in
+          if G.number_of_nodes decision_tree > 0 then
             decision_tree :: all_trees
           else all_trees
         else (all_trees)
@@ -219,5 +229,5 @@ let calculate_deltas superset ?entries is_option =
   let visited = Addr.Hash_set.create () in
   Hash_set.iter entries 
     ~f:(Superset.with_ancestors_at
-          ~visited ~post:make_deltas ?f:None superset);
+          ~visited ~post:make_deltas ?pre:None superset);
   !deltas

@@ -2,7 +2,6 @@ open Core_kernel
 open Bap.Std
 
 module Dis = Disasm_expert
-module G = Superset.ISG.G
 
 let default_features = [
   "ImgEntry";
@@ -67,13 +66,12 @@ let restricted_clamp superset =
           if Set.mem conflicts v then
             b := true
           else to_clamp := Set.add (!to_clamp) v
-      in Superset.with_ancestors_at ~post:(fun _ -> ()) ~f:pre superset entry;
+      in Superset.with_ancestors_at ~post:(fun _ -> ()) ~pre superset entry;
     );
   !to_clamp
 
 let extended_clamp superset = 
   let to_clamp = find_free_insns superset in
-  (* TODO this doesn't merge with to_clamp, and the var names are misleading *)
   Set.fold to_clamp ~init:Addr.Set.empty ~f:(fun to_clamp clamp -> 
       let _, to_clamp =
         Superset.ISG.dfs_fold superset
@@ -104,7 +102,6 @@ let extract_loop_addrs superset =
         else addrs
       )
 
-(* TODO duplicate in sheath? *)
 let extract_filtered_loop_addrs superset =
   let loop_addrs = extract_loop_addrs superset in
   Map.filteri loop_addrs ~f:(fun ~key ~data ->
@@ -240,7 +237,7 @@ let extract_ssa_to_map superset =
       addr add_to_map in
   let entries = Superset.entries_of_isg superset in
   Hash_set.iter entries ~f:(fun addr ->
-      Superset.with_ancestors_at superset addr ~post ~f:pre;
+      Superset.with_ancestors_at superset addr ~post ~pre;
       var_use := Exp.Map.empty
     );
   !defuse_map
@@ -257,7 +254,7 @@ let extract_freevarssa_to_map superset =
       addr add_to_map in
   let entries = Superset.entries_of_isg superset in
   Hash_set.iter entries ~f:(fun addr -> 
-      Superset.with_ancestors_at superset addr ~post ~f:pre;
+      Superset.with_ancestors_at superset addr ~post ~pre;
       var_use := Var.Map.empty
     );
   !defuse_map
@@ -332,11 +329,11 @@ let fixpoint_descendants superset extractf depth =
       Hash_set.iter cur_features ~f:(fun cur ->
           if not Hash_set.(mem visited cur) then
             Superset.with_descendents_at superset
-              ~f:(fun v ->
+              ~pre:(fun v ->
                   if Hash_set.(mem cur_features v)
                   && not Addr.(cur = v) then
                     Hash_set.add subset_features v
-                ) ?post:None ~visited cur
+                ) ~visited cur
           else Hash_set.add subset_features cur
         );
       fix_descendants subset_features (d+1)
@@ -351,13 +348,13 @@ let fixpoint_map superset feature_pmap =
       if not Hash_set.(mem visited cur) then
         let prev = ref [] in
         let feature_pmap = ref feature_pmap in
-        Superset.with_descendents_at ~f:(fun v ->
+        Superset.with_descendents_at ~pre:(fun v ->
             match Map.find !feature_pmap v with
             | None -> ()
             | Some(p) ->
               prev :=  List.append p  !prev;
               feature_pmap := Map.set !feature_pmap v !prev;
-          ) ?post:None ~visited superset cur;
+          ) ~visited superset cur;
         !feature_pmap
       else feature_pmap
     )
@@ -408,7 +405,6 @@ let allfeatures =
   "FreeVarSSA"             ::
   "MirrorSCC"              ::
   "JmpTargetIntersection"  :: (* TODO *)
-  "FixpointCallsites"      :: (* TODO *)   
   "FixpointGrammar"        :: 
   "FixpointSSA"            :: (* TODO *)
   "FixpointFreevarSSA"     :: 
@@ -466,6 +462,15 @@ let filtered_grammar superset =
   let violations = (layer_violations superset) in
   let branches = Set.diff (get_branches superset) violations in
   Set.diff branches (branch_violations superset)
+
+let extract_loops_to_set superset =
+  let loops = Superset.ISG.raw_loops superset in
+  let loops = List.filter loops ~f:(fun l -> List.length l >= 2) in
+  Sheathed.addrs_of_loops loops
+
+let extract_filter_loops superset =
+  Sheathed.addrs_of_filtered_loops superset
+
 let loop_grammar superset =
   let superset = Invariants.tag_layer_violations superset in
   let violations = Superset.Core.copy_bad superset in
@@ -476,39 +481,21 @@ let loop_grammar superset =
   let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   let branches = Set.diff branches (transform violations) in
-  let loop_addrs = extract_loop_addrs superset in
-  let loop_addrs = 
-    Map.fold ~init:Addr.Set.empty loop_addrs ~f:(fun ~key ~data addrs -> 
-        if List.length data >= 2 then
-          List.fold ~init:addrs data ~f:Set.add
-        else addrs
-      ) in
+  let loop_addrs = extract_loops_to_set superset in
   Set.filter branches ~f:(fun x -> Set.(mem loop_addrs x))
-let extract_loops superset = 
-  let loop_addrs = extract_loop_addrs superset in
-  Map.fold ~init:Addr.Set.empty loop_addrs ~f:(fun ~key ~data addrs -> 
-      if List.length data >= 2 then
-        List.fold ~init:addrs data ~f:Set.add
-      else addrs
-    )
-let extract_filter_loops superset = 
-  let loop_addrs = extract_filtered_loop_addrs superset in
-  Map.fold ~init:Addr.Set.empty loop_addrs ~f:(fun ~key ~data addrs -> 
-      List.fold ~init:addrs data ~f:Set.add
-    )  
+
 let extract_loops_with_break superset =
   let loop_addrs = extract_loop_addrs superset in
   Map.fold ~init:Addr.Set.empty loop_addrs ~f:(fun ~key ~data loops -> 
       let loop = List.fold ~init:Addr.Set.empty data ~f:Set.add in
-      let has_break = Seq.exists Seq.(of_list data)
-          ~f:(fun addr -> 
-              let targets = Superset.ISG.descendants superset addr in
-              Seq.exists Seq.(of_list targets) 
+      let has_break = List.exists  data
+                        ~f:(fun addr ->
+            let targets = Superset.ISG.descendants superset addr in
+            List.exists targets
                 ~f:(fun x -> not Set.(mem loop x))
             ) in
       if has_break then Set.union loops loop else loops
     )
-
 
 let extract_constants_to_set superset = 
   let constants = extract_constants superset in
@@ -520,7 +507,7 @@ let extract_exitless superset =
   let entries = Superset.entries_of_isg superset in
   Hash_set.iter entries ~f:(fun entry -> 
       Superset.with_ancestors_at superset
-        ?post:None ~f:(Hash_set.add returned) entry
+        ?post:None ~pre:(Hash_set.add returned) entry
     );
   Superset.Core.fold superset ~f:(fun ~key ~data exitless ->
       let v = key in
@@ -535,8 +522,10 @@ let collect_descendants superset ?insn_isg ?visited ?datas targets =
       if not Hash_set.(mem visited v) then
         Superset.mark_descendent_bodies_at ~visited ~datas superset v      
     )
+
 let extract_union_find_compatible superset =  
   Addr.Set.empty
+
 (* TODO iterate over the superset and split it into the set of items
     that can be merged together tenatively. Add the clamped, constants and
     unfiltered grammar. For all added, maintain an Int.Map from union
@@ -661,20 +650,21 @@ let extract_trim_fixpoint_tails superset =
 
 let discard_edges superset =
   Superset.ISG.fold_edges superset
-    (fun child parent _ -> 
-       if not Superset.(is_fall_through superset parent child) then
+    (fun child parent superset -> 
+       if not Superset.(is_fall_through superset parent child) then (
          match Superset.Core.lookup superset parent with
-         | None -> ()
+         | None -> superset
          | Some (mem, insn) -> 
            match insn with 
            | Some(insn) -> 
              let insn = Insn.of_basic insn in
              if Insn.(is Insn.call insn) then
                Superset.ISG.unlink superset child parent
-           | None -> ()
-    ) ();
+             else superset
+           | None -> superset
+       ) else superset
+    ) superset
   (*let edges = Superset.get_non_fall_through_edges superset in*)
-  superset
 
 type extractor = (Superset.t -> Addr.Set.t)
 type ('b) mapextractor = (Superset.t -> 'b Addr.Map.t)
@@ -704,7 +694,7 @@ let _exfiltset = [
   ("Clamped", (find_free_insns, unfiltered));
   ("RestrictedClamped", (restricted_clamp, unfiltered));
   ("ExtendedClamped", (extended_clamp, unfiltered));
-  ("UnfilteredSCC", (extract_loops,unfiltered));
+  ("UnfilteredSCC", (extract_loops_to_set,unfiltered));
   ("LoopsWithBreak", (extract_loops_with_break,unfiltered));
   ("SCC", (extract_filter_loops,unfiltered));
   ("NoExit", (extract_exitless, unfiltered));

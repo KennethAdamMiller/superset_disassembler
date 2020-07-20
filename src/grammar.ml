@@ -62,7 +62,7 @@ let linear_branch_sweep superset entries =
     | None -> ();
   in
   let post _ _ _ = () in
-  Traverse.visit_by_block superset ~pre ~post entries;
+  let superset = Traverse.visit_by_block superset ~pre ~post entries in
   let final_jmps = Addr.Hash_set.create () in
   Map.iteri !jmp_hit_cnt ~f:(fun ~key ~data  -> 
       let jmp_addr = key in
@@ -72,15 +72,18 @@ let linear_branch_sweep superset entries =
     );
   final_jmps
 
+(* TODO threshold needs to be acquired, and this function belongs in
+ * a different module, and descendent traversal needs to be
+ * refactored *)
 let tag_callsites visited ?callsites superset =
   let callsites = Option.value callsites 
       ~default:(Superset.get_callsites ~threshold:6 superset) in
   Hash_set.iter callsites ~f:(fun callsite ->
       Superset.with_descendents_at ~visited
-        ?post:None ~f:(fun _ -> ()) superset callsite;
+        ?post:None ?pre:None superset callsite;
     );
   superset
-
+  
 (* The objective here is to tag grammar structures while traversing *)
 (* topologically in such a manner that we can converge the *)
 (* probability of recognizing an intended sequence by the *)
@@ -92,7 +95,6 @@ let tag_callsites visited ?callsites superset =
 (* point, expressing a path by which they can finally rejoin. *)
 let tag_by_traversal ?(threshold=8) superset =
   let visited = Addr.Hash_set.create () in
-  (* TODO should be either in it's own module and designated function *)
   let callsites = Superset.get_callsites ~threshold:6 superset in
   let superset = tag_callsites visited ~callsites superset in
   let superset = Invariants.tag_layer_violations superset in
@@ -101,9 +103,6 @@ let tag_by_traversal ?(threshold=8) superset =
   let branches = Superset.get_branches superset in
   (*let branches = identify_branches superset in*)
   (*let branches = linear_branch_sweep superset entries in*)
-  (* TODO should delete this printf *)
-  printf "detected %d if structures, %d callsites\n" 
-    (Hash_set.length branches) Hash_set.(length callsites);
   let cur_total = ref 0 in
   let positives = ref [] in
   let entry = ref None in
@@ -123,14 +122,11 @@ let tag_by_traversal ?(threshold=8) superset =
       positives := addr :: !positives;
       if !cur_total >= threshold then (
         let open Option in 
-        (* TODO could add the remaining part of the positives from threshold *)
         ignore (List.nth !positives threshold >>| 
                 (fun convergent_point ->
                    Hash_set.add tps convergent_point));
       ) 
     ) in
-  (* TODO, post does not take into account that increments may occur *)
-  (* across layers and keep those isolated *)
   let post addr =
     entry := Option.value_map !entry ~default:!entry
         ~f:(fun e -> if e = addr then None else Some(e));
@@ -142,11 +138,10 @@ let tag_by_traversal ?(threshold=8) superset =
     ) in
   Traverse.visit
     ~pre ~post superset entries;
-  printf "marked %d convergences\n" (Hash_set.length tps);
   let visited = Addr.Hash_set.create () in
   Hash_set.iter tps ~f:(fun tp -> 
       if not (Hash_set.mem visited tp) then (
-        Superset.with_descendents_at superset tp ~f:(fun tp -> 
+        Superset.with_descendents_at superset tp ~pre:(fun tp -> 
             let mark_bad addr =
               if Superset.ISG.mem_vertex superset addr then (
                 Superset.Core.mark_bad superset addr

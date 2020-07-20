@@ -17,11 +17,12 @@ end
 
 module Reduction(R : Reducer) = struct
 
+  let visited = Addr.Hash_set.create () 
+  (* TODO post cannot work with a persistent graph style *)
   let post superset accu addr =
     let module G = Superset.ISG in
     if R.check_elim superset accu addr then (
       R.mark superset accu addr;
-      G.remove superset addr;
     );
     R.check_post superset accu addr
 
@@ -30,7 +31,12 @@ module Reduction(R : Reducer) = struct
     (* let orig_size = (G.nb_vertex superset_risg) in *)
     let post = post superset in
     let pre = R.check_pre superset in
-    let _ = Superset.with_bad superset ~pre ~post R.accu in
+    let _ = Superset.with_bad superset ~visited ~pre ~post R.accu in
+    let superset = 
+      Hash_set.fold visited ~init:superset ~f:(fun superset addr ->
+          Superset.ISG.remove superset addr
+        ) in
+    Hash_set.clear visited;
     Superset.Core.clear_all_bad superset;
     (*let trimmed_size = (G.nb_vertex superset_risg) in
       let num_removed = orig_size - trimmed_size in
@@ -45,7 +51,7 @@ module Disabled = struct
   let trim superset = superset
 end
 
-module DefaultReducer = Reduction(struct
+module Default = Reduction(struct
     type acc = unit
     let accu = ()
     let check_pre _ accu _ = accu
@@ -53,8 +59,6 @@ module DefaultReducer = Reduction(struct
     let check_elim _ _ _ = true
     let mark _ _ _ = ()
   end)
-
-module Default = DefaultReducer
 
 module DeadblockTolerantReducer : Reducer
 (*with type acc = Superset.elem option*) = struct

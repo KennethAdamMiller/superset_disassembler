@@ -2,7 +2,7 @@ PKG cmdliner
 PKG bap
 PKG ounit2
 PKG bap.plugins
-PKG ocamlgraph
+PKG graphlib
 
 S src/
 

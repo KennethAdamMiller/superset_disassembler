@@ -79,7 +79,6 @@ let tag_branch_violations superset =
     Superset.Occlusion.with_data_of_insn
       superset at ~f:(Hash_set.add dataset)
   in
-  (* TODO removing should move to an alternate set to track discrete lineages *)
   let remove_data_of_insn dataset at =
     Superset.Occlusion.with_data_of_insn
       superset at ~f:(Hash_set.remove dataset)      
@@ -103,8 +102,6 @@ let tag_branch_violations superset =
       )
   in
   let post addr =
-    (* TODO removing should move to a different set, for tracking
-       alternate lineages *)
     Hash_set.remove insns addr;
     remove_data_of_insn datas addr in
   let entries = Superset.entries_of_isg superset in
@@ -141,7 +138,6 @@ let accesses_non_mem superset mem insn _ =
     Option.value status ~default:false
   with _ -> false 
 
-(* TODO Does this belong in Superset? *)
 let tag_with ~f (mem, insn) superset = 
   let targets = Superset.Inspection.static_successors superset mem insn in
   f superset mem insn targets
@@ -205,19 +201,13 @@ let tag_non_insn superset mem insn targets =
   );
   superset
 
-
-(* TODO This belongs in Superset *)
-(* could merge add_to_map and tag_success *)
 let tag_success superset mem insn targets =
   let src = Memory.min_addr mem in
-  (*let superset = Superset.add superset mem insn in*)
-  (* TODO perhaps the below should be merged with Superset.add *)
-  List.iter targets ~f:(fun (target,_) -> 
+  List.fold targets ~init:superset ~f:(fun superset (target,_) -> 
       match target with
       | Some (target) -> 
         Superset.ISG.link superset target src
-      | None -> ());
-  superset
+      | None -> superset)
 
 (* TODO need to add a unit test for each tag *)
 let default_tags = ["Tag non insn", tag_non_insn;

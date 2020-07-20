@@ -7,15 +7,14 @@ type elem = mem * Dis.full_insn option
 type t = Superset_impl.t
 
 module ISG : sig
-  module G = Superset_impl.G
   val ancestors : t -> addr -> addr list
   val descendants : t -> addr -> addr list
   val mem_vertex : t -> addr -> bool
   val iter_vertex : t -> (addr -> unit) -> unit
   val fold_edges : t -> (addr -> addr -> 'a -> 'a) -> 'a -> 'a
-  val link : t -> addr -> addr -> unit
-  val unlink : t -> addr -> addr -> unit
-  val remove : t -> addr -> unit
+  val link : t -> addr -> addr -> t
+  val unlink : t -> addr -> addr -> t
+  val remove : t -> addr -> t
   val raw_loops : t -> addr list list
   val dfs_fold :
     ?visited:Addr.Hash_set.t -> t -> pre:('a -> addr -> 'a) ->
@@ -30,29 +29,32 @@ module Core : sig
 
   val add : t -> mem -> Dis.full_insn option -> t
   val empty : arch -> t
-  (** This primary core function is the core of disassembly, and simply *)
-  (** reads each byte consecutively in memory by address successor. *)
+
+  (** This primary core function is the core of disassembly, and
+  simply reads each byte consecutively in memory by address
+  successor. *)
   val run_seq :
     ('a, 'b) Dis.t ->
     mem ->
     (mem * (Dis.asm, Dis.kinds) Dis.insn option) seq
-  (** This primary core function is the core of disassembly, and simply *)
-  (** reads each byte consecutively in memory by address successor. It *)
-  (** is alike to run_seq, but it hides the sequence part, and accepts *)
-  (** a parameter lambda. *)
+
+  (** This primary core function is the core of disassembly, and simply 
+   reads each byte consecutively in memory by address successor. It 
+   is alike to run_seq, but it hides the sequence part, and accepts 
+   a parameter lambda. *)
   val run :
     ('a, 'b) Dis.t ->
     accu:'c ->
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'c -> 'c) ->
     mem -> 'c
-  (** This primary core function is the core of disassembly, and simply *)
-  (** reads each byte consecutively in memory by address successor. It *)
-  (** builds the disassembler and runs the superset behind the *)
-  (** scenes. One can accumulate with any arbitrary type. Later *)
-  (** accessories tuck the results into a custom superset *)
-  (** representation with graph specializations suited to the *)
-  (** invariants, heuristics and performance that are vital to good *)
-  (** operation. *)
+  (** This primary core function is the core of disassembly, and simply 
+   reads each byte consecutively in memory by address successor. It 
+   builds the disassembler and runs the superset behind the 
+   scenes. One can accumulate with any arbitrary type. Later 
+   accessories tuck the results into a custom superset 
+   representation with graph specializations suited to the 
+   invariants, heuristics and performance that are vital to good 
+   operation. *)
   val disasm :
     ?backend:string ->
     accu:'a ->
@@ -96,10 +98,10 @@ module Core : sig
 end
 
 module Inspection : sig
-  (** Returns if the addr is still in the container representing the *)
-  (** superset. Note, an addr may be marked as bad for removal, but isn't *)
-  (** removed until the trim module traverses for cleaning. Marking for *)
-  (** removal can be reversed by calling clear_bad. *)
+  (** Returns if the addr is still in the container representing the 
+   superset. Note, an addr may be marked as bad for removal, but isn't 
+   removed until the trim module traverses for cleaning. Marking for 
+   removal can be reversed by calling clear_bad. *)
   val contains_addr : t -> addr -> bool
   val get_endianness : t -> endian option
   val get_arch : t -> arch
@@ -112,9 +114,9 @@ module Inspection : sig
   val get_base : t -> addr
   val len_at : t -> addr -> int
   val total_bytes : t -> int
-  (** A carefully written function that visits the address in the body *)
-  (** of any instruction that is longer than one byte. So, addr + 1, *)
-  (** addr + 2, ... addr + n. *)
+  (** A carefully written function that visits the address in the body 
+   of any instruction that is longer than one byte. So, addr + 1, 
+   addr + 2, ... addr + n. *)
   val static_successors : t -> mem -> Dis.full_insn option ->
     Brancher.dests
   val get_memmap : t -> value memmap
@@ -150,8 +152,8 @@ end
 
 (** The instruction immediately after argument addr. *)
 val fall_through_of : t -> addr -> addr
-(** A helper function meant to tuck away the representation *)
-(** underneath that tracks bad addresses. *)
+(** A helper function meant to tuck away the representation 
+ underneath that tracks bad addresses. *)
 val is_fall_through :
   t -> addr -> addr -> bool
 
@@ -176,31 +178,32 @@ val get_non_fall_through_edges :
 val get_callsites : ?threshold:int -> t -> 'b Addr.Hash_set.t_
 
 val with_bad :
-  t -> pre:('b -> addr -> 'c) ->
+  t -> ?visited:Addr.Hash_set.t -> pre:('b -> addr -> 'c) ->
   post:('c -> addr -> 'b) -> 'b -> 'b
 
 val iter_component : ?terminator:((addr -> bool)) ->
   ?visited:Addr.Hash_set.t -> ?pre:(addr -> unit) -> ?post:(addr -> unit) ->
   t -> addr -> unit
 
-(** This function starts at a given address and traverses toward *)
-(** every statically visible descendant. It is used to maximally *)
-(** propagate a given function application. For speed, an isg can *)
-(** be provided, in which case the reverse does not have to be computed *)
-(** repeatedly. *)
+(** This function starts at a given address and traverses toward 
+ every statically visible descendant. It is used to maximally 
+ propagate a given function application. For speed, an isg can 
+ be provided, in which case the reverse does not have to be computed 
+ repeatedly. *)
 (* TODO belongs in traverse *)
 val with_descendents_at :
   ?visited:'a Addr.Hash_set.t_ ->
-  ?post:(addr -> unit) -> f:(addr -> unit) ->
+  ?post:(addr -> unit) -> ?pre:(addr -> unit) ->
   t -> addr ->  unit
 
 val with_ancestors_at :
   ?visited:'a Addr.Hash_set.t_ ->
-  ?post:(addr -> unit) -> ?f:(addr -> unit)  -> t -> addr -> unit
+  ?post:(addr -> unit) -> ?pre:(addr -> unit)  ->
+  t -> addr -> unit
 
-(** From the starting point specified, this reviews all descendants *)
-(** and marks their bodies as bad. For speed, an isg can be provided, *)
-(** in which case the reverse does not have to be computed repeatedly. *)
+(** From the starting point specified, this reviews all descendants 
+ and marks their bodies as bad. For speed, an isg can be provided, 
+ in which case the reverse does not have to be computed repeatedly. *)
 val mark_descendent_bodies_at :
   ?visited:'a Addr.Hash_set.t_ ->
   ?datas:'b Addr.Hash_set.t_ ->
