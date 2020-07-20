@@ -53,6 +53,21 @@ let format_report r =
     "exfp: " Option.(value_map r.exfp ~f:Addr.to_string ~default:"None")
     "================="
 
+let mark_threshold_with_pmap ?visited ?datas superset pmap threshold = 
+  let visited = Option.value visited 
+      ~default:(Addr.Hash_set.create ()) in
+  let datas = Option.value datas
+      ~default:(Addr.Hash_set.create ()) in
+  Map.iteri pmap ~f:(fun ~key ~data ->
+      let addr = key in
+      let p = data in
+      if p > threshold then (
+        if Superset.Core.mem superset addr then
+          Superset.mark_descendent_bodies_at
+            ~datas ~visited superset addr;
+      )
+    )
+  
 let collect_set_report
     (superset : 's) (extractf : 's -> 'e) (filterf : 's -> 'e -> 'e) tps ro fps pmap = 
   let extracted = extractf superset in
@@ -119,8 +134,8 @@ let collect_set_report
   let overlap_space = overlap_max -. overlap_min in
   let visited = Addr.Hash_set.create () in
   let datas = Addr.Hash_set.create () in
-  Markup.mark_threshold_with_pmap ~visited ~datas superset pmap 0.99;
-  let removed = Markup.collect_bad superset in
+  mark_threshold_with_pmap ~visited ~datas superset pmap 0.99;
+  let removed = Superset.Core.copy_bad superset in
   let analysis_cleansed = Hash_set.length removed in
   let (analysis_fn,analysis_fp) =
     Hash_set.fold removed ~init:(0,0) ~f:(fun (fn,fp) addr -> 

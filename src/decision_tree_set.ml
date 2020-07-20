@@ -3,6 +3,8 @@ open Bap.Std
 open Graphlib.Std
 open Graph
 
+module G = Superset.ISG.G
+   
 (** The decision set represents a set of potentially inter-dependent
       decision trees and potential requirements of selection at each
       node. Although a graph is used, the actual structure is acyclic.
@@ -35,7 +37,7 @@ let conflicts_of_entries superset entries =
        ) else conflicted_entries
     )
 
-let tails_of_conflicts superset conflicts = 
+let tails_of_conflicts superset conflicts =
   let possible_tails = Superset.mergers superset in
   (* This tail is the particular instruction
      that is the fall through target of several potential
@@ -80,7 +82,7 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
       | Some(sheath) ->
         List.iter sheath ~f:(fun competitor ->
             Hash_set.add visited_choices competitor;
-            Superset_risg.G.add_edge decision_tree possible_tail
+            G.add_edge decision_tree possible_tail
               competitor;
           );
       | _ -> ()
@@ -89,7 +91,7 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
   let link_zero decision_tree entry =
     let width = Addr.bitwidth entry in
     let zero = Addr.(of_int ~width 0) in
-    Superset_risg.G.add_edge decision_tree zero entry
+    G.add_edge decision_tree zero entry
   in
   let f decision_tree entry =
     let width = Addr.bitwidth entry in
@@ -97,13 +99,13 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
       Addr.of_int ~width 0 in
     let link_choices current_vert =
       add_choices decision_tree entry;
-      let contained = Superset_risg.G.mem_vertex
+      let contained = G.mem_vertex
           decision_tree current_vert in
       let is_new = Hash_set.mem visited current_vert in
       if contained && is_new then (
-        if not @@ Superset_risg.G.mem_edge decision_tree !saved_vert
+        if not @@ G.mem_edge decision_tree !saved_vert
             current_vert then (
-          Superset_risg.G.add_edge decision_tree !saved_vert
+          G.add_edge decision_tree !saved_vert
             current_vert;
         );
         saved_vert := current_vert;
@@ -113,12 +115,12 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
     (* Would like to have fold_component; not available in this
        version *)
     Superset.with_ancestors_at superset entry ?post:None ~f:link_choices;
-    (*Superset_risg.Dfs.prefix_component link_choices insn_isg entry;*)
+    (*Dfs.prefix_component link_choices insn_isg entry;*)
   in
   let conflicted_trees = 
     List.filter_map conflicted_entries ~f:(fun conflicted ->
         if Hash_set.length conflicted > 0 then
-          let decision_tree = Superset_risg.G.create () in
+          let decision_tree = G.create () in
           let f entry = 
             if not (Hash_set.mem visited entry) then (
               link_zero decision_tree entry;
@@ -130,9 +132,9 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
   Hash_set.fold entries ~init:conflicted_trees 
     ~f:(fun all_trees entry ->
         if not (Hash_set.mem visited entry) then
-          let decision_tree = Superset_risg.G.create () in
+          let decision_tree = G.create () in
           f decision_tree entry;
-          if Superset_risg.G.nb_vertex decision_tree > 0 then
+          if G.nb_vertex decision_tree > 0 then
             decision_tree :: all_trees
           else all_trees
         else (all_trees)

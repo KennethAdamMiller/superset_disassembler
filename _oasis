@@ -20,7 +20,6 @@ Library superset_disassemblers
   CompiledObject:	best
   BuildDepends:		bap, core_kernel, cmdliner, ocamlgraph, ppx_inline_test
   Modules:		
-                        Superset_risg,
                         Superset,
                         Metrics,
                         Common, 
@@ -32,9 +31,7 @@ Library superset_disassemblers
                         Insn_disasm_benchmark, 
                         Sheathed, 
                         Decision_tree_set,
-                        Cfg_dot_layout,
                         Abstract_ssa,
-                        Markup,
                         Features,
                         Report,
                         Superset_impl

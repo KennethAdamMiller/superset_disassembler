@@ -1,6 +1,5 @@
 open Core_kernel
 open Bap.Std
-open Superset_risg
 open Graphlib.Std
 open Graph
 
@@ -26,12 +25,8 @@ let filter_components ?(min_size=20) components =
           keep
       )
 
-let raw_loops superset = 
-  Superset.ISG.with_graph superset ~f:(fun insn_risg -> 
-      Superset_risg.StrongComponents.scc_list insn_risg)
-
 let filtered_loops ?(min_size=20) superset =
-  filter_components ~min_size @@ raw_loops superset
+  filter_components ~min_size @@ Superset.ISG.raw_loops superset
 
 
 let tag_loop_contradictions ?(min_size=20) superset =

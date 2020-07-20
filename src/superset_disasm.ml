@@ -120,7 +120,7 @@ let process_cut superset options results =
   match options.cut with 
   | None ->
     if options.save_dot then
-      Cfg_dot_layout.print_dot superset results;
+      Superset.ISG.print_dot ~colorings:results superset;
   | Some cut -> (
       let cut =
         let c, addr, len = cut in
@@ -143,22 +143,17 @@ let process_cut superset options results =
         let terminator _ =
           !depth < len &&
           Hash_set.(length subgraph) < len in
-        (* TODO want to use Graphlib's filtered here *)
         Superset.iter_component ~terminator ~pre ~post superset addr;
-        let sg = Superset.subgraph superset subgraph in ()
-      (* TODO restore dot printing *)
-      (*let superset = Superset.(of_components ~insn_risg:sg superset) in
-        Cfg_dot_layout.print_dot superset results*)
+        let superset = Superset.ISG.filter superset subgraph in 
+        Superset.ISG.print_dot ~colorings:results superset
       | Interval, addr, len ->
         let subgraph = Addr.Hash_set.create () in
         let add x =
           if Addr.(addr <= x) && Addr.(x <= (addr ++ len)) then
             Hash_set.add subgraph x in
         Superset.ISG.iter_vertex superset add;
-        let sg = Superset.subgraph superset subgraph in ()
-        (* TODO restore dot printing *)
-        (*let superset = Superset.(rebuild ~insn_risg:sg superset) in
-          Cfg_dot_layout.print_dot superset results*)
+        let superset = Superset.ISG.filter superset subgraph in 
+        Superset.ISG.print_dot ~colorings:results superset
     )
 
 let converge featureset superset =
@@ -178,17 +173,114 @@ module Program(Conf : Provider)  = struct
           (*Markup.mark_threshold_with_pmap
             superset ~visited ~datas pmap 
             options.tp_threshold;
-            Markup.enforce_uncertain
-            superset visited datas (ref pmap);
             Markup.check_convergence superset visited;*)
           Trim.Default.trim superset in
         do_analysis (round+1) superset in
     do_analysis 0 superset
 
+  let collect_results superset results metrics setops tracker =
+    match options.ground_truth_file with
+    | Some (gt) ->
+       let remaining = Addr.Hash_set.create () in
+       let remaining = 
+         Superset.Core.fold superset ~init:remaining
+           ~f:(fun ~key ~data remaining ->
+             Hash_set.add remaining key; remaining
+           ) in
+       (* apply setops within ground truth? *)
+       Map.iteri setops ~f:(fun ~key ~data ->
+           let s = sprintf "%s - %d" key Hash_set.(length data) in
+           print_endline s;
+           Hash_set.iter data ~f:(Hash_set.remove remaining);
+         );
+       let min_addr = Superset.Inspection.get_base superset in
+       let tp = read_addrs Addr.(bitwidth min_addr) gt in
+       let tps = Addr.Hash_set.create () in
+       List.iter tp ~f:(Hash_set.add tps);
+       let fps = Addr.Hash_set.create () in
+       let _ = Hash_set.iter remaining ~f:(fun key -> 
+                   if not (Hash_set.mem tps key) then
+                     Hash_set.add fps key
+                 ) in
+       let fns = Addr.Hash_set.create () in
+       Hash_set.iter tps ~f:(fun v -> 
+           if not (Hash_set.mem remaining v) then
+             Hash_set.add fns v;
+         );
+       let s = sprintf "tracker size: %d" Map.(length tracker) in
+       print_endline s;
+       Map.iteri tracker ~f:(fun ~key ~data ->
+           let d = !data in
+           let s = sprintf "tracker %s size: %d"
+                     key Map.(length d) in
+           print_endline s;
+           Map.iteri !data ~f:(fun ~key ~data ->
+               if (not Superset.Core.(mem superset key))
+                  && Hash_set.(mem tps key) then (
+                 let memstr =
+                   match Superset.Core.lookup superset key with
+                   | Some (mem, _ ) -> Memory.str () mem
+                   | None -> "" in
+                 let s =
+                   sprintf
+                     "marked fn bad with mem %s of removal size %d"
+                     memstr Set.(length data) in
+                 print_endline s;
+               );
+               Set.iter data ~f:(fun x ->
+                   let s = sprintf "marked fn bad at %s"
+                             Addr.(to_string key) in
+                   let s = sprintf "%s, ancestor fn at %s"
+                             s Addr.(to_string x) in
+                   print_endline s;
+                 ) ; 
+             )
+         );
+       let results = String.Map.set results "True Positives" tps in
+       let results = String.Map.set results "False Positives" fps in
+       let results = String.Map.set results "False Negatives" fns in
+       let s = sprintf "false negatives: %d" Hash_set.(length fns) in
+       print_endline s;
+       let s = sprintf "remaining: %d" Hash_set.(length remaining) in
+       print_endline s;
+       results
+    | None -> results 
+
+  let checkpoint bin phases =
+    let backend = options.disassembler in
+    let dis_method x =
+      (* TODO is tag success still necessary? *)
+      let f x =
+        Superset.superset_disasm_of_file ~backend x
+          ~f:(Invariants.tag ~invariants:[Invariants.tag_success])
+      in time ~name:"disasm binary" f x in
+    match options.checkpoint with
+    | Some Import -> 
+       let superset = time ~name:"import" Superset.import bin in
+       let phases =
+         List.filter phases
+           ~f:(function | Non_instruction -> true | _ -> false) in
+       with_phases superset phases
+    | Some Export ->
+       let superset = dis_method bin in
+       let superset = with_phases superset phases in
+       Superset.export bin superset;
+       superset
+    | Some Update ->
+       let superset = Superset.import bin in
+       let phases =
+         List.filter phases
+           ~f:(function | Non_instruction -> true | _ -> false) in
+       let superset = with_phases superset phases in
+       Superset.export bin superset;
+       superset
+    | None ->
+       let superset = dis_method bin in
+       with_phases superset phases
+
   let main () =
     Random.self_init ();
     let phases = Option.value options.phases ~default:[] in
-    let backend = options.disassembler in
     let format = match options.metrics_format with
       | Latex -> format_latex
       | Standard -> format_standard in
@@ -201,43 +293,12 @@ module Program(Conf : Provider)  = struct
         exit 0
       else
         () in
-    let checkpoint dis_method bin = 
-      match options.checkpoint with
-      | Some Import -> 
-        let superset = time ~name:"import" Superset.import bin in
-        let phases =
-          List.filter phases
-            ~f:(function | Non_instruction -> true | _ -> false) in
-        with_phases superset phases
-      | Some Export ->
-        let superset = dis_method bin in
-        let superset = with_phases superset phases in
-        Superset.export bin superset;
-        superset
-      | Some Update ->
-        let superset = Superset.import bin in
-        let phases =
-          List.filter phases
-            ~f:(function | Non_instruction -> true | _ -> false) in
-        let superset = with_phases superset phases in
-        Superset.export bin superset;
-        superset
-      | None ->
-        let superset = dis_method bin in
-        with_phases superset phases
-    in
-    let dis_method x =
-      let f x = Superset.superset_disasm_of_file ~backend x
-          ~f:(Trim.tag ~invariants:[Trim.tag_success])  in
-      time ~name:"disasm binary" f x
-    in
+    let superset = checkpoint options.target phases in
     let trim = select_trimmer options.trim_method in
     let (trim,metrics) = build_metrics trim phases in
     let trim = select_trimmer options.trim_method in
     let (trim,tracker) = build_tracker trim phases in
     let (trim,setops) = build_setops trim options.setops in
-    let superset = 
-      checkpoint dis_method options.target in
     let superset = trim superset in
     let superset = trim_with (converge options.featureset) superset in
     let _ =
@@ -246,81 +307,7 @@ module Program(Conf : Provider)  = struct
       else () in
     let results = apply_setops setops options.setops in
     let results =
-      match options.ground_truth_file with
-      | Some (gt) ->
-        let remaining = Addr.Hash_set.create () in
-        let remaining = 
-          Superset.Core.fold superset ~init:remaining
-            ~f:(fun ~key ~data remaining ->
-                Hash_set.add remaining key; remaining
-              ) in
-        let s = sprintf "metrics - %d" Map.(length metrics) in
-        print_endline s;
-        let s = sprintf "setops - %d" Map.(length setops) in
-        print_endline s;
-        let s = sprintf "results - %d" Map.(length results) in
-        print_endline s;
-        Map.iteri setops ~f:(fun ~key ~data ->
-            let s = sprintf "%s - %d" key Hash_set.(length data) in
-            print_endline s;
-            Hash_set.iter data ~f:(Hash_set.remove remaining);
-          );
-        let min_addr = Superset.Inspection.get_base superset in
-        let tp = read_addrs Addr.(bitwidth min_addr) gt in
-        let tps = Addr.Hash_set.create () in
-        List.iter tp ~f:(Hash_set.add tps);
-        let fps = Addr.Hash_set.create () in
-        let _ = Hash_set.iter remaining ~f:(fun key -> 
-            if not (Hash_set.mem tps key) then
-              Hash_set.add fps key
-          ) in
-        let fns = Addr.Hash_set.create () in
-        Hash_set.iter tps ~f:(fun v -> 
-            if not (Hash_set.mem remaining v) then
-              Hash_set.add fns v;
-          );
-        let s = sprintf "fps: %d" Hash_set.(length fps) in
-        print_endline s;
-        let s = sprintf "tps: %d" Hash_set.(length tps) in
-        print_endline s;
-        let s = sprintf "tracker size: %d" Map.(length tracker) in
-        print_endline s;
-        Map.iteri tracker ~f:(fun ~key ~data ->
-            let d = !data in
-            let s = sprintf "tracker %s size: %d"
-                key Map.(length d) in
-            print_endline s;
-            Map.iteri !data ~f:(fun ~key ~data ->
-                if (not Superset.Core.(mem superset key))
-                && Hash_set.(mem tps key) then (
-                  let memstr =
-                    match Superset.Core.lookup superset key with
-                    | Some (mem, _ ) -> Memory.str () mem
-                    | None -> "" in
-                  let s =
-                    sprintf
-                      "marked fn bad with mem %s of removal size %d"
-                      memstr Set.(length data) in
-                  print_endline s;
-                );
-                Set.iter data ~f:(fun x ->
-                    let s = sprintf "marked fn bad at %s"
-                        Addr.(to_string key) in
-                    let s = sprintf "%s, ancestor fn at %s"
-                        s Addr.(to_string x) in
-                    print_endline s;
-                  ) ; 
-              )
-          );
-        let results = String.Map.set results "True Positives" tps in
-        let results = String.Map.set results "False Positives" fps in
-        let results = String.Map.set results "False Negatives" fns in
-        let s = sprintf "false negatives: %d" Hash_set.(length fns) in
-        print_endline s;
-        let s = sprintf "remaining: %d" Hash_set.(length remaining) in
-        print_endline s;
-        results
-      | None -> results in
+      collect_results superset results metrics setops tracker in
     process_cut superset options results;
     match options.ground_truth_bin with
     | Some bin -> 
@@ -336,11 +323,11 @@ module Cmdline = struct
   let create 
       checkpoint disassembler ground_truth_bin ground_truth_file target
       metrics_format phases trim_method setops cut save_dot save_gt
-      save_addrs tp_threshold retain_at rounds partition_method featureset = 
+      save_addrs tp_threshold rounds partition_method featureset = 
     Fields.create ~checkpoint ~disassembler ~ground_truth_bin
       ~ground_truth_file ~target ~metrics_format ~phases ~trim_method
-      ~setops ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold ~
-      retain_at ~rounds ~partition_method ~featureset
+      ~setops ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold
+      ~rounds ~partition_method ~featureset
 
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
@@ -371,7 +358,7 @@ module Cmdline = struct
           $checkpoint $(disassembler ()) $ground_truth_bin
           $ground_truth_file $target $metrics_format $phases
           $trim_method $setops $cut $save_dot $save_gt $save_addrs
-          $tp_threshold $retain_at $rounds $partition_method
+          $tp_threshold $rounds $partition_method
           $featureset),
     Term.info "superset_disasm" ~doc ~man
 

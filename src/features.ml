@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 
 module Dis = Disasm_expert
+module G = Superset.ISG.G
 
 let default_features = [
   "ImgEntry";
@@ -26,6 +27,11 @@ let default_features = List.rev default_features
 
 let transform = Hash_set.fold ~init:Addr.Set.empty ~f:Set.add
 
+let clear_each superset visited =
+  Hash_set.iter visited ~f:(fun tp -> 
+      Superset.Core.clear_bad superset tp
+    )
+              
 let find_free_insns superset = 
   let mem = Superset.Core.mem superset in
   let all_conflicts = Addr.Hash_set.create () in
@@ -69,26 +75,26 @@ let extended_clamp superset =
   let to_clamp = find_free_insns superset in
   (* TODO this doesn't merge with to_clamp, and the var names are misleading *)
   Set.fold to_clamp ~init:Addr.Set.empty ~f:(fun to_clamp clamp -> 
-      let _, to_clamp = Superset.ISG.with_graph superset ~f:(fun g ->
-          Superset_risg.Dfs.fold_component
-            (fun addr (struck,to_clamp) ->
-               if struck then (struck,to_clamp) else
-                 let conflicts =
-                   Superset.Occlusion.conflicts_within_insn_at
-                     superset addr in
-                 let no_conflicts = Set.length conflicts = 0 in
-                 (*let conflicts = Superset_risg.parent_conflict_at
+      let _, to_clamp =
+        Superset.ISG.dfs_fold superset
+          ~pre:(fun (struck,to_clamp) addr ->
+            if struck then (struck,to_clamp) else
+              let conflicts =
+                Superset.Occlusion.conflicts_within_insn_at
+                  superset addr in
+              let no_conflicts = Set.length conflicts = 0 in
+              (*let conflicts = Superset.Occlusion.parent_conflict_at
                      insn_risg insn_map addr in
                    let no_conflicts = Set.length conflicts = 0
                                     && no_conflicts in*)
-                 if no_conflicts then (struck, Set.(add to_clamp addr))
-                 else (true, to_clamp)
-            ) (false, to_clamp) g clamp 
-        ) in to_clamp
+              if no_conflicts then (struck, Set.(add to_clamp addr))
+              else (true, to_clamp)
+          ) ~post:(fun x _ -> x) (false, to_clamp) clamp 
+      in to_clamp
     )
 
 let extract_loop_addrs superset = 
-  let loop_addrs = Sheathed.raw_loops superset in
+  let loop_addrs = Superset.ISG.raw_loops superset in
   List.fold_left ~init:Addr.Map.empty loop_addrs
     ~f:(fun addrs loop ->
         if List.length loop >= 2 then
@@ -293,7 +299,7 @@ let extract_trim_clamped superset =
       if Hash_set.(mem visited d) || Set.(mem to_clamp d) then
         Superset.Core.clear_bad superset d
     );
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset
 
 let time ?(name="") f x =
@@ -313,7 +319,7 @@ let extract_trim_limited_clamped superset =
   let () = Superset.Core.clear_all_bad superset in
   let superset = time ~name:"extract_trim_clamped "
       extract_trim_clamped superset in
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset
 
 let fixpoint_descendants superset extractf depth = 
@@ -432,12 +438,12 @@ let extract_fp_branches superset =
   branch_map_of_branches superset branches
 let extract_filter_fp_branches superset =
   let superset = Invariants.tag_layer_violations superset in
-  let violations = Markup.collect_bad superset in
+  let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   let branches = get_branches superset in
   let branches = Set.diff branches (transform violations) in
   let superset = Invariants.tag_branch_violations superset in
-  let violations = Markup.collect_bad superset in
+  let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   let branches = Set.diff branches (transform violations) in
   branch_map_of_branches superset branches
@@ -448,12 +454,12 @@ let classic_grammar superset =
   transform Grammar.(identify_branches superset)
 let branch_violations superset = 
   let superset = Invariants.tag_branch_violations superset in
-  let violations = Markup.collect_bad superset in
+  let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   transform violations
 let layer_violations superset = 
   let superset = Invariants.tag_layer_violations superset in
-  let violations = Markup.collect_bad superset in
+  let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   transform violations
 let filtered_grammar superset = 
@@ -462,12 +468,12 @@ let filtered_grammar superset =
   Set.diff branches (branch_violations superset)
 let loop_grammar superset =
   let superset = Invariants.tag_layer_violations superset in
-  let violations = Markup.collect_bad superset in
+  let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   let branches = get_branches superset in
   let branches = Set.diff branches (transform violations) in
   let superset = Invariants.tag_branch_violations superset in
-  let violations = Markup.collect_bad superset in
+  let violations = Superset.Core.copy_bad superset in
   let _ = Superset.Core.clear_all_bad superset in
   let branches = Set.diff branches (transform violations) in
   let loop_addrs = extract_loop_addrs superset in
@@ -573,7 +579,7 @@ let extract_trim_callsites superset =
   collect_descendants superset ~visited protection;
   Superset.Core.clear_all_bad superset;
   let superset = Grammar.tag_callsites visited ~callsites superset in
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset
 let extract_trim_loops_with_break superset = 
   (*let loops = extract_loops_with_break superset in*)
@@ -602,8 +608,8 @@ let extract_trim_fixpoint_grammar superset =
       if Hash_set.(mem visited d) || Hash_set.(mem gdesc d) then
         Superset.Core.clear_bad superset d
     );
-  Markup.check_convergence superset visited;
-  Markup.check_convergence superset gdesc;
+  clear_each superset visited;
+  clear_each superset gdesc;
   superset  
 let extract_trim_fixpoint_ssa superset =
   let gdesc = fixpoint_ssa superset 6 in
@@ -618,7 +624,7 @@ let extract_trim_fixpoint_ssa superset =
       if Hash_set.(mem visited d) || Hash_set.(mem gdesc d) then
         Superset.Core.clear_bad superset d
     );
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset  
 let extract_trim_fixpoint_freevarssa superset =
   let gdesc = fixpoint_freevarssa superset 6 in
@@ -633,7 +639,7 @@ let extract_trim_fixpoint_freevarssa superset =
       if Hash_set.(mem visited d) || Hash_set.(mem gdesc d) then
         Superset.Core.clear_bad superset d
     );
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset
 let extract_trim_fixpoint_tails superset = 
   let tdesc = fixpoint_tails superset in
@@ -650,7 +656,7 @@ let extract_trim_fixpoint_tails superset =
       if Hash_set.(mem visited d) || Hash_set.(mem tdesc d) then
         Superset.Core.clear_bad superset d
     );
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset
 
 let discard_edges superset =
@@ -798,6 +804,6 @@ let apply_featurepmap featureset ?(threshold=50) superset =
   List.iter Map.(keys feature_pmap) ~f:(fun addr -> 
       Superset.mark_descendent_bodies_at superset ~visited addr
     );
-  Markup.check_convergence superset visited;
+  clear_each superset visited;
   superset
 (*Trim.trim superset*)

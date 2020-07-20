@@ -5,7 +5,6 @@ module type InvariantApplicator = sig
   val apply : Superset.t -> Superset.t
 end
 
-
 let enforce_exclusivity insn_delta data_delta =
   let insns_in_data = 
     Hash_set.fold ~init:[] data_delta ~f:(fun violators data -> 
@@ -111,3 +110,152 @@ let tag_branch_violations superset =
   let entries = Superset.entries_of_isg superset in
   Traverse.visit ~pre ~post superset entries;
   superset
+
+let find_non_mem_accesses superset = 
+  let check_return_addr r addr = 
+    match addr with
+    | Bil.Int(addr) -> 
+      if Superset.Inspection.contains_addr superset addr then
+        r
+      else r.return(Some(false))
+    | _ -> r in
+  (object(self) 
+    inherit [bool] Stmt.finder
+    method! enter_load ~mem ~addr _ _ r = 
+      check_return_addr r addr
+    method! enter_store ~mem ~addr ~exp _ _ r =
+      check_return_addr r addr
+  end)
+
+let accesses_non_mem superset mem insn _ =
+  try
+    let bil = Superset.Core.lift_insn superset ((mem, insn)) in
+    let _, bil = Option.value ~default:(mem,[]) bil in
+    let status = List.fold bil ~init:None ~f:(fun status _stmt -> 
+        Option.value_map status ~default:(Some(false)) ~f:(fun status ->
+            if not status then
+              Stmt.find (find_non_mem_accesses superset) _stmt
+            else Some(status)
+          )
+      ) in
+    Option.value status ~default:false
+  with _ -> false 
+
+(* TODO Does this belong in Superset? *)
+let tag_with ~f (mem, insn) superset = 
+  let targets = Superset.Inspection.static_successors superset mem insn in
+  f superset mem insn targets
+
+let tag_target_not_in_mem superset mem insn targets =
+  List.iter targets
+    ~f:(fun (target,_) ->
+        match target with 
+        | Some(target) -> 
+          if not (Superset.Inspection.contains_addr superset target) then
+            Superset.Core.mark_bad superset (Memory.min_addr mem)
+        | None -> ()
+      );
+  superset
+
+let tag_target_is_bad superset mem insn targets =
+  let width = Addr.bitwidth @@ Memory.min_addr mem in
+  let z = Addr.zero width in
+  List.iter targets
+    ~f:(fun (target,_) ->
+        match target with 
+        | Some(target) -> 
+          if Addr.(target = z) then
+            Superset.Core.mark_bad superset target
+        | None -> ()
+      );
+  superset
+
+let tag_target_in_body superset mem insn targets =
+  let src = Memory.min_addr mem in
+  List.iter targets
+    ~f:(fun (target,_) ->
+        match target with 
+        | Some(target) -> 
+          if (Memory.contains mem target) && 
+             not Addr.(src = target) then
+            Superset.Core.mark_bad superset src
+        | None -> ()
+      );
+  superset
+
+let tag_invalid_targets superset mem insn targets = 
+  let superset = tag_target_not_in_mem superset mem insn targets in
+  let superset = tag_target_is_bad superset mem insn targets in
+  let superset = tag_target_in_body superset mem insn targets in
+  superset
+
+let tag_non_mem_access superset mem insn targets = 
+  let src  = Memory.min_addr mem in
+  if accesses_non_mem superset mem insn targets then (
+    (* The instruction reads or writes to memory that is not mapped *)
+    Superset.Core.mark_bad superset src
+  );
+  superset
+
+let tag_non_insn superset mem insn targets = 
+  let src  = Memory.min_addr mem in
+  if Option.is_none insn then (
+    (* Wasn't a parseable instruction *)
+    Superset.Core.mark_bad superset src
+  );
+  superset
+
+
+(* TODO This belongs in Superset *)
+(* could merge add_to_map and tag_success *)
+let tag_success superset mem insn targets =
+  let src = Memory.min_addr mem in
+  (*let superset = Superset.add superset mem insn in*)
+  (* TODO perhaps the below should be merged with Superset.add *)
+  List.iter targets ~f:(fun (target,_) -> 
+      match target with
+      | Some (target) -> 
+        Superset.ISG.link superset target src
+      | None -> ());
+  superset
+
+(* TODO need to add a unit test for each tag *)
+let default_tags = ["Tag non insn", tag_non_insn;
+                    "Tag non mem access", tag_non_mem_access;
+                    "Tag target not in mem", tag_target_not_in_mem;
+                    "Tag target is bad", tag_target_is_bad;
+                    "Tag target in body", tag_target_in_body;
+                    (*tag_success;*)]
+
+let default_funcs = [
+  tag_non_insn;
+  tag_non_mem_access;
+  tag_target_not_in_mem;
+  tag_target_is_bad;
+  tag_target_in_body;
+  ]
+
+let tag ?invariants =
+  let invariants = Option.value invariants ~default:default_funcs in
+  let f superset mem insn targets =
+    List.fold_left invariants ~init:superset ~f:(fun superset f -> 
+        (f superset mem insn targets)) in
+  tag_with ~f
+
+
+let tag_superset ?invariants superset = 
+  let invariants = Option.value invariants ~default:default_funcs in
+  let f superset mem insn targets =
+    List.fold ~init:superset invariants
+      ~f:(fun superset invariant -> 
+          invariant superset mem insn targets) in
+  Superset.Core.fold ~init:superset superset ~f:(fun ~key ~data superset -> 
+      let mem, insn = data in
+      tag_with ~f (mem, insn) superset
+    )
+    
+let tagged_disasm_of_file ?f ?invariants ~backend file =
+  let invariants = Option.value invariants ~default:default_funcs in
+  let f = Option.value f ~default:[] in
+  let invariants = Some(List.append f invariants) in
+  Superset.superset_disasm_of_file ~backend file ~f:(tag ?invariants)

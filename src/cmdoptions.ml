@@ -22,8 +22,6 @@ type phase =
 
 (* TODO tree set should be a separate option *)
 
-(* TODO execute in fixpoint or by number of rounds? *)
-
 type setop =
   | Intersection
   | Difference
@@ -69,7 +67,6 @@ type t = {
   save_gt            : bool;
   save_addrs         : bool;
   tp_threshold       : float  option;
-  retain_at          : float  option;
   rounds             : int;
   partition_method   : partition option;
   featureset         : string list;
@@ -113,12 +110,6 @@ let tp_threshold =
     "Used for specifying a tp trimming threshold" in
   Cmdliner.Arg.(value & opt (some float) (Some 0.99)
                 & info ["tp_threshold"] ~doc)
-
-let retain_at = 
-  let doc = "Specify what minimum probability to retain all at." in
-  Cmdliner.Arg.(value &
-                opt (some float) None
-                & info ["retain_at"] ~doc)
 
 let read_addrs width ic : addr list = 
   List.filter_map In_channel.(read_lines ic) ~f:(fun x ->
@@ -279,12 +270,14 @@ let select_trimmer trim_method =
 let with_phases superset phases =
   let tag_grammar ?min_size = 
     Grammar.tag_by_traversal ?threshold:None in
+  (* TODO could fold a string and variant pair list instead of
+     manually matching the variant with *)
   let analyses = 
     List.fold ~init:Int.Map.empty phases ~f:(fun analyses phase -> 
         match phase with
         | Default ->
           let analyses = 
-            List.foldi ~init:analyses Trim.default_tags
+            List.foldi ~init:analyses Invariants.default_tags
               ~f:(fun idx analyses tag_func ->
                   Map.set analyses idx (Some(tag_func), None, None))
           in
@@ -301,19 +294,19 @@ let with_phases superset phases =
           (None, Some("Tag grammar", tag_grammar), None)*)
         | Target_not_in_memory -> 
           Map.set analyses Map.(length analyses)
-            (Some(("Tag target not in mem", Trim.tag_target_not_in_mem)), None, None)
+            (Some(("Tag target not in mem", Invariants.tag_target_not_in_mem)), None, None)
         | Target_is_bad ->
           Map.set analyses Map.(length analyses)
-            (Some(("Tag target is bad", Trim.tag_target_is_bad)), None, None)
+            (Some(("Tag target is bad", Invariants.tag_target_is_bad)), None, None)
         | Target_within_body -> 
           Map.set analyses Map.(length analyses)
-            (Some(("Tag target in body", Trim.tag_target_in_body)), None, None)
+            (Some(("Tag target in body", Invariants.tag_target_in_body)), None, None)
         | Invalid_memory_access -> 
           Map.set analyses Map.(length analyses)
-            (Some(("Tag non mem access", Trim.tag_non_mem_access)), None, None)
+            (Some(("Tag non mem access", Invariants.tag_non_mem_access)), None, None)
         | Non_instruction ->
           Map.set analyses Map.(length analyses)
-            (Some(("Tag non insn", Trim.tag_non_insn)), None, None)
+            (Some(("Tag non insn", Invariants.tag_non_insn)), None, None)
         | Component_body -> 
           Map.set analyses Map.(length analyses) 
             (None, Some("Tag loop contradictions", Sheathed.tag_loop_contradictions), None)
@@ -330,7 +323,7 @@ let with_phases superset phases =
             (None, None, Some("Decision trees", Decision_tree_set.decision_trees_of_superset))
       ) in
   let analyses = Map.set analyses (1+Map.(length analyses))
-      (Some("Tag success",Trim.tag_success),None,None) in
+      (Some("Tag success",Invariants.tag_success),None,None) in
   (*let analyses = Map.set analyses (1+Map.(length analyses))
                        (Some(Trim.tag_target_is_bad),None,None) in*)
   let (tag_funcs, analysis_funcs, make_tree) =
@@ -352,7 +345,7 @@ let with_phases superset phases =
     List.rev x, List.rev y, List.rev z in
   let superset = 
     time ~name:"tagging"
-      (Trim.tag_superset  ~invariants:tag_funcs) superset in
+      (Invariants.tag_superset  ~invariants:tag_funcs) superset in
   List.foldi ~init:superset analysis_funcs 
     ~f:(fun idx superset (analysis, analyze) ->
         let name = sprintf "analysis %s" analysis in

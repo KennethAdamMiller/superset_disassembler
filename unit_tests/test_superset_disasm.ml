@@ -3,7 +3,6 @@ open Core_kernel
 open Bap.Std
 open Or_error
 open Common
-open Superset_risg
 open Superset
 open Bap_plugins.Std
 
@@ -17,8 +16,10 @@ let segments = Table.empty
 
 let width = 8*(Arch.size_in_bytes arch);;
 
+module G = Superset.ISG.G
+
 let init () = 
-  let insn_isg = Superset_risg.G.create () in
+  let insn_isg = G.create () in
   let insn_map = Addr.Map.empty in
   insn_map, insn_isg
 
@@ -70,7 +71,7 @@ let str_of_bads superset mem =
   List.to_string ~f:Addr.to_string bds
 
 let debug_msg superset mem =
-  let msg = Superset.isg_to_string superset in
+  let msg = Superset.ISG.isg_to_string superset in
   let bads = str_of_bads superset mem in
   let msg = sprintf "%s\n%s"
       msg bads in
@@ -91,9 +92,9 @@ let test_trim test_ctxt =
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
   let superset = Superset.Core.update_with_mem
-      superset mem ~f:Trim.tag in
+      superset mem ~f:Invariants.tag in
   let superset =
-    Trim.tag_superset superset in
+    Invariants.tag_superset superset in
   let tgt = Memory.min_addr mem in
   let dbg = debug_msg superset mem in
   let bads = str_of_bads superset mem in
@@ -136,7 +137,7 @@ let test_tag_non_mem_access test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let f = (Trim.tag ~invariants:[Trim.tag_non_mem_access]) in
+  let f = (Invariants.tag ~invariants:[Invariants.tag_non_mem_access]) in
   let superset = Superset.Core.update_with_mem
       superset mem ~f in
   let msg = debug_msg superset mem in
@@ -208,12 +209,12 @@ let test_target_not_in_mem test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let invariants = [Trim.tag_target_not_in_mem] in
-  let f = (Trim.tag ~invariants) in
+  let invariants = [Invariants.tag_target_not_in_mem] in
+  let f = (Invariants.tag ~invariants) in
   let superset = Superset.Core.update_with_mem
       superset mem ~f in
   let superset =
-    Trim.tag_superset ~invariants superset in
+    Invariants.tag_superset ~invariants superset in
   let tgt = Memory.min_addr mem in
   let dbg = debug_msg superset mem in
   let explanation =
@@ -236,7 +237,7 @@ let test_trims_invalid_jump test_ctxt =
   let memory, arch = make_params bytes in
   let superset = of_mem arch memory in
   let superset = Superset.Core.update_with_mem
-      superset memory ~f:Trim.tag  in
+      superset memory ~f:Invariants.tag  in
   let superset = Trim.Default.trim superset in
   let superset = Superset.Core.rebalance superset in
   let expected_results = [ ] in
@@ -254,13 +255,13 @@ let test_addr_map test_ctxt =
   assert_bool msg ((Addr.Map.length insn_map) = 1)
 
 let test_insn_isg test_ctxt = 
-  let insn_risg = Superset_risg.G.create () in
+  let insn_risg = G.create () in
   let addr_size = Size.in_bits @@ Arch.addr_size Arch.(`x86_64) in
   let addr  = Addr.of_int addr_size 0 in
-  Superset_risg.G.add_vertex insn_risg addr;
-  Superset_risg.G.add_vertex insn_risg addr;
+  G.add_vertex insn_risg addr;
+  G.add_vertex insn_risg addr;
   let msg = "expected length to be one" in
-  assert_bool msg ((Superset_risg.G.nb_vertex insn_risg) = 1)  
+  assert_bool msg ((G.nb_vertex insn_risg) = 1)  
 
 let test_consistent_superset test_ctxt = 
   let memory, arch = make_params "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
@@ -276,7 +277,7 @@ let construct_loop insn_map insn_isg start finish =
     (* Where we would otherwise connect the nodes from the tail
        condition back up to the loop body entry, here all the edges are
        reversed in the spirit of the disassembled insn_isg. *)
-    Superset_risg.G.add_edge insn_isg start finish;
+    G.add_edge insn_isg start finish;
     let junk_data = String.of_char ' ' in
     let start_mem = create_memory arch start junk_data |> ok_exn in
     let insn_map = Addr.Map.set insn_map start (start_mem, None) in
@@ -295,7 +296,7 @@ let construct_loop insn_map insn_isg start finish =
            nodes, each going from finish to step (reverse as it would
            be a flow in a real binary) before finally reaching the
            start *)
-        Superset_risg.G.add_edge insn_isg step start;
+        G.add_edge insn_isg step start;
         (* Because the algorithm at this point relies on the graph
            and map entirely, it doesn't matter the contents of the
            memory. *)
@@ -310,8 +311,8 @@ let construct_loop insn_map insn_isg start finish =
 let construct_entry_conflict insn_map insn_isg at conflict_len = 
   let junk_data = String.make conflict_len ' ' in
   let conflict = Addr.(at ++ conflict_len) in
-  Superset_risg.G.add_edge insn_isg at conflict;
-  Superset_risg.G.add_edge insn_isg Addr.(at ++ 1) Addr.(conflict ++ 1);
+  G.add_edge insn_isg at conflict;
+  G.add_edge insn_isg Addr.(at ++ 1) Addr.(conflict ++ 1);
   let insn_map = Addr.Map.set insn_map ~key:at 
       ~data:(create_memory arch at junk_data |> ok_exn, None) in
   let insn_map = Addr.Map.set insn_map ~key:conflict
@@ -325,9 +326,9 @@ let construct_entry_conflict insn_map insn_isg at conflict_len =
 let construct_tail_conflict 
     insn_map insn_isg tail_addr conflict_count =
   let orig = 
-    if Superset_risg.G.mem_vertex insn_isg tail_addr &&
-       Superset_risg.G.out_degree insn_isg tail_addr > 0 then
-      let orig = Superset_risg.G.succ insn_isg tail_addr in
+    if G.mem_vertex insn_isg tail_addr &&
+       G.out_degree insn_isg tail_addr > 0 then
+      let orig = G.succ insn_isg tail_addr in
       let orig = Addr.Set.of_list orig in orig
     else Addr.Set.empty in
   let insn_map, tail_len = match Addr.Map.find insn_map tail_addr with
@@ -343,7 +344,7 @@ let construct_tail_conflict
     if conflict_count > 0 then
       let junk_data = String.make conflict_count ' ' in
       let conflict_addr = Addr.(tail_addr -- conflict_count) in
-      Superset_risg.G.add_edge insn_isg tail_addr conflict_addr;
+      G.add_edge insn_isg tail_addr conflict_addr;
       let insn_map = Addr.Map.set insn_map ~key:conflict_addr 
           ~data:(create_memory arch conflict_addr junk_data |> ok_exn,
                  None) in
@@ -352,7 +353,7 @@ let construct_tail_conflict
       insn_map, insn_isg in
   let insn_map, insn_isg = 
     make_tail_options insn_map conflict_count in
-  let opts = Superset_risg.G.succ insn_isg tail_addr in
+  let opts = G.succ insn_isg tail_addr in
   let opts = Addr.Set.of_list opts in
   let opts = Set.diff opts orig in
   let msg = sprintf
@@ -401,9 +402,9 @@ let test_tail_construction test_ctxt =
       let superset = Superset_impl.of_components
           ~insn_map ~insn_risg arch in
       Map.iteri insn_map ~f:(fun ~key ~data -> 
-          assert_equal true @@ Superset_risg.G.mem_vertex insn_risg key;
+          assert_equal true @@ G.mem_vertex insn_risg key;
         );
-      Superset_risg.G.iter_vertex (fun vert -> 
+      G.iter_vertex (fun vert -> 
           assert_equal true @@ Map.mem insn_map vert;
         ) insn_risg;
       let conflicts = Superset.Occlusion.find_all_conflicts superset in
@@ -476,7 +477,7 @@ let test_decision_tree_of_entries test_ctxt =
       entry 10 in
   let msg = sprintf "expected entry %s to be in isg" 
       (Addr.to_string entry) in
-  assert_equal ~msg true (Superset_risg.G.mem_vertex insn_isg entry);
+  assert_equal ~msg true (G.mem_vertex insn_isg entry);
   let superset = Superset_impl.of_components
       ~insn_map ~insn_risg arch in  
   let entries = Superset.entries_of_isg superset in
@@ -500,11 +501,11 @@ let test_decision_tree_of_entries test_ctxt =
   assert_equal true @@ (not ((List.length decision_trees) = 0));
   List.iter decision_trees ~f:(fun decision_tree ->
       assert_equal ~msg:non_empty_tree_msg 
-        true @@ not ((Superset_risg.G.nb_vertex decision_tree)=0);
+        true @@ not ((G.nb_vertex decision_tree)=0);
       assert_equal ~msg:expect_entry_msg 
-        true @@ (Superset_risg.G.mem_vertex decision_tree entry);
+        true @@ (G.mem_vertex decision_tree entry);
       assert_equal ~msg:expect_zero_msg 
-        true @@ (Superset_risg.G.mem_vertex decision_tree zero);
+        true @@ (G.mem_vertex decision_tree zero);
     )
 
 let test_loop_scc test_ctxt = 
@@ -513,8 +514,10 @@ let test_loop_scc test_ctxt =
   let insn_map, insn_isg = 
     construct_loop insn_map insn_isg entry Addr.(entry ++ 20) in
   let loop_points = Addr.Hash_set.create () in
-  Superset_risg.G.iter_vertex (fun vert -> Hash_set.add loop_points vert) insn_isg;
-  let scc = Superset_risg.StrongComponents.scc_list insn_isg in
+  G.iter_vertex (fun vert -> Hash_set.add loop_points vert) insn_isg;
+  let superset =
+    Superset_impl.of_components ~insn_map ~insn_risg:insn_isg arch in
+  let scc = Superset.ISG.raw_loops superset in
   let scc_points = Addr.Hash_set.create () in
   List.iter scc ~f:(fun scc -> 
       List.iter scc ~f:(fun component_addr -> 
@@ -530,11 +533,13 @@ let test_loop_scc test_ctxt =
       @@ Hash_set.mem loop_points loop_addr)
 
 let test_scc test_ctxt =
-  let _, insn_isg = init () in
+  let insn_map, insn_risg = init () in
   let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
-  Superset_risg.G.add_edge insn_isg zero entry;
-  let components = Superset_risg.StrongComponents.scc_list insn_isg in
+  G.add_edge insn_risg zero entry;
+  let superset =
+    Superset_impl.of_components ~insn_map ~insn_risg arch in
+  let components = Superset.ISG.raw_loops superset in
   let components = Sheathed.filter_components components in
   assert_equal ~msg:"found non scc component" 0 (Set.length components)
 
@@ -574,16 +579,16 @@ let test_trim_scc test_ctxt =
     construct_loop insn_map insn_isg entry Addr.(entry ++ 20) in
   let in_loop_addr = Addr.(of_int ~width 0x10) in
   let loop_points = Addr.Hash_set.create () in
-  Superset_risg.G.iter_vertex (Hash_set.add loop_points) insn_isg;
+  G.iter_vertex (Hash_set.add loop_points) insn_isg;
   let insn_map, insn_risg =
     construct_tail_conflict insn_map insn_isg in_loop_addr 3 in
   let conflicts_added = Addr.Hash_set.create () in
-  Superset_risg.G.iter_vertex (fun vert -> 
+  G.iter_vertex (fun vert -> 
       if not (Hash_set.mem loop_points vert) then 
         Hash_set.add conflicts_added vert) insn_isg;
   let superset = Superset_impl.of_components
       ~insn_map ~insn_risg arch in
-  let components = Superset_risg.StrongComponents.scc_list insn_isg in
+  let components = Superset.ISG.raw_loops superset in
   assert_bool "Should have a component" 
     (List.(length components) > 0);
   let superset = 
@@ -595,7 +600,7 @@ let test_trim_scc test_ctxt =
                               Hash_set.to_list conflicts_added in
   let removed_msg = "of conflicts " ^ conflicts_added_str 
                     ^ ", residual conflict present within " in
-  let isg_msg = Superset.isg_to_string superset in
+  let isg_msg = Superset.ISG.isg_to_string superset in
   let removed_msg = sprintf "%s\n%s" isg_msg removed_msg in
   let (mlg, glm) = Superset.Inspection.unbalanced_diff superset in
   let msg = sprintf "%s\nmlg: %d, glm: %d" removed_msg
@@ -620,24 +625,24 @@ let test_topological_revisit ctxt =
   let rec make_if current stop =
     if not (current = stop) then
       let next = Addr.succ current in
-      Superset_risg.G.add_edge insn_risg current next;
+      G.add_edge insn_risg current next;
       make_if next stop in
   make_if start stop;
-  Superset_risg.G.add_edge insn_risg start stop;
+  G.add_edge insn_risg start stop;
   let update_count addr visit_count = 
     match Map.find visit_count addr with
     | Some (count) -> 
       let visit_count = Map.remove visit_count addr in
       Map.set visit_count addr (count+1)
     | None -> Map.set visit_count addr 1 in
-  let visit_count = Topological.fold 
+  let visit_count = Superset_impl.Topological.fold 
       update_count insn_risg Addr.Map.empty in
   Map.iteri visit_count (fun ~key ~data -> assert_equal ~ctxt data 1)
 
 let rec extend_back insn_map insn_isg ?(step=1) addr num =
   let make_link len =
     let dest = Addr.(addr -- len) in
-    Superset_risg.G.add_edge insn_isg addr dest;
+    G.add_edge insn_isg addr dest;
     let junk_data = String.make len ' ' in
     let mem = create_memory arch dest junk_data |> ok_exn in
     let insn_map = Map.set insn_map dest (mem, None) in
@@ -652,7 +657,7 @@ let make_extended_cross tail_addr =
   let insn_map, insn_risg = init () in
   let insn_map, insn_risg =
     construct_tail_conflict insn_map insn_risg tail_addr 2 in
-  let layer_options = Superset_risg.G.(succ insn_risg tail_addr) in
+  let layer_options = G.(succ insn_risg tail_addr) in
   let insn_map, insn_risg = List.fold ~init:(insn_map, insn_risg)
       layer_options ~f:(fun (insn_map, insn_risg) opt -> 
           extend_back insn_map insn_risg opt 1 ~step:2
@@ -665,7 +670,7 @@ let make_extended_cross tail_addr =
   let _ = Hash_set.fold ~init:None extended_points
       ~f:(fun current next -> 
           let _ = Option.map current ~f:(fun current -> 
-              Superset_risg.G.add_edge insn_risg current next
+              G.add_edge insn_risg current next
             ) in
           Some(next)
         ) in
@@ -687,7 +692,7 @@ let test_calculate_delta test_ctxt =
   let is_option = Set.mem option_set in
   let deltas = Decision_tree_set.calculate_deltas 
       superset ~entries is_option in
-  let expected_deltas = Superset_risg.G.succ insn_risg tail_addr in
+  let expected_deltas = G.succ insn_risg tail_addr in
   let num_expected = List.(length expected_deltas) in
   let actual = Map.(length deltas) in
   let msg = sprintf "expected %d deltas, got %d" 
@@ -720,10 +725,10 @@ let construct_branch insn_map insn_risg branch_at incr =
   let rejoin = Addr.(right ++ incr) in
   let rejoin_mem = create_memory arch rejoin junk_data |> ok_exn in
   let insn_map = Map.set insn_map rejoin (rejoin_mem, None) in
-  Superset_risg.G.add_edge insn_risg left branch_at;
-  Superset_risg.G.add_edge insn_risg right branch_at;
-  Superset_risg.G.add_edge insn_risg rejoin right;
-  Superset_risg.G.add_edge insn_risg rejoin left;
+  G.add_edge insn_risg left branch_at;
+  G.add_edge insn_risg right branch_at;
+  G.add_edge insn_risg rejoin right;
+  G.add_edge insn_risg rejoin left;
   insn_map, insn_risg
 
 let test_branch_recognition test_ctxt =
@@ -762,15 +767,17 @@ let test_layer_delta_calculation test_ctxt = ()
 let test_dfs_redundancy_elimination test_ctxt = ()
 
 let test_dfs_iter_order test_ctxt = 
-  let _, insn_risg = init () in
+  let insn_map, insn_risg = init () in
+  let superset =
+    Superset_impl.of_components ~insn_map ~insn_risg arch in           
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let start = Addr.of_int addr_size 40 in
-  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
-  Superset_risg.G.add_edge insn_risg start Addr.(start ++ 2);
+  G.add_edge insn_risg start Addr.(succ start);
+  G.add_edge insn_risg start Addr.(start ++ 2);
   let visit_order = ref [] in
-  Superset_risg.Dfs.prefix_component
-    (fun v -> visit_order := v :: !visit_order) 
-    insn_risg start;
+  Superset.with_ancestors_at 
+    ~f:(fun v -> visit_order := v :: !visit_order) 
+    superset start;
   visit_order := List.rev !visit_order;
   let msg = sprintf "expected addr %s to be first, was %s" 
       Addr.(to_string start)
@@ -812,14 +819,13 @@ let test_graph_edge_behavior test_ctxt =
   let _, insn_risg = init () in
   let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let start = Addr.of_int addr_size 50 in
-  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
-  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
-  Superset_risg.G.add_edge insn_risg start Addr.(succ start);
-  let edges = Superset_risg.G.find_all_edges 
+  G.add_edge insn_risg start Addr.(succ start);
+  G.add_edge insn_risg start Addr.(succ start);
+  G.add_edge insn_risg start Addr.(succ start);
+  let edges = G.find_all_edges 
       insn_risg start Addr.(succ start) in
   let msg = "expect single edge between nodes" in
   assert_equal ~msg List.(length edges) 1
-
 
 
 let () =

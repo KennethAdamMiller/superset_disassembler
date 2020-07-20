@@ -7,6 +7,7 @@ type elem = mem * Dis.full_insn option
 type t = Superset_impl.t
 
 module ISG : sig
+  module G = Superset_impl.G
   val ancestors : t -> addr -> addr list
   val descendants : t -> addr -> addr list
   val mem_vertex : t -> addr -> bool
@@ -15,15 +16,18 @@ module ISG : sig
   val link : t -> addr -> addr -> unit
   val unlink : t -> addr -> addr -> unit
   val remove : t -> addr -> unit
-  val with_graph : t -> f:(Superset_risg.t -> 'a) -> 'a
+  val raw_loops : t -> addr list list
+  val dfs_fold :
+    ?visited:Addr.Hash_set.t -> t -> pre:('a -> addr -> 'a) ->
+    post:('a -> addr -> 'a) -> 'a -> addr -> 'a
+  val print_dot : ?colorings:Addr.Hash_set.t String.Map.t -> t -> unit
+  val filter : t -> Addr.Hash_set.t -> t
+  val format_isg : ?format:Format.formatter -> t -> unit
+  val isg_to_string : t -> string
 end
 
 module Core : sig
 
-  (* TODO these functions may not be needed  *)
-  (*val create :
-    ?insn_map:(mem * Dis.full_insn option) Addr.Map.t ->
-    ?insn_risg:Superset_risg.t -> arch -> 'a -> t*)
   val add : t -> mem -> Dis.full_insn option -> t
   val empty : arch -> t
   (** This primary core function is the core of disassembly, and simply *)
@@ -83,6 +87,9 @@ module Core : sig
       longer distinguishable as previously. *)
   val clear_bad : t -> addr -> unit
   val clear_all_bad : t -> unit
+  (** Returns a copy of the set of addresses that have been marked
+      bad *)
+  val copy_bad : t -> Addr.Hash_set.t
   val lookup : t -> addr -> (mem * Dis.full_insn option) option
   val fold : t -> init:'a -> f:(key:addr -> data:elem -> 'a -> 'a) -> 'a
   val mem : t -> addr -> bool
@@ -141,7 +148,6 @@ module Occlusion : sig
     t -> ?mem:(addr -> bool) -> ?conflicts:Addr.Set.t -> addr -> Addr.Set.t
 end
 
-(* TODO duplicate in Trim, possibly also in the graph *)
 (** The instruction immediately after argument addr. *)
 val fall_through_of : t -> addr -> addr
 (** A helper function meant to tuck away the representation *)
@@ -162,17 +168,15 @@ val get_branches : t -> Addr.Hash_set.t
 val check_connected : t -> addr -> addr -> bool
 
 (* TODO move to features *)
-val get_callers :
-  t -> Superset_risg.G.vertex -> Superset_risg.G.vertex List.t
 val get_non_fall_through_edges :
   t ->
-  (Superset_risg.G.vertex, Superset_risg.G.vertex,
+  (addr, addr,
    Addr.Map.Key.comparator_witness)
     Map.t
 val get_callsites : ?threshold:int -> t -> 'b Addr.Hash_set.t_
 
 val with_bad :
-  t -> ?visited:Addr.Hash_set.t -> pre:('b -> addr -> 'c) ->
+  t -> pre:('b -> addr -> 'c) ->
   post:('c -> addr -> 'b) -> 'b -> 'b
 
 val iter_component : ?terminator:((addr -> bool)) ->
@@ -202,21 +206,9 @@ val mark_descendent_bodies_at :
   ?datas:'b Addr.Hash_set.t_ ->
   t -> addr -> unit
 
-val subgraph : t -> Addr.Hash_set.t -> Superset_risg.t
-
-(* belongs in isg *)
-val format_isg : ?format:Format.formatter -> t -> unit
-val isg_to_string : t -> string
-
-val insn_map_to_string : (mem * 'a) Addr.Map.t -> string
-val insn_map_of_string :
-  string -> (mem * 'a option) Addr.Map.t
-val meta_of_string : string -> Arch.t
-val meta_to_string : t -> string
 val import : string -> t
-val export : string -> t -> Base.unit
+val export : string -> t -> unit
 val export_addrs : string -> t -> unit
-
 
 val superset_disasm_of_file :
   ?backend:string ->
