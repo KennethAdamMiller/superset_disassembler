@@ -53,6 +53,7 @@ let format_report r =
     "exfp: " Option.(value_map r.exfp ~f:Addr.to_string ~default:"None")
     "================="
 
+(* TODO duplicates in other places *)
 let mark_threshold_with_pmap ?visited ?datas superset pmap threshold = 
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in

@@ -4,13 +4,41 @@ open Regular.Std
 open Format
 open Bap_knowledge
 open Bap_future.Std
+open Bap_core_theory
+open Monads.Std
 open Cmdoptions
 
 include Self()
+module Dis = Disasm_expert.Basic
 
-let superdisasm features threshold rounds save load calc_gt trimmer
-      oformat =
+let superdisasm options =
+  let module Program =
+    With_options(struct
+        let options = options
+      end) in
+  let open Program in
   info "superset disasm";
+  let promise_addrs () =
+    Knowledge.promise Dis.Insn.slot (fun obj ->
+    KB.(collect Dis.Insn.slot obj >>|
+    (fun insn ->
+    match insn with
+    | None ->  insn
+    | Some insn ->
+       KB.Value.put Dis.Insn.slot insn
+      ))) in
+  let open Knowledge in
+  List.iter (Documentation.classes ()) ~f:(fun (c,ps) ->
+      List.iter ps ~f:(fun prop ->
+          return @@ print_endline (Documentation.Property.desc prop)
+        );
+      return @@ print_endline (Documentation.Class.desc c)
+    );
+  print_endline "finished classes";
+  List.iter (Documentation.agents ()) ~f:(fun agnt ->
+      return @@ print_endline (Documentation.Agent.desc agnt);
+    );
+  print_endline "finished agents";
   let req = Stream.zip Project.Info.arch Project.Info.code in
   Stream.observe req (fun (arch,cd) ->
       info "Stream.observe (arch,code)";
@@ -21,19 +49,12 @@ let superdisasm features threshold rounds save load calc_gt trimmer
           ~f:(fun superset (mem,v) ->
             Superset.Core.update_with_mem superset mem
           ) in
-      let superset = Invariants.tag_superset superset in
-      let superset = Trim.Default.trim superset in
-      (* apply features *)
-      let superset =
-        Features.apply_featureset features superset in
-      let superset =
-        Features.apply_featurepmap features superset in
-      let superset = Trim.Default.trim superset in
-      let selections = Knowledge.empty in
-      ()
-    )
 
-(* TODO write the other command line arguments *)
+      Superset.ISG.iter_vertex superset (fun v ->
+          (* report the remaining as truths to the knowledge base *)
+          ()
+        )
+    )
   
 let () =
   let () = Config.manpage [
@@ -43,9 +64,8 @@ let () =
                   optional trimming components to reduce false
                   positives to an ideal minimum. ";
     ] in
-  let deps = [ ] in
   let doc = "Number of analysis cycles" in
-  let rounds = Config.(param (some int) "rounds" ~doc) in
+  let rounds = Config.(param (int) ~default:1 "rounds" ~doc) in
   let threshold = Config.(param (some float) "threshold" ~doc) in
   let doc = "The file that houses the points-to ground truth" in
   let features =
@@ -64,15 +84,15 @@ let () =
   let doc =
     "There are options of trimmer, which is the false positives removal method." in
   let trimmer =
-    Config.(param (string) "trimmer" ~default:"Simple" ~doc) in
+    Config.(param (some (enum list_trimmers)) "trimmer" ~default:(Some Simple) ~doc) in
   let doc = "The output format of choice" in
   let oformat = Config.(param (some string) "out_format" ~default:None
                           ~doc) in
   Config.when_ready (fun {Config.get=(!)} ->
-      superdisasm !features !threshold !rounds !savetgt !load
-                     !invariants !calc_gt !trimmer !oformat
-      $ground_truth_bin
-      $metrics_format
-       $setops $cut
-      $retain_at 
+      let options =
+        Fields.create ~checkpoint ~disassembler ~ground_truth_bin
+          ~ground_truth_file ~target ~metrics_format ~phases ~trim_method
+          ~setops ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold
+          ~rounds ~featureset in
+      superdisasm options
     )

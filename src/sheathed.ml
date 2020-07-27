@@ -26,6 +26,13 @@ let filter_loops ?(min_size=20) loops =
 let addrs_of_filtered_loops ?(min_size=20) superset =
   filter_loops ~min_size @@ Superset.ISG.raw_loops superset
 
+(** In the body of a loop, instructions fall through eventually to
+    themselves, which amounts to effectively a trigger of an
+    invariant. But the level at which invariants operate is too fine
+    grained to see the consequence propagated from conflicts that are
+    potentially in loops that are many instructions long. This
+    function cleanses the bodies of instructions that occur in loops
+    of a minimum size. *)
 let tag_loop_contradictions ?(min_size=20) superset =
   let keep = addrs_of_filtered_loops ~min_size superset in
   (* Here we have to be careful; we only want to find instructions

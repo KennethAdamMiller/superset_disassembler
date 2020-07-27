@@ -2,7 +2,6 @@ open OUnit2
 open Core_kernel
 open Bap.Std
 open Or_error
-open Common
 open Superset
 open Bap_plugins.Std
 open Graphlib.Std
@@ -10,6 +9,9 @@ open Graphlib.Std
 let () = Pervasives.ignore(Plugins.load ())
 let _ = Bap_main.init ()
 
+let create_memory arch min_addr data =
+  let data = Bigstring.of_string data in
+  Memory.create (Arch.endian arch) min_addr data
 
 let arch = `x86
 
@@ -101,8 +103,6 @@ let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let superset = Superset.Core.update_with_mem
-      superset mem ~f:Invariants.tag in
   let superset =
     Invariants.tag_superset superset in
   let tgt = Memory.min_addr mem in
@@ -140,21 +140,44 @@ let test_can_lift test_ctxt =
   with _ -> ()  
 
 (* TODO want a bil language oriented way to specify the construction of a superset *)
-
-(* TODO after obtaining the bil language oriented construction of *)
-(* superset, build tag_non_mem *)
-let test_tag_non_mem_access test_ctxt = 
-  let bytes = "\x2d\xdd\xc3\x54\x55" in
+let dis_with_invariants bytes invariants = 
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let f = (Invariants.tag ~invariants:[Invariants.tag_non_mem_access]) in
+  let f = (Invariants.tag ~invariants) in
   let superset = Superset.Core.update_with_mem
-      superset mem ~f in
+                   superset mem ~f in
+  let msg = debug_msg superset mem in
+  let msg = sprintf "Should be bad at %s\n%s"
+              Addr.(to_string min_addr) msg in
+  let is_bad = Superset.Inspection.is_bad_at superset min_addr in
+  assert_bool msg is_bad;
+  let superset = Trim.Default.trim superset in
+  let superset = Superset.Core.rebalance superset in
   let msg = debug_msg superset mem in
   let offset_one =
-    Superset.Core.mem superset Addr.(succ min_addr) in
+    Superset.Core.mem superset min_addr in
   assert_bool msg (not offset_one)
+  
+let test_tag_non_mem_access test_ctxt =
+  let bytes = "\xb8\x00\x00\x00\x00" in
+  dis_with_invariants bytes [Invariants.tag_non_mem_access]
 
+let test_tag_non_insn test_ctxt =
+  dis_with_invariants "\x0f\xff" [Invariants.tag_non_insn]
+
+let test_tag_target_is_bad test_ctxt =
+  let bytes = "\x77\x77" in
+  dis_with_invariants bytes [Invariants.tag_target_is_bad]
+
+let test_target_in_body test_ctxt =
+  let bytes = "\x77\xFF" in
+  dis_with_invariants bytes [Invariants.tag_target_in_body]
+
+let test_target_not_in_mem test_ctxt = 
+  let bytes = "\x77\x77" in
+  let invariants = [Invariants.tag_target_not_in_mem] in
+  dis_with_invariants bytes invariants
+  
 let test_static_successors_includes_fall_through test_ctxt =
   let bytes = "\x54\x55" in
   let mem, arch = make_params bytes in
@@ -213,34 +236,6 @@ let test_superset_contains_addr test_ctxt =
     let b = b && (List.length tgts > 0) in
     assert_bool "static successors doesn't contain fall through" b
   | None -> assert_bool "insn expected here" false
-
-
-let test_target_not_in_mem test_ctxt = 
-  let bytes = "\x2d\xdd\xc3\x54\x55" in
-  let mem, arch = make_params bytes in
-  let superset = of_mem arch mem in
-  let invariants = [Invariants.tag_target_not_in_mem] in
-  let f = (Invariants.tag ~invariants) in
-  let superset = Superset.Core.update_with_mem
-      superset mem ~f in
-  let superset =
-    Invariants.tag_superset ~invariants superset in
-  let tgt = Memory.min_addr mem in
-  let dbg = debug_msg superset mem in
-  let explanation =
-    sprintf "target not in mem did not mark bad at %s"
-      Addr.(to_string tgt) in
-  let msg = sprintf "%s\n%s"
-      dbg explanation in
-  let is_bad = Superset.Inspection.is_bad_at superset tgt in
-  assert_bool msg is_bad;
-  let superset = Trim.Default.trim superset in
-  let msg = sprintf "%s\n%s"
-      dbg "target not in mem is not true here" in
-  match Superset.Core.lookup superset tgt with
-  | Some (mem, insn) -> 
-    assert_bool msg false
-  | None -> ()
 
 let test_trims_invalid_jump test_ctxt =
   let bytes = "\x55\x54\xE9\xFC\xFF\xFF\xFF" in
@@ -382,7 +377,7 @@ let test_construct_entry_conflict test_ctxt =
       let superset = Superset_impl.of_components
           ~insn_map ~insn_risg arch in
       let entries = Superset.entries_of_isg superset in
-      let conflicts = Decision_tree_set.conflicts_of_entries
+      let conflicts = Decision_trees.conflicts_of_entries
           superset entries in
       (match conflicts with
        | conflict_set :: nil -> 
@@ -418,7 +413,7 @@ let test_tail_construction test_ctxt =
           assert_equal true @@ Map.mem insn_map vert;
         );
       let conflicts = Superset.Occlusion.find_all_conflicts superset in
-      let tails = Decision_tree_set.tails_of_conflicts
+      let tails = Decision_trees.tails_of_conflicts
           superset conflicts  in
       let num_tails = Addr.Map.length tails in
       let msg = "There should be exactly one tail; there was "
@@ -449,7 +444,7 @@ let test_tails_of_conflicts test_ctxt =
   let superset = Superset_impl.of_components
       ~insn_map ~insn_risg arch in  
   let conflicts = Superset.Occlusion.find_all_conflicts superset in
-  let tails = Decision_tree_set.tails_of_conflicts superset
+  let tails = Decision_trees.tails_of_conflicts superset
       conflicts in
   assert_equal true (Addr.Map.length tails = 1)
     ~msg:"There should be exactly one tail" 
@@ -470,7 +465,7 @@ let test_extenuating_tail_competitors test_ctxt =
   let superset = Superset_impl.of_components
       ~insn_map ~insn_risg arch in  
   let conflicts = Superset.Occlusion.find_all_conflicts superset in
-  let tails = Decision_tree_set.tails_of_conflicts superset
+  let tails = Decision_trees.tails_of_conflicts superset
       conflicts in
   assert_equal true @@ Addr.Map.mem tails tail;
   assert_equal true @@ Addr.Map.mem tails extenuation_addr;
@@ -499,14 +494,8 @@ let test_decision_tree_of_entries test_ctxt =
   let msg = sprintf "expected entry %s to be in entries" 
       Addr.(to_string @@ succ entry) in
   assert_equal ~msg true (Hash_set.mem entries Addr.(succ entry));
-  let conflicts = Superset.Occlusion.find_all_conflicts superset in
-  let tails = Decision_tree_set.tails_of_conflicts superset
-      conflicts in
-  let conflicted_entries =
-    Decision_tree_set.conflicts_of_entries superset entries in
   let decision_trees =
-    Decision_tree_set.decision_tree_of_entries
-      superset conflicted_entries entries tails in
+    Decision_trees.decision_trees_of_superset superset in
   let expect_entry_msg = "Expect entry in decision_tree" in
   let expect_zero_msg = "Expect zero node in decision tree" in
   let non_empty_tree_msg = "Expect decision tree to be non empty" in
@@ -576,9 +565,7 @@ let test_is_option test_ctxt =
       num_conflicts in
   let superset = Superset_impl.of_components
       ~insn_map ~insn_risg arch in  
-  let is_option = (Decision_tree_set.insn_is_option superset) in
-  let deltas = Decision_tree_set.calculate_deltas superset
-      is_option in
+  let deltas = Decision_trees.calculate_deltas superset in
   let msg = sprintf
       "expected 6 options to be identified, saw %d" 
       Map.(length deltas) in
@@ -712,13 +699,13 @@ let test_calculate_delta test_ctxt =
                    ~insn_map ~insn_risg arch in  
   let entries = Superset.entries_of_isg superset in
   let conflicts = Superset.Occlusion.find_all_conflicts superset in
-  let tails = Decision_tree_set.tails_of_conflicts superset
+  let tails = Decision_trees.tails_of_conflicts superset
       conflicts in
   let option_set = List.fold ~init:Addr.Set.empty (Map.data tails)
       ~f:(fun option_set options -> 
           List.fold ~init:option_set options ~f:Addr.Set.add) in
   let is_option = Set.mem option_set in
-  let deltas = Decision_tree_set.calculate_deltas 
+  let deltas = Decision_trees.calculate_deltas 
       superset ~entries is_option in
   let expected_deltas =
     Seq.to_list @@ G.Node.succs tail_addr insn_risg in
@@ -881,13 +868,16 @@ let () =
       "test_overlay_construction" >:: test_overlay_construction;
       "test_find_all_conflicts" >:: test_find_all_conflicts;
       "test_graph_edge_behavior" >:: test_graph_edge_behavior;
-      (*"test_tag_non_mem_access" >:: test_tag_non_mem_access;*)
-      "test_target_not_in_mem" >:: test_target_not_in_mem;
       "test_can_lift" >:: test_can_lift;
       "test_static_successors_includes_fall_through" >::
       test_static_successors_includes_fall_through;
       "test_successor_calculation" >:: test_successor_calculation;
       "test_superset_contains_addr" >:: test_superset_contains_addr;
+      "test_tag_non_mem_access" >:: test_tag_non_mem_access;
+      "test_target_not_in_mem" >:: test_target_not_in_mem;
+      "test_tag_non_insn" >:: test_tag_non_insn;
+      "test_tag_target_is_bad" >:: test_tag_target_is_bad;
+      "test_target_in_body" >:: test_target_in_body;
     ] in
   run_test_tt_main suite
 ;;

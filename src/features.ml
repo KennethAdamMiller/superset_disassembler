@@ -30,7 +30,45 @@ let clear_each superset visited =
   Hash_set.iter visited ~f:(fun tp -> 
       Superset.Core.clear_bad superset tp
     )
-              
+
+let get_non_fall_through_edges superset = 
+  Superset.ISG.fold_edges superset
+    (fun child parent jmps -> 
+       if Superset.is_fall_through superset parent child then
+         Map.set jmps child parent
+       else jmps
+    ) Addr.Map.empty
+
+
+(** A callsite is a location which is shared as the target of a call
+    by several other locations in the binary. *)
+let get_callsites ?(threshold=6) superset =
+  let callsites = Addr.Hash_set.create () in
+  Superset.ISG.iter_vertex superset
+    (fun v -> 
+       let callers = Superset.ISG.ancestors superset v in
+       let num_callers = 
+         List.fold callers ~init:0 ~f:(fun total caller -> 
+             if not (Superset.is_fall_through superset caller v) then
+               total + 1
+             else total) in
+       if num_callers > threshold then (
+         Hash_set.add callsites v;
+       )
+    ) ;
+  callsites
+
+(** Adds to the set visited the set of reachable descendents of a
+    callsite of a given sufficient threshold number of external callers *)
+let tag_callsites visited ?callsites superset =
+  let callsites = Option.value callsites 
+      ~default:(get_callsites ~threshold:6 superset) in
+  Hash_set.iter callsites ~f:(fun callsite ->
+      Superset.with_descendents_at ~visited
+        ?post:None ?pre:None superset callsite;
+    );
+  superset
+  
 let find_free_insns superset = 
   let mem = Superset.Core.mem superset in
   let all_conflicts = Addr.Hash_set.create () in
@@ -310,8 +348,8 @@ let time ?(name="") f x =
 
 let extract_trim_limited_clamped superset = 
   let visited = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:0 superset in
-  let f s = Grammar.tag_callsites visited ~callsites s in
+  let callsites = get_callsites ~threshold:0 superset in
+  let f s = tag_callsites visited ~callsites s in
   let superset = time ~name:"tagging callsites: " f superset in
   let () = Superset.Core.clear_all_bad superset in
   let superset = time ~name:"extract_trim_clamped "
@@ -384,7 +422,7 @@ let fixpoint_tails superset =
   let extractf superset =
     let conflicts = Superset.Occlusion.find_all_conflicts superset in
     let tails_map = 
-      Decision_tree_set.tails_of_conflicts superset conflicts in 
+      Decision_trees.tails_of_conflicts superset conflicts in 
     let tails = Addr.Hash_set.create () in
     List.iter Map.(keys tails_map) ~f:Hash_set.(add tails);
     tails
@@ -400,13 +438,9 @@ let allfeatures =
   "FalseBranchMap"         ::
   "FilteredFalseBranchMap" ::
   "UnfilteredSCC"          ::
-  "UnionFindBranches"      :: (* TODO *)
-  "UnionFindCompatible"    :: (* TODO *)
   "FreeVarSSA"             ::
-  "MirrorSCC"              ::
-  "JmpTargetIntersection"  :: (* TODO *)
   "FixpointGrammar"        :: 
-  "FixpointSSA"            :: (* TODO *)
+  "FixpointSSA"            ::
   "FixpointFreevarSSA"     :: 
   "FixpointTails"          :: 
   default_features
@@ -523,34 +557,6 @@ let collect_descendants superset ?insn_isg ?visited ?datas targets =
         Superset.mark_descendent_bodies_at ~visited ~datas superset v      
     )
 
-let extract_union_find_compatible superset =  
-  Addr.Set.empty
-
-(* TODO iterate over the superset and split it into the set of items
-    that can be merged together tenatively. Add the clamped, constants and
-    unfiltered grammar. For all added, maintain an Int.Map from union
-    find id to number of features.  *)
-let extract_union_find_branches superset =
-  (*let insn_risg = Superset.get_graph superset in
-    let insn_map  = Superset.get_map superset in
-    let branches = Superset_risg.get_branches insn_risg in
-    let components =
-    Superset_risg.DiscreteComponents.components_list insn_risg in*)
-  Addr.Set.empty
-(*List.fold ~init:Addr.Set.empty components 
-  ~f:(fun (compatible) component -> 
-      List.fold component ~init:(compatible) 
-        ~f:(fun (insns,datas) addr -> 
-            let insns = Union_find.(create addr) :: insns in
-            let conflicts = 
-              Seq.filter ~f:(Map.mem insn_map)
-                Superset_risg.(conflict_seq_at insn_map addr) in
-            let datas = 
-              Seq.fold ~init:datas conflicts ~f:(fun datas conflict ->
-                  (Union_find.create conflict) :: datas) in
-            insns, datas
-          )
-    )*)
 let extract_img_entry superset =
   let e = Addr.Set.empty in
   match Superset.Inspection.get_main_entry superset with
@@ -563,11 +569,11 @@ let extract_img_entry superset =
 
 let extract_trim_callsites superset =
   let visited = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:2 superset in
-  let protection = Superset.get_callsites ~threshold:0 superset in
+  let callsites = get_callsites ~threshold:2 superset in
+  let protection = get_callsites ~threshold:0 superset in
   collect_descendants superset ~visited protection;
   Superset.Core.clear_all_bad superset;
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let superset = tag_callsites visited ~callsites superset in
   clear_each superset visited;
   superset
 let extract_trim_loops_with_break superset = 
@@ -589,8 +595,8 @@ let extract_trim_fixpoint_grammar superset =
   let gdesc = fixpoint_grammar superset 10 in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:0 superset in
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let callsites = get_callsites ~threshold:0 superset in
+  let superset = tag_callsites visited ~callsites superset in
   Superset.Core.clear_all_bad superset;
   collect_descendants ~visited superset gdesc;
   Hash_set.iter datas ~f:(fun d -> 
@@ -604,9 +610,9 @@ let extract_trim_fixpoint_ssa superset =
   let gdesc = fixpoint_ssa superset 6 in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:0 superset in
+  let callsites = get_callsites ~threshold:0 superset in
   (*collect_descendants ~visited ~insn_isg superset callsites;*)
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let superset = tag_callsites visited ~callsites superset in
   Superset.Core.clear_all_bad superset;
   collect_descendants ~visited superset gdesc;
   Hash_set.iter datas ~f:(fun d -> 
@@ -619,9 +625,9 @@ let extract_trim_fixpoint_freevarssa superset =
   let gdesc = fixpoint_freevarssa superset 6 in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:0 superset in
+  let callsites = get_callsites ~threshold:0 superset in
   (*collect_descendants ~visited ~insn_isg superset callsites;*)
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let superset = tag_callsites visited ~callsites superset in
   Superset.Core.clear_all_bad superset;
   collect_descendants ~visited superset gdesc;
   Hash_set.iter datas ~f:(fun d -> 
@@ -634,8 +640,8 @@ let extract_trim_fixpoint_tails superset =
   let tdesc = fixpoint_tails superset in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:0 superset in
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let callsites = get_callsites ~threshold:0 superset in
+  let superset = tag_callsites visited ~callsites superset in
   Superset.Core.clear_all_bad superset;
   Hash_set.iter tdesc ~f:(fun v -> 
       if not Hash_set.(mem visited v) then
@@ -689,7 +695,7 @@ let _exfiltset = [
   ("LoopGrammar", (loop_grammar, unfiltered));
   ("ClassicGrammar", (classic_grammar, unfiltered));
   ("Callsites3",
-   ((fun x -> transform (Superset.get_callsites
+   ((fun x -> transform (get_callsites
                            ~threshold:6 x)), unfiltered));
   ("Clamped", (find_free_insns, unfiltered));
   ("RestrictedClamped", (restricted_clamp, unfiltered));
@@ -699,8 +705,6 @@ let _exfiltset = [
   ("SCC", (extract_filter_loops,unfiltered));
   ("NoExit", (extract_exitless, unfiltered));
   ("Constant", (extract_constants_to_set,unfiltered));
-  ("UnionFindCompatible", (extract_union_find_compatible,unfiltered));
-  ("UnionFindBranches", (extract_union_find_branches,unfiltered));
   ("ImgEntry", (extract_img_entry, unfiltered));
 ]
 let exfiltset :(setexfilt) String.Map.t
@@ -788,8 +792,8 @@ let apply_featurepmap featureset ?(threshold=50) superset =
   let feature_pmap = 
     Map.filter feature_pmap (fun total -> total > threshold) in
   let visited = Addr.Hash_set.create () in
-  let callsites = Superset.get_callsites ~threshold:0 superset in
-  let superset = Grammar.tag_callsites visited ~callsites superset in
+  let callsites = get_callsites ~threshold:0 superset in
+  let superset = tag_callsites visited ~callsites superset in
   Superset.Core.clear_all_bad superset;
   List.iter Map.(keys feature_pmap) ~f:(fun addr -> 
       Superset.mark_descendent_bodies_at superset ~visited addr

@@ -7,26 +7,46 @@ type elem = mem * Dis.full_insn option
 type t = Superset_impl.t
 
 module ISG : sig
+  (** Returns a list of those addresses for which the argument
+  address could be the immediate next instruction of. *)
   val ancestors : t -> addr -> addr list
+  (** Returns a list of those addresses for which the argument
+  address could potentially lead to. *)
   val descendants : t -> addr -> addr list
   val mem_vertex : t -> addr -> bool
   val iter_vertex : t -> (addr -> unit) -> unit
   val fold_edges : t -> (addr -> addr -> 'a -> 'a) -> 'a -> 'a
+  val check_connected : t -> addr -> addr -> bool
+  (** Adds an associated directed link from src to dst, tracking
+  addresses if they are not already. *)
   val link : t -> addr -> addr -> t
+  (** Removes a link between two addresses, but not stop tracking
+  those addresses even if they each have no more links *)
   val unlink : t -> addr -> addr -> t
+  (** Stops tracking an address. Can unbalance the internal
+  structure, requiring further balanace and trim calls *)
   val remove : t -> addr -> t
+  (** Uses strongly connected components to determine loop lists, but
+  does no filtering. *)
   val raw_loops : t -> addr list list
   val dfs_fold :
     ?visited:Addr.Hash_set.t -> t -> pre:('a -> addr -> 'a) ->
     post:('a -> addr -> 'a) -> 'a -> addr -> 'a
+  (** Print the graph to file for a given superset *)
   val print_dot : ?colorings:Addr.Hash_set.t String.Map.t -> t -> unit
+  (** For all items in the address hash set, remove them from the
+  superset. This is a raw removal, so it does not mark bad and
+  traverse to perform maximal removals. *)
   val filter : t -> Addr.Hash_set.t -> t
+  (** Prints the isg via a formatter in gml format. *)
   val format_isg : ?format:Format.formatter -> t -> unit
+  (** Prints the isg to a string buffer in gml format. *)
   val isg_to_string : t -> string
 end
 
 module Core : sig
 
+  (** Insert the memory and disassembled instruction into the superset *)
   val add : t -> mem -> Dis.full_insn option -> t
   val empty : arch -> t
 
@@ -60,7 +80,10 @@ module Core : sig
     accu:'a ->
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'a -> 'a) ->
     Arch.t -> mem -> 'a Or_error.t
-  val lift_insn : t -> (mem * Dis.full_insn option) -> (mem * bil) option
+  (** Lift a single disassembled memory and instruction pair *)
+  val lift_insn :
+    t -> (mem * Dis.full_insn option) -> (mem * bil) option
+  (** Lift all insns using the configuration provided by the  *)
   val lift : t -> 
     (mem * Dis.full_insn option) List.t ->
     (bil * int) Addr.Map.t
@@ -72,27 +95,38 @@ module Core : sig
     ?backend:string ->
     ?f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> t -> t) ->
     t -> mem -> t
+
   (** Marking an address bad means that it is temporarily maintained
       until a later phase in which it is removed, together with as
       many other other instructions that might have accessed it as
       possible. *)
   val mark_bad : t -> addr -> unit
+
   (** Internally, performance is important, and it may be the case
       that after many bad instructions are marked and removed, that
       there is some mismatch between the internal tracking that is
       done. So, this library imposes that after a trim that this be
       called. *)
   val rebalance : t -> t
+
   (** This removes bad entries from the tracker without pruning them
       from the superset. If this is called before trimming the
       superset, then the bad instructions that were marked are no
       longer distinguishable as previously. *)
   val clear_bad : t -> addr -> unit
+
+  (** Removes all addresses from being tracked as bad, without
+      removing them from the superset. *)
   val clear_all_bad : t -> unit
+
   (** Returns a copy of the set of addresses that have been marked
       bad *)
   val copy_bad : t -> Addr.Hash_set.t
+
   val lookup : t -> addr -> (mem * Dis.full_insn option) option
+
+  (** Accumulate over each current disassembled instruction in the
+      current superset. *)
   val fold : t -> init:'a -> f:(key:addr -> data:elem -> 'a -> 'a) -> 'a
   val mem : t -> addr -> bool
 end
@@ -103,24 +137,51 @@ module Inspection : sig
    removed until the trim module traverses for cleaning. Marking for 
    removal can be reversed by calling clear_bad. *)
   val contains_addr : t -> addr -> bool
+
   val get_endianness : t -> endian option
+
   val get_arch : t -> arch
+
   (** Mark and track the argument address for removal upon trimming. *)
   val num_bad : t -> int
+
+  (** Current number of disassembled instructions in the superset *)
   val count : t -> int
+
+  (** Returns information reporting unbalanced the superset has
+      become, which ideally resides at zero. *)
   val count_unbalanced : t -> int
+
+  (** Returns a tuple representing differences of addresses not in
+      each of either the disassembly set and the graph. *)
   val unbalanced_diff : t -> (Addr.Set.t * Addr.Set.t)
+
+  (** Returns true if the address is currently marked for removal *)
   val is_bad_at : t -> addr -> bool
+
   val get_base : t -> addr
+
+  (** Returns the length of the instruction at addr *)
   val len_at : t -> addr -> int
+
+  (** Returns the total overall size of memory in bytes that has been
+      processed by the superset *)
   val total_bytes : t -> int
+
   (** A carefully written function that visits the address in the body 
    of any instruction that is longer than one byte. So, addr + 1, 
    addr + 2, ... addr + n. *)
   val static_successors : t -> mem -> Dis.full_insn option ->
     Brancher.dests
+
   val get_memmap : t -> value memmap
+
+  (** Returns the entry of the image that was originally loaded into
+      this superset, if any was used or if it was discovered when
+      loaded. *)
   val get_main_entry : t -> addr option
+
+  (** Returns the filename, if any was used, to compute this superset. *)
   val filename : t -> string option
 end
 
@@ -129,25 +190,46 @@ module Metrics : sig
 end
 
 module Occlusion : sig
+  (** For each address within the set, search within the body of the
+      corresponding disassembled instruction, looking for conflicts
+      (shingles). Add all such addresses, including the original
+      instruction if any occurred in it's body. Only exclude an
+      address from the output set if it didn't occur in the body of
+      another, and if no instruction conflicted. *)
   val conflicts_within_insns : t -> Addr.Set.t -> Addr.Set.t
 
-  val find_all_conflicts : ?mem:(addr -> bool) -> t -> Addr.Set.t
-
-  val seq_of_addr_range : addr -> int -> addr seq 
-
-  val range_seq : t -> addr seq
-
-  val range_seq_of_conflicts : mem:(addr -> bool) -> addr -> int -> addr seq
-
-  val seq_of_all_conflicts : t -> addr seq
-
-  val conflict_seq_at : t -> addr -> addr seq
-
-  val with_data_of_insn :
-    t -> addr -> f:(addr -> unit) -> unit
-
+  (** For a given address, produce a set of all addresses
+      within the body of the disassembly that possess a conflict. *)
   val conflicts_within_insn_at :
     t -> ?mem:(addr -> bool) -> ?conflicts:Addr.Set.t -> addr -> Addr.Set.t
+
+  (** For a given superset, look at every single instruction. Defers
+      to conflicts_within_insns in implementation. *)
+  val find_all_conflicts : ?mem:(addr -> bool) -> t -> Addr.Set.t
+
+  (** A vital address range sequence creator. *)
+  val seq_of_addr_range : addr -> int -> addr seq 
+
+  (** For a given superset, create a single sequence over all current
+      addresses of current disassembled instructions, binding the
+      sequence between instructions. *)
+  val range_seq : t -> addr seq
+
+  (** A sequence view of conflicts within a given disassembled
+      instruction at a given address for a given length. *)
+  val range_seq_of_conflicts : mem:(addr -> bool) -> addr -> int -> addr seq
+
+  (** A sequence view of all conflicts. *)
+  val seq_of_all_conflicts : t -> addr seq
+
+  (** At a given address, return all addresses within its body for
+      which there exists another conflicting instruction. *)
+  val conflict_seq_at : t -> addr -> addr seq
+
+  (** Compute at a given address given with those addresses reside
+      within the body of the disassembly. *)
+  val with_data_of_insn :
+    t -> addr -> f:(addr -> unit) -> unit
 end
 
 (** The instruction immediately after argument addr. *)
@@ -157,62 +239,69 @@ val fall_through_of : t -> addr -> addr
 val is_fall_through :
   t -> addr -> addr -> bool
 
+(** Entry is a connotation that denotes no other instruction leads
+    into this one. *)
 val is_entry : t -> addr -> bool
 
+(** Return all addresses in a set for which is_entry returns true *)
 val entries_of_isg : t -> Addr.Hash_set.t
 
+(** Return the set of addreses for which more than one other
+    instruction targets it. *)
 val mergers : t -> Addr.Set.t
 
+(** Checks for the existence of successors other than fall through. *)
 val is_branch : t -> addr -> bool
 
+(** Returns a set of the addresses for which is_branch is true *)
 val get_branches : t -> Addr.Hash_set.t
 
-val check_connected : t -> addr -> addr -> bool
-
-(* TODO move to features *)
-val get_non_fall_through_edges :
-  t ->
-  (addr, addr,
-   Addr.Map.Key.comparator_witness)
-    Map.t
-val get_callsites : ?threshold:int -> t -> 'b Addr.Hash_set.t_
-
+(** DFS traverses the set of addresses that are currently marked as
+    bad, applying functions pre and post, from the bad to all
+    ancestors. *)
 val with_bad :
   t -> ?visited:Addr.Hash_set.t -> pre:('b -> addr -> 'c) ->
   post:('c -> addr -> 'b) -> 'b -> 'b
 
+(** Abstract dfs from a given starting point. *)
 val iter_component : ?terminator:((addr -> bool)) ->
   ?visited:Addr.Hash_set.t -> ?pre:(addr -> unit) -> ?post:(addr -> unit) ->
   t -> addr -> unit
 
 (** This function starts at a given address and traverses toward 
  every statically visible descendant. It is used to maximally 
- propagate a given function application. For speed, an isg can 
- be provided, in which case the reverse does not have to be computed 
- repeatedly. *)
+ propagate a given function application. *)
 (* TODO belongs in traverse *)
 val with_descendents_at :
   ?visited:'a Addr.Hash_set.t_ ->
   ?post:(addr -> unit) -> ?pre:(addr -> unit) ->
   t -> addr ->  unit
 
+(** This function starts at a given address and traverses toward 
+ every statically visible ancestor. It is used to maximally 
+ propagate a given function application. *)
 val with_ancestors_at :
   ?visited:'a Addr.Hash_set.t_ ->
   ?post:(addr -> unit) -> ?pre:(addr -> unit)  ->
   t -> addr -> unit
 
 (** From the starting point specified, this reviews all descendants 
- and marks their bodies as bad. For speed, an isg can be provided, 
- in which case the reverse does not have to be computed repeatedly. *)
+    and marks their bodies as bad. For speed, an isg can be provided, 
+    in which case the reverse does not have to be computed repeatedly. *)
 val mark_descendent_bodies_at :
   ?visited:'a Addr.Hash_set.t_ ->
   ?datas:'b Addr.Hash_set.t_ ->
   t -> addr -> unit
 
+(** Read a given superset from file. *)
 val import : string -> t
+(** Save a superset to a given file location. *)
 val export : string -> t -> unit
+(** Save only the remaining disassembled addresses. *)
 val export_addrs : string -> t -> unit
 
+(** Take the raw superset of a given file name of a compiled object of
+    any kind that Image can parse. *)
 val superset_disasm_of_file :
   ?backend:string ->
   ?f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> t -> t) ->

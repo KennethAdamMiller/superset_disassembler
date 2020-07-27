@@ -1,6 +1,8 @@
 open Core_kernel
 open Bap.Std
 
+(** A clean wrapper around raw superset that does some management of
+    visited nodes for efficiency behind the scenes. *)
 let visit ?visited ~pre ~post superset entries =
   let visited = Option.value visited
       ~default:(Addr.Hash_set.create ()) in
@@ -12,10 +14,12 @@ let visit ?visited ~pre ~post superset entries =
         Superset.with_ancestors_at superset ~visited ~pre ~post addr
     )
 
+(** A delta from decision trees is constructed and passed to the
+    visitor functions during a visit. *)
 let visit_with_deltas ?pre ?post ~is_option superset entries =
   let pre = Option.value pre ~default:(fun _ _ -> ()) in
   let post = Option.value post ~default:(fun _ _ -> ()) in
-  let deltas = ref (Decision_tree_set.calculate_deltas
+  let deltas = ref (Decision_trees.calculate_deltas
                       superset ~entries is_option) in
   let pre addr = 
     pre !deltas addr in
@@ -25,6 +29,10 @@ let visit_with_deltas ?pre ?post ~is_option superset entries =
   in
   visit ~pre ~post superset entries
 
+(** This traversal unlinks all non-branch jumps, collects every
+    entry, which now includes newly unlinked blocks in order to
+    provide a separation over traversal. *)
+(* TODO I think that this can be removed.  *)
 let visit_by_block superset
     ?(pre=(fun _ _ _ -> ())) ?(post=(fun _ _ _ -> ())) entries = 
   let (jmps,targets) = Superset.ISG.fold_edges superset

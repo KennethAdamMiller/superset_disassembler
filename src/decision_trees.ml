@@ -6,12 +6,25 @@ open Graph
 module G = Graphlib.Make(Addr)(Unit)
 
          
-(** The decision set represents a set of potentially inter-dependent
-      decision trees and potential requirements of selection at each
-      node. Although a graph is used, the actual structure is acyclic.
-      The addr -> terminal map expresses relationships between the
-      graph with which it is paired with other members of the
-      enclosing decision_tree_set *)
+(** The decision tree represents a set of potentially inter-dependent
+    decision trees and potential ramifications of selection at each
+    node. The objective is to present to the user a clean interface
+    by which to construct mutually compatible decisions, since it it
+    possible for a blithely written analysis to piece together many
+    decisions that are not fit with the whole. *)
+
+type decision_tree = G.t list
+type 'a possibility
+type 'a choice
+type 'a consequence
+type tail
+   
+(** For any given entry, calculate the conflicts, and filter the set
+    down to lists of entries that conflict with one another. *)
+(* TODO why only other entries should be in the conflicts of entries?
+    I think that conflicts of entries was trying to express something
+    about the set of points that remain undecided. But actually, it
+    should be a filtering dfs visitor. *)
 let conflicts_of_entries superset entries =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
@@ -37,6 +50,10 @@ let conflicts_of_entries superset entries =
        ) else conflicted_entries
     )
 
+(** Calculate the set potential points where occlusive instructions
+    could rejoin to a common target, such as cease when falling
+    through to the same instruction. Calculate the tail, or the join
+    target and the conflicts that led into that. *)
 let tails_of_conflicts superset conflicts =
   let possible_tails = Superset.mergers superset in
   (* This tail is the particular instruction
@@ -53,7 +70,7 @@ let tails_of_conflicts superset conflicts =
           let f sheath poss_conflict =
             let not_added = not (Set.mem added_choices poss_conflict) in
             let is_conflict = Set.mem conflicts poss_conflict in
-            let is_connected = Superset.check_connected
+            let is_connected = Superset.ISG.check_connected
                 superset possible_tail poss_conflict in
             if not_added && is_conflict && is_connected then
               poss_conflict :: sheath
@@ -78,6 +95,9 @@ let mem_edge g v1 v2 =
   let e = G.Edge.create v1 v2 () in
   G.Edge.mem e g
 
+(** Starting from each entry in the superset, identify the tails and
+    build a decision tree that allows to jump from conflict to
+    conflict and review the options. *)
 let decision_tree_of_entries superset conflicted_entries entries tails =
   let visited = Addr.Hash_set.create () in
   let visited_choices = Addr.Hash_set.create () in
@@ -102,7 +122,6 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
     add_edge decision_tree zero entry in
   let f decision_tree entry =
     let width = Addr.bitwidth entry in
-    (* TODO get rid of zero *)
     let saved_vert = ref @@
       Addr.of_int ~width 0 in
     let link_choices decision_tree current_vert =
@@ -150,9 +169,9 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
         else (all_trees)
       )
 
-
-(** Accepts a per instruction control flow graph, and a map from addr *)
-(** to (mem, insn) *)
+(** Accepts a superset, and calculates the decision trees over groups
+    of instructions. The returned trees index from tails to the
+    options available. *)
 let decision_trees_of_superset superset = 
   (* Here, for each vertex, look up the insn from the map and *)
   (* identify conflicts. *)
@@ -199,6 +218,9 @@ let insn_is_option superset addr =
       else current
     )
 
+(** For a given superset that contains groups of instruction lineages
+    as potential choices, calculate the result of picking a given
+    choice as a delta. *)
 let calculate_deltas superset ?entries is_option = 
   let entries = Option.value entries 
       ~default:(Superset.entries_of_isg superset) in
@@ -231,3 +253,8 @@ let calculate_deltas superset ?entries is_option =
     ~f:(Superset.with_ancestors_at
           ~visited ~post:make_deltas ?pre:None superset);
   !deltas
+
+module Speculate = struct
+  let weigh_possibilities _ _ = ()
+  let make_choices x _ _ = x
+end                         

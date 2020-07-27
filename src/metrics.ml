@@ -1,9 +1,12 @@
 open Bap.Std
 open Core_kernel
+open Or_error
 
+module Linear = Disasm_expert.Linear
+exception Inconsistent_img of string
 
-type format_as   = | Latex
-                   | Standard
+type format_as = | Latex
+                 | Standard
 [@@deriving sexp]
 
 type metrics = {
@@ -72,6 +75,24 @@ struct
         );
 end
 
+let make_gatherer accu = 
+  let module Instance = MetricsGatheringReducer(struct
+      type acc = (Addr.Hash_set.t )
+      let accu = accu
+    end) in
+  let module Instance = Trim.Reduction(Instance) in
+  Instance.trim 
+
+let make_mark_tracker accu =
+  let module Instance =
+    PerMarkTrackingReducer(
+    struct
+      type acc = (Addr.Set.t Addr.Map.t) ref
+      let accu = accu
+    end) in
+  let module Instance = Trim.Reduction(Instance) in
+  Instance.trim
+  
 let format_standard metrics =
   match metrics with 
   | Some metrics -> 
@@ -107,12 +128,30 @@ let true_positives_of_ground_truth superset ground_truth =
     );
   true_positives
 
-(* implement jmp_of_fp as a map from target to source in *)
-(* True positive set is going to come up short because if it isn't in *)
-(* the isg, it isn't going to be explored *)
+let read arch ic : (string * addr * addr) list =
+  let sym_of_sexp x = [%of_sexp:string * int64 * int64] x in
+  let addr_of_int64 x =
+    let width = Arch.addr_size arch |> Size.in_bits in
+    Addr.of_int64 ~width x in
+  List.(Sexp.input_sexps ic >>| sym_of_sexp >>| (fun (s, es, ef) ->
+      s, addr_of_int64 es, addr_of_int64 ef))
+
+let read_addrs ic : addr list =
+  List.t_of_sexp Addr.t_of_sexp @@ Sexp.input_sexp ic
+
+let ground_truth_of_unstripped_bin bin : addr seq Or_error.t =
+  let name = Filename.basename bin in
+  let tmp = Filename.temp_dir_name ^ "/bw_" ^ name ^ ".symbol" in
+  let cmd = sprintf "bap-byteweight dump -i symbols %S > %S" 
+      bin tmp in
+  if Sys.command cmd = 0
+  then return (Seq.of_list @@ In_channel.with_file tmp ~f:read_addrs)
+  else errorf
+      "failed to fetch symbols from unstripped binary, command `%s'
+  failed" cmd
+  
 let true_positives superset f = 
-  let function_starts =
-    Insn_disasm_benchmark.ground_truth_of_unstripped_bin f |> ok_exn
+  let function_starts = ground_truth_of_unstripped_bin f |> ok_exn
   in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
@@ -158,8 +197,7 @@ let check_fn_entries superset ground_truth =
   Set.diff ground_truth detected_insns
 
 let gather_metrics ~bin superset =
-  let function_starts =
-    Insn_disasm_benchmark.ground_truth_of_unstripped_bin bin |> ok_exn in
+  let function_starts = ground_truth_of_unstripped_bin bin |> ok_exn in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   let ground_truth = 
@@ -205,7 +243,7 @@ let gather_metrics ~bin superset =
   printf "Instruction fns: %d\n"
     (fn_insn_cnt superset true_positives);
   let detected_insn_count = Superset.Inspection.count superset in
-  printf "superset_map length %d graph size: %d" 
+  printf "superset_map length %d graph size: %d\n" 
     Superset.Inspection.(count_unbalanced superset)
     detected_insn_count;
   let false_negatives = Set.(length fn_entries) in
@@ -239,7 +277,7 @@ module Opts = struct
   let list_formats_doc = sprintf
       "Available output metrics formats: %s" @@ 
     Arg.doc_alts_enum list_formats_types
-  let metrics_format = 
+  let metrics_fmt = 
     Arg.(value & opt (enum list_formats_types) Standard
          & info ["metrics_format"] ~doc:list_formats_doc)
 

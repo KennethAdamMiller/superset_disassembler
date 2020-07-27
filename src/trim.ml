@@ -1,6 +1,10 @@
 open Core_kernel
 open Bap.Std
-  
+
+
+(** A reducer is a modular way to extend the propagation of bad
+    insns with other functionalities, such as metrics collection, but
+    is openly extensible. *)
 module type Reducer = sig
   type acc
   val accu : acc
@@ -10,15 +14,11 @@ module type Reducer = sig
   val mark  : Superset.t -> acc -> addr -> unit
 end
 
-module type ReducerInstance = sig
-  include Reducer
-  val post : Superset.t -> acc -> addr -> acc
-end
-
+(** A functor that weaves into the trim traversal the reducer of choice. *)
 module Reduction(R : Reducer) = struct
 
   let visited = Addr.Hash_set.create () 
-  (* TODO post cannot work with a persistent graph style *)
+
   let post superset accu addr =
     let module G = Superset.ISG in
     if R.check_elim superset accu addr then (
@@ -46,11 +46,14 @@ module Reduction(R : Reducer) = struct
 
 end
 
+(** A tiny partial Reducer instance that doesn't trim. *)
 module Disabled = struct
   let post _ accu _ = accu
   let trim superset = superset
 end
 
+(** The default trimming reducer, doesn't introduce any complication
+    or feature to the surrounding functor facilities. *)
 module Default = Reduction(struct
     type acc = unit
     let accu = ()
@@ -60,8 +63,11 @@ module Default = Reduction(struct
     let mark _ _ _ = ()
   end)
 
-module DeadblockTolerantReducer : Reducer
-(*with type acc = Superset.elem option*) = struct
+
+(** A reducer that tries to work around dead blocks. It blocks
+    trimming from occurring except in places where a given address
+    may be a control flow affecting instruction. *)
+module DeadblockTolerantReducer : Reducer = struct
   type acc = Superset.elem option
   let accu = None
   let check_pre superset accu addr =
@@ -95,6 +101,3 @@ module DeadblockTolerantReducer : Reducer
 end
 
 module DeadblockTolerant = Reduction(DeadblockTolerantReducer)
-
-let trimmed_disasm_of_file ?f ~backend file =
-  Default.trim (Invariants.tagged_disasm_of_file ?f ~backend file)

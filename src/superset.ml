@@ -24,7 +24,7 @@ module OG = Graphlib.To_ocamlgraph(G)
   
 let add_to_graph superset mem insn =
   let addr = Memory.min_addr mem in
-  let insn_risg = OG.add_vertex superset.insn_risg addr in
+  let insn_risg = G.Node.insert addr superset.insn_risg in
   { superset with insn_risg }
 
 module ISG = struct
@@ -41,8 +41,9 @@ module ISG = struct
     let insn_risg = superset.insn_risg in 
     OG.fold_edges f insn_risg
 
-  let link superset v1 v2 = 
-    let insn_risg = OG.add_edge superset.insn_risg v1 v2 in
+  let link superset v1 v2 =
+    let e = G.Edge.create v1 v2 () in
+    let insn_risg = G.Edge.insert e superset.insn_risg in
     { superset with insn_risg }
 
   let unlink superset v1 v2 = 
@@ -54,6 +55,11 @@ module ISG = struct
     { superset with insn_risg } 
 
   let mem_vertex superset = OG.mem_vertex superset.insn_risg
+
+  let check_connected superset e1 e2 =
+    match OG.find_all_edges
+            superset.insn_risg e1 e2 with
+    | [] -> false | _ -> true
 
   let raw_loops superset = 
     StrongComponents.scc_list superset.insn_risg
@@ -157,7 +163,9 @@ module Core = struct
     let next_addr = Addr.succ addr in
     Memory.view ~from:next_addr mem
 
-  let run_seq dis mem = 
+  (** Builds a sequence disassembly sequence at every byte offset of
+  the memory mem. *)
+  let run_seq dis mem =
     let open Seq.Generator in 
     let rec disasm cur_mem = 
       let elem = match Dis.insn_of_mem dis cur_mem with
@@ -169,9 +177,11 @@ module Core = struct
       | Error _ -> return () in
     run (disasm mem)
 
+  (** Fold over the memory at every byte offset with function f *)
   let run dis ~accu ~f mem =
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
+  (** This builds the disasm type, and runs it on the memory. *)
   let disasm ?(backend="llvm") ~accu ~f arch mem =
     Dis.with_disasm ~backend (Arch.to_string arch)
       ~f:(fun d -> Ok(run d ~accu ~f mem))
@@ -192,6 +202,7 @@ module Core = struct
           | None -> lifted_superset
         )
 
+  (** Perform superset disassembly on mem and add the results. *)
   let update_with_mem ?backend ?f superset mem =
     let update = Option.value f ~default:(fun (m, i) a -> a) in
     let f (mem, insn) superset =
@@ -200,7 +211,15 @@ module Core = struct
     disasm ?backend ~accu:superset ~f superset.arch mem |> ok_exn
 
 
-  (* TODO this may not produce the one to one needed *)
+  (** This function is required by the differences between propagating
+  data removal maximally and maintaining associations between the
+  address and the instruction decoded thereof. It strives to make the
+  results of trimming and tagging consistent between the map and
+  graph, in order to keep a consistent view. But this may not produce
+  the one to one needed, since there are scenarios in which there can
+  be mismatch in some scenarios that are possible in binaries. Using
+  the tagging and other library together with fixpoint is sufficient
+  to rule that out, however. *)
   let rebalance superset =
     let insn_map = get_map superset in
     let superset_risg = get_graph superset in
@@ -407,11 +426,6 @@ let get_branches superset =
     );
   branches
 
-let check_connected superset e1 e2 =
-  match OG.find_all_edges
-          superset.insn_risg e1 e2 with
-  | [] -> false | _ -> true
-
 (* This is a traversal
    val with_bad :
    t ->
@@ -420,9 +434,13 @@ let check_connected superset e1 e2 =
    post:('d -> addr -> 'c) -> 'c -> 'c
 *)
 let with_bad superset ?visited ~pre ~post accu =
+  let visited =
+    match visited with
+    | None -> (Addr.Hash_set.create ())
+    | Some visited -> visited in
   Hash_set.fold ~init:accu superset.bad ~f:(fun accu b -> 
       if OG.mem_vertex superset.insn_risg b then
-        ISG.dfs_fold superset ?visited
+        ISG.dfs_fold superset ~visited
           ~pre ~post accu b
       else accu
     )  
@@ -444,80 +462,29 @@ let get_callers superset addr =
         not (is_fall_through superset caller addr))
   else []
 
-let get_non_fall_through_edges superset = 
-  let g = (get_graph superset) in
-  OG.fold_edges
-    (fun child parent jmps -> 
-       if is_fall_through superset parent child then
-         Map.set jmps child parent
-       else jmps
-    ) g Addr.Map.empty
-
-let get_callsites ?(threshold=6) superset =
-  let callsites = Addr.Hash_set.create () in
-  ISG.iter_vertex superset
-    (fun v -> 
-       let callers = ISG.ancestors superset v in
-       let num_callers = 
-         List.fold callers ~init:0 ~f:(fun total caller -> 
-             if not (is_fall_through superset caller v) then
-               total + 1
-             else total) in
-       if num_callers > threshold then (
-         Hash_set.add callsites v;
-       )
-    ) ;
-  callsites
-
-let with_depth ?pre ?post f =
-  let depth = ref 0 in
-  let pre x =
-    depth := !depth + 1;
-    Option.value_map pre
-      ~f:(fun pre -> pre !depth x) ~default:()
-  in
-  let post x =
-    depth := !depth - 1;
-    Option.value_map post
-      ~f:(fun post -> post !depth x) ~default:()
-  in
-  f ~pre ~post 
-
-(* TODO Does this calculate the depth correctly? would BFS be more *)
-(* correct, since there can be more than one descendant of an edge. *)
-let get_depth f =
-  let deepest = ref 0 in
-  with_depth ~post:(fun depth x ->
-      deepest := max !deepest depth;
-    ) ~pre:(fun _ _ -> ()) f;
-  !deepest
-
 let dfs ?(terminator=(fun _ -> true))
-    ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) explore g v =
+    ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) explore superset v =
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
   let rec visit v =
     Hash_set.add visited v;
     pre v;
-    List.iter (explore g v)
+    List.iter (explore superset v)
       ~f:(fun w ->
           if (not (Hash_set.mem visited w)) && (terminator w) then
             visit w) ;
     post v
-  in visit v
+  in if Core.mem superset v then visit v
 
 let iter_component ?(terminator=(fun _ -> true))
     ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ())  =
   dfs ~terminator ?visited ~pre ~post ISG.ancestors
 
 let with_descendents_at ?visited ?post ?pre superset addr =
-  if Core.mem superset addr then
-    dfs ?visited ?post ?pre ISG.descendants superset addr
+  dfs ?visited ?post ?pre ISG.descendants superset addr
 
 let with_ancestors_at ?visited ?post ?pre superset addr =
-  if Core.mem superset addr then
-    dfs ?visited ?post ?pre ISG.ancestors superset addr
-
+  dfs ?visited ?post ?pre ISG.ancestors superset addr
 
 let mark_descendent_bodies_at ?visited ?datas superset addr =
   let datas = Option.value datas 
@@ -528,14 +495,6 @@ let mark_descendent_bodies_at ?visited ?datas superset addr =
         Occlusion.with_data_of_insn superset v ~f:mark_bad;
         Occlusion.with_data_of_insn superset v ~f:(Hash_set.add datas);
       )
-
-let rebuild ?insn_map ?insn_risg superset =
-  let insn_map = Option.value insn_map ~default:superset.insn_map in
-  let insn_risg = Option.value insn_risg ~default:superset.insn_risg in
-  { superset with 
-    insn_risg = insn_risg;
-    insn_map  = insn_map;
-  }
 
 let sexp_of_mem mem = 
   let endianness = Memory.endian mem in
@@ -619,5 +578,9 @@ let superset_of_img ?f ~backend img =
       )
 
 let superset_disasm_of_file ?(backend="llvm") ?f binary =
-  let img  = Common.img_of_filename binary in
+  let img, errs = Image.create ~backend binary |> ok_exn in
+  (*List.iter errs ~f:(fun err ->
+      Format.fprintf Format.std_formatter "%s - \n%a\n"
+        binary Error.pp err;
+    );*)
   superset_of_img ~backend img ?f
