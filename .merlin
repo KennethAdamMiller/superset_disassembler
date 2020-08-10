@@ -3,6 +3,7 @@ PKG bap
 PKG ounit2
 PKG bap.plugins
 PKG graphlib
+PKG monads
 
 S src/
 

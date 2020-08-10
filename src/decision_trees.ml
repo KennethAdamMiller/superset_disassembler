@@ -13,18 +13,23 @@ module G = Graphlib.Make(Addr)(Unit)
     possible for a blithely written analysis to piece together many
     decisions that are not fit with the whole. *)
 
-type decision_tree = G.t list
+type decision_tree = {
+    tree : G.t;
+    starts : Addr.Hash_set.t;
+  }
+type decision_forest = decision_tree list
 type 'a possibility
 type 'a choice
 type 'a consequence
 type tail
    
+let count tree =
+  List.length tree
+let with_trees (tree : decision_forest)  =
+  List.fold tree
+   
 (** For any given entry, calculate the conflicts, and filter the set
     down to lists of entries that conflict with one another. *)
-(* TODO why only other entries should be in the conflicts of entries?
-    I think that conflicts of entries was trying to express something
-    about the set of points that remain undecided. But actually, it
-    should be a filtering dfs visitor. *)
 let conflicts_of_entries superset entries =
   let visited_entries = Addr.Hash_set.create () in
   Hash_set.fold entries ~init:[] ~f:
@@ -87,46 +92,56 @@ let tails_of_conflicts superset conflicts =
         ) possible_tails in 
   tails
 
-let add_edge g v1 v2 = 
+let add_edge dtr v1 v2 =
+  let g = dtr.tree in
   let e = G.Edge.create v1 v2 () in
-  G.Edge.insert e g
+  let g = G.Edge.insert e g in
+  { dtr with tree = g }
 
-let mem_edge g v1 v2 =
+let mem_edge dtr v1 v2 =
+  let g = dtr.tree in
   let e = G.Edge.create v1 v2 () in
   G.Edge.mem e g
+
+let new_dtree () =
+  let tree = Graphlib.create (module G) () in
+  let starts = Addr.Hash_set.create () in
+  { tree; starts; }
+
+module DecisionTree = struct
+  let count dtree =
+    (G.number_of_nodes dtree.tree) + (Hash_set.length dtree.starts)
+  let mem addr dtree = G.Node.mem addr dtree.tree
+                       || Hash_set.mem dtree.starts addr
+end                     
 
 (** Starting from each entry in the superset, identify the tails and
     build a decision tree that allows to jump from conflict to
     conflict and review the options. *)
 let decision_tree_of_entries superset conflicted_entries entries tails =
   let visited = Addr.Hash_set.create () in
-  let visited_choices = Addr.Hash_set.create () in
   let add_choices decision_tree current_vert = 
     let unvisited =
-      not (Hash_set.mem visited_choices current_vert) in
+      not (Hash_set.mem visited current_vert) in
     if unvisited then
       let possible_tail = current_vert in
       match Addr.Map.find tails possible_tail with
       | Some(sheath) ->
         List.fold sheath ~init:decision_tree ~f:(fun decision_tree competitor ->
-            Hash_set.add visited_choices competitor;
             add_edge decision_tree possible_tail competitor
           );
       | _ -> decision_tree
     else decision_tree;
   in
-  (* TODO zero needs to get removed in favor of module type and api *)
-  let link_zero decision_tree entry =
-    let width = Addr.bitwidth entry in
-    let zero = Addr.(of_int ~width 0) in
-    add_edge decision_tree zero entry in
+  let link_start decision_tree entry =
+    Hash_set.add decision_tree.starts entry;
+    { decision_tree with starts = decision_tree.starts }
+  in
   let f decision_tree entry =
-    let width = Addr.bitwidth entry in
-    let saved_vert = ref @@
-      Addr.of_int ~width 0 in
+    let saved_vert = ref entry in
     let link_choices decision_tree current_vert =
       let decision_tree = add_choices decision_tree entry in 
-      let contained = G.Node.mem current_vert decision_tree in
+      let contained = DecisionTree.mem current_vert decision_tree in
       let is_new = Hash_set.mem visited current_vert in
       let decision_tree = 
         if contained && is_new then (
@@ -139,18 +154,18 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
           saved_vert := current_vert;
           decision_tree
         ) else decision_tree in
-      Hash_set.add visited current_vert;
       decision_tree
     in
-    Superset.ISG.dfs_fold superset decision_tree entry ~post:(fun g v -> g) ~pre:link_choices
+    Superset.ISG.dfs_fold superset ~visited decision_tree 
+      ~post:(fun g v -> g) ~pre:link_choices entry
   in
   let conflicted_trees = 
     List.filter_map conflicted_entries ~f:(fun conflicted ->
         if Hash_set.length conflicted > 0 then
-          let decision_tree = Graphlib.create (module G) () in
+          let decision_tree = new_dtree () in
           let f decision_tree entry = 
             if not (Hash_set.mem visited entry) then (
-              let decision_tree = link_zero decision_tree entry in
+              let decision_tree = link_start decision_tree entry in
               f decision_tree entry) else decision_tree
           in
           let decision_tree =
@@ -161,9 +176,9 @@ let decision_tree_of_entries superset conflicted_entries entries tails =
   Hash_set.fold entries ~init:conflicted_trees 
     ~f:(fun all_trees entry ->
         if not (Hash_set.mem visited entry) then
-          let decision_tree = Graphlib.create (module G) () in
+          let decision_tree = new_dtree () in
           let decision_tree = f decision_tree entry in
-          if G.number_of_nodes decision_tree > 0 then
+          if DecisionTree.count decision_tree > 0 then
             decision_tree :: all_trees
           else all_trees
         else (all_trees)
@@ -221,7 +236,10 @@ let insn_is_option superset addr =
 (** For a given superset that contains groups of instruction lineages
     as potential choices, calculate the result of picking a given
     choice as a delta. *)
-let calculate_deltas superset ?entries is_option = 
+let calculate_deltas ?entries ?is_option superset =
+  let is_option =
+    Option.value is_option
+      ~default:(insn_is_option superset) in
   let entries = Option.value entries 
       ~default:(Superset.entries_of_isg superset) in
   let add_data_of_insn dataset at = 

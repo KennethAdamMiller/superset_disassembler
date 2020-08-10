@@ -52,8 +52,6 @@ let tag_layer_violations superset =
     | Some (insn_delta, data_delta) -> 
       Hash_set.iter insn_delta ~f:(fun insn -> 
           let inbound = Superset.ISG.descendants superset insn in
-          (* TODO what if we encounter a predecessor we haven't *)
-          (* visited before? *)
           List.iter inbound ~f:(fun src -> 
               if Hash_set.mem data_delta src then (
                 Superset.Core.mark_bad superset insn;

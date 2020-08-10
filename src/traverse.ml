@@ -20,7 +20,7 @@ let visit_with_deltas ?pre ?post ~is_option superset entries =
   let pre = Option.value pre ~default:(fun _ _ -> ()) in
   let post = Option.value post ~default:(fun _ _ -> ()) in
   let deltas = ref (Decision_trees.calculate_deltas
-                      superset ~entries is_option) in
+                      superset ~entries ~is_option) in
   let pre addr = 
     pre !deltas addr in
   let post addr = 

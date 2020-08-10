@@ -15,11 +15,12 @@ module Cmdline = struct
   let create 
       checkpoint disassembler ground_truth_bin ground_truth_file target
       metrics_format phases analyses trim_method cut setops save_dot save_gt
-      save_addrs tp_threshold rounds featureset = 
+      save_addrs collect_report dforest tp_threshold rounds featureset = 
     Fields.create ~checkpoint ~disassembler ~ground_truth_bin
       ~ground_truth_file ~target ~metrics_format ~phases ~analyses ~trim_method
-      ~setops ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold
-      ~rounds ~featureset
+      ~setops ~cut ~save_dot ~save_gt ~save_addrs ~collect_report
+      ~dforest ~tp_threshold ~rounds ~featureset
+    
 
   let disassembler () : string Term.t =
     Disasm_expert.Basic.available_backends () |>
@@ -49,7 +50,8 @@ module Cmdline = struct
           $ckpt $(disassembler ()) $ground_truth_bin
           $ground_truth_file $target $Opts.metrics_fmt $invariants
           $analyses_opt $trimmer $cut_opt $setops_opt $save_dot $save_gt
-          $save_addrs $tp_threshold $rounds $featureset_opt),
+          $save_addrs $collect_reports $decision_trees_opt
+          $tp_threshold $rounds $featureset_opt),
     Term.info "superset_disasm" ~doc ~man
 
   let parse argv =

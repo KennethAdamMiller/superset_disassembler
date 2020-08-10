@@ -44,10 +44,19 @@ let analyses_opt =
     & info ["analyses"] ~docv:analyses_doc ~doc
   )
 
+type forester = | Tails [@@deriving sexp]
 let list_decision_trees = [
     "decision_tree:tails",
-    Decision_trees.decision_trees_of_superset;
+    Tails;
   ]
+let dtrees_doc = List.(to_string ~f:fst (list_decision_trees))                        
+let decision_trees_opt =
+  let doc = "Select macro level analyses to run" in
+  Cmdliner.Arg.(
+    value & opt ((some (enum list_decision_trees)))
+              (None)
+    & info ["decision_tree"] ~docv:dtrees_doc ~doc
+  )
 
 type setop =
   | Intersection
@@ -136,6 +145,7 @@ type t = {
   save_gt            : bool;
   save_addrs         : bool;
   collect_report     : bool;
+  dforest            : forester option;
   tp_threshold       : float  option;
   rounds             : int;
   featureset         : string list;
@@ -247,113 +257,191 @@ let add_tag_loop analyses =
   Map.set analyses (Map.length analyses)
     (None, Some("Tag loop contradictions",
                 Sheathed.tag_loop_contradictions), None)
-  
-let with_invariants superset invariants =
-  let invariants = Invariants.tag_success :: invariants in 
-  time ~name:"tagging"
-    (Invariants.tag_superset ~invariants) superset
 
-let with_analyses superset analyses =
-  List.fold analyses ~init:superset ~f:(fun superset analyze ->
-      analyze superset
+let build_tracker trim phases = 
+  List.fold phases ~init:(trim,String.Map.empty)
+    ~f:(fun (trim,trackers) phase ->
+      match List.find Invariants.default_tags ~f:(fun (name,p) ->
+                phys_equal phase p
+              ) with
+      | Some (name,p) ->
+         let accu = ref Addr.Map.empty in
+         let instance_trim = Metrics.make_mark_tracker accu in
+         (fun x -> instance_trim @@ trim x), Map.set trackers name accu
+      | None -> trim,trackers
     )
 
+let build_metrics trim phases =
+  List.fold phases ~init:(trim,String.Map.empty)
+    ~f:(fun (trim,metrics) phase ->
+      match List.find Invariants.default_tags ~f:(fun (name,p) ->
+                phys_equal phase p
+              ) with
+      | Some (name,p) ->
+         let accu = (Addr.Hash_set.create ()) in
+         let instance_trim = Metrics.make_gatherer accu in
+         (fun x -> instance_trim @@ trim x), Map.set metrics name accu
+      | None -> trim,metrics
+    )
+
+let build_setops trim setops =
+  List.fold setops ~init:(trim,String.Map.empty)
+    ~f:(fun (trim,metrics) (colr, (sop, (f1, f2))) ->
+      let add (trim,metrics) f =
+        if Map.mem metrics f then
+          trim, metrics
+        else
+          let accu = (Addr.Hash_set.create ()) in
+          let instance_trim = Metrics.make_gatherer accu in
+          let metrics = Map.set metrics f accu in
+          ((fun x -> instance_trim @@ trim x), metrics) in
+      add (add (trim,metrics) f1) f2
+    )
+
+let collect_results superset ground_truth_file results metrics setops tracker =
+  match ground_truth_file with
+  | Some (gt) ->
+     let remaining = Addr.Hash_set.create () in
+     let remaining = 
+       Superset.Core.fold superset ~init:remaining
+         ~f:(fun ~key ~data remaining ->
+           Hash_set.add remaining key; remaining
+         ) in
+     (* apply setops within ground truth? *)
+     Map.iteri setops ~f:(fun ~key ~data ->
+         let s = sprintf "%s - %d" key Hash_set.(length data) in
+         print_endline s;
+         Hash_set.iter data ~f:(Hash_set.remove remaining);
+       );
+     let min_addr = Superset.Inspection.get_base superset in
+     let tp = read_addrs Addr.(bitwidth min_addr) gt in
+     let tps = Addr.Hash_set.create () in
+     List.iter tp ~f:(Hash_set.add tps);
+     let fps = Addr.Hash_set.create () in
+     let _ = Hash_set.iter remaining ~f:(fun key -> 
+                 if not (Hash_set.mem tps key) then
+                   Hash_set.add fps key
+               ) in
+     let fns = Addr.Hash_set.create () in
+     Hash_set.iter tps ~f:(fun v -> 
+         if not (Hash_set.mem remaining v) then
+           Hash_set.add fns v;
+       );
+     let s = sprintf "tracker size: %d" Map.(length tracker) in
+     print_endline s;
+     Map.iteri tracker ~f:(fun ~key ~data ->
+         let d = !data in
+         let s = sprintf "tracker %s size: %d"
+                   key Map.(length d) in
+         print_endline s;
+         Map.iteri !data ~f:(fun ~key ~data ->
+             if (not Superset.Core.(mem superset key))
+                && Hash_set.(mem tps key) then (
+               let memstr =
+                 match Superset.Core.lookup superset key with
+                 | Some (mem, _ ) -> Memory.str () mem
+                 | None -> "" in
+               let s =
+                 sprintf
+                   "marked fn bad with mem %s of removal size %d"
+                   memstr Set.(length data) in
+               print_endline s;
+             );
+             Set.iter data ~f:(fun x ->
+                 let s = sprintf "marked fn bad at %s"
+                           Addr.(to_string key) in
+                 let s = sprintf "%s, ancestor fn at %s"
+                           s Addr.(to_string x) in
+                 print_endline s;
+               ) ; 
+           )
+       );
+     let results = String.Map.set results "True Positives" tps in
+     let results = String.Map.set results "False Positives" fps in
+     let results = String.Map.set results "False Negatives" fns in
+     results
+  | None -> results 
+
+(* might be able to adjust this with new cmd features. *)
+let apply_setops metrics setops =
+  let report_err colr f1 =
+    Format.eprintf
+      "Feature %s not found, error for color %s!" f1 colr in
+  List.fold setops ~init:String.Map.empty
+    ~f:(fun results (colr, (sop, (f1, f2))) -> 
+      match Map.find metrics f1, Map.find metrics f2 with
+      | Some (fmetric1), Some (fmetric2) -> (
+        match sop with
+        | Difference ->
+           let s = Addr.Hash_set.create () in
+           Hash_set.iter fmetric1 ~f:(fun fv ->
+               if not (Hash_set.mem fmetric2 fv) then
+                 Hash_set.add s fv
+             );
+           Map.set results colr s
+        | Union ->
+           let s = Addr.Hash_set.create () in
+           Hash_set.iter fmetric1 ~f:(fun fv ->
+               Hash_set.add s fv
+             );
+           Hash_set.iter fmetric2 ~f:(fun fv ->
+               Hash_set.add s fv
+             );
+           Map.set results colr s
+        | Intersection ->
+           let s = Addr.Hash_set.create () in
+           Hash_set.iter fmetric1 ~f:(fun fv ->
+               if (Hash_set.mem fmetric2 fv) then
+                 Hash_set.add s fv
+             );
+           Hash_set.iter fmetric2 ~f:(fun fv ->
+               if (Hash_set.mem fmetric1 fv) then
+                 Hash_set.add s fv
+             );
+           Map.set results colr s
+      )
+      | None, None ->
+         report_err colr f1;
+         report_err colr f2;
+         results
+      | None, _ ->
+         report_err colr f1;
+         results
+      | _, None ->
+         report_err colr f2;
+         results
+    ) 
+
+  
 module With_options(Conf : Provider)  = struct
   open Conf
   open Metrics.Opts
   open Or_error
   open Format
 
-  let build_tracker trim phases = 
-    List.fold phases ~init:(trim,String.Map.empty)
-      ~f:(fun (trim,trackers) phase ->
-        match List.find Invariants.default_tags ~f:(fun (name,p) ->
-                  phys_equal phase p
-                ) with
-        | Some (name,p) ->
-           let accu = ref Addr.Map.empty in
-           let instance_trim = Metrics.make_mark_tracker accu in
-           (fun x -> instance_trim @@ trim x), Map.set trackers name accu
-        | None -> trim,trackers
+  let with_invariants superset invariants =
+    let invariants = Invariants.tag_success :: invariants in 
+    time ~name:"tagging"
+      (Invariants.tag_superset ~invariants) superset
+
+  let with_analyses superset analyses =
+    let tps = Addr.Hash_set.create () in
+    let fps = Addr.Hash_set.create () in
+    let ro = Addr.Hash_set.create () in
+    List.fold analyses ~init:superset ~f:(fun superset analyze ->
+        if options.collect_report then (
+          let analysis = "" in
+          match Map.find Features.exfiltmap analysis with
+          | Some (extractf, filterf) ->
+             let pmap = Features.make_featurepmap options.featureset superset in
+             let report = 
+               Report.collect_map_report superset extractf filterf tps
+                 ro fps  in ()
+          | None -> ()
+        );
+        analyze superset
       )
-
-  let build_metrics trim phases =
-    List.fold phases ~init:(trim,String.Map.empty)
-      ~f:(fun (trim,metrics) phase ->
-        match List.find Invariants.default_tags ~f:(fun (name,p) ->
-                  phys_equal phase p
-                ) with
-        | Some (name,p) ->
-           let accu = (Addr.Hash_set.create ()) in
-           let instance_trim = Metrics.make_gatherer accu in
-           (fun x -> instance_trim @@ trim x), Map.set metrics name accu
-        | None -> trim,metrics
-      )
-
-  let build_setops trim setops =
-    List.fold setops ~init:(trim,String.Map.empty)
-      ~f:(fun (trim,metrics) (colr, (sop, (f1, f2))) ->
-        let add (trim,metrics) f =
-          if Map.mem metrics f then
-            trim, metrics
-          else
-            let accu = (Addr.Hash_set.create ()) in
-            let instance_trim = Metrics.make_gatherer accu in
-            let metrics = Map.set metrics f accu in
-            ((fun x -> instance_trim @@ trim x), metrics) in
-        add (add (trim,metrics) f1) f2
-      )
-
-  (* might be able to adjust this with new cmd features. *)
-  let apply_setops metrics setops =
-    let report_err colr f1 =
-      Format.eprintf
-        "Feature %s not found, error for color %s!" f1 colr in
-    List.fold setops ~init:String.Map.empty
-      ~f:(fun results (colr, (sop, (f1, f2))) -> 
-        match Map.find metrics f1, Map.find metrics f2 with
-        | Some (fmetric1), Some (fmetric2) -> (
-          match sop with
-          | Difference ->
-             let s = Addr.Hash_set.create () in
-             Hash_set.iter fmetric1 ~f:(fun fv ->
-                 if not (Hash_set.mem fmetric2 fv) then
-                   Hash_set.add s fv
-               );
-             Map.set results colr s
-          | Union ->
-             let s = Addr.Hash_set.create () in
-             Hash_set.iter fmetric1 ~f:(fun fv ->
-                 Hash_set.add s fv
-               );
-             Hash_set.iter fmetric2 ~f:(fun fv ->
-                 Hash_set.add s fv
-               );
-             Map.set results colr s
-          | Intersection ->
-             let s = Addr.Hash_set.create () in
-             Hash_set.iter fmetric1 ~f:(fun fv ->
-                 if (Hash_set.mem fmetric2 fv) then
-                   Hash_set.add s fv
-               );
-             Hash_set.iter fmetric2 ~f:(fun fv ->
-                 if (Hash_set.mem fmetric1 fv) then
-                   Hash_set.add s fv
-               );
-             Map.set results colr s
-        )
-        | None, None ->
-           report_err colr f1;
-           report_err colr f2;
-           results
-        | None, _ ->
-           report_err colr f1;
-           results
-        | _, None ->
-           report_err colr f2;
-           results
-      ) 
-
+ 
   let process_cut superset options results =
     match options.cut with 
     | None ->
@@ -403,70 +491,6 @@ module With_options(Conf : Provider)  = struct
         let superset = Trim.Default.trim @@ f superset in
         do_analysis (round+1) superset in
     do_analysis 0 superset
-
-  let collect_results superset results metrics setops tracker =
-    match options.ground_truth_file with
-    | Some (gt) ->
-       let remaining = Addr.Hash_set.create () in
-       let remaining = 
-         Superset.Core.fold superset ~init:remaining
-           ~f:(fun ~key ~data remaining ->
-             Hash_set.add remaining key; remaining
-           ) in
-       (* apply setops within ground truth? *)
-       Map.iteri setops ~f:(fun ~key ~data ->
-           let s = sprintf "%s - %d" key Hash_set.(length data) in
-           print_endline s;
-           Hash_set.iter data ~f:(Hash_set.remove remaining);
-         );
-       let min_addr = Superset.Inspection.get_base superset in
-       let tp = read_addrs Addr.(bitwidth min_addr) gt in
-       let tps = Addr.Hash_set.create () in
-       List.iter tp ~f:(Hash_set.add tps);
-       let fps = Addr.Hash_set.create () in
-       let _ = Hash_set.iter remaining ~f:(fun key -> 
-                   if not (Hash_set.mem tps key) then
-                     Hash_set.add fps key
-                 ) in
-       let fns = Addr.Hash_set.create () in
-       Hash_set.iter tps ~f:(fun v -> 
-           if not (Hash_set.mem remaining v) then
-             Hash_set.add fns v;
-         );
-       let s = sprintf "tracker size: %d" Map.(length tracker) in
-       print_endline s;
-       Map.iteri tracker ~f:(fun ~key ~data ->
-           let d = !data in
-           let s = sprintf "tracker %s size: %d"
-                     key Map.(length d) in
-           print_endline s;
-           Map.iteri !data ~f:(fun ~key ~data ->
-               if (not Superset.Core.(mem superset key))
-                  && Hash_set.(mem tps key) then (
-                 let memstr =
-                   match Superset.Core.lookup superset key with
-                   | Some (mem, _ ) -> Memory.str () mem
-                   | None -> "" in
-                 let s =
-                   sprintf
-                     "marked fn bad with mem %s of removal size %d"
-                     memstr Set.(length data) in
-                 print_endline s;
-               );
-               Set.iter data ~f:(fun x ->
-                   let s = sprintf "marked fn bad at %s"
-                             Addr.(to_string key) in
-                   let s = sprintf "%s, ancestor fn at %s"
-                             s Addr.(to_string x) in
-                   print_endline s;
-                 ) ; 
-             )
-         );
-       let results = String.Map.set results "True Positives" tps in
-       let results = String.Map.set results "False Positives" fps in
-       let results = String.Map.set results "False Negatives" fns in
-       results
-    | None -> results 
 
   let checkpoint bin invariants =
     let backend = options.disassembler in
@@ -521,7 +545,7 @@ module With_options(Conf : Provider)  = struct
       else () in
     let results = apply_setops setops options.setops in
     let results =
-      collect_results superset results metrics setops tracker in
+      collect_results superset options.ground_truth_file results metrics setops tracker in
     process_cut superset options results;
     match options.ground_truth_bin with
     | Some bin -> 

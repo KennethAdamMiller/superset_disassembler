@@ -475,7 +475,6 @@ let test_extenuating_tail_competitors test_ctxt =
    that the two are reachable from addr 0.  *)
 let test_decision_tree_of_entries test_ctxt =
   let insn_map, insn_risg = init () in
-  let zero = Addr.(of_int ~width 0) in
   let entry = Addr.(of_int ~width 1) in
   let insn_map, insn_risg =
     construct_entry_conflict insn_map insn_risg 
@@ -497,16 +496,14 @@ let test_decision_tree_of_entries test_ctxt =
   let decision_trees =
     Decision_trees.decision_trees_of_superset superset in
   let expect_entry_msg = "Expect entry in decision_tree" in
-  let expect_zero_msg = "Expect zero node in decision tree" in
   let non_empty_tree_msg = "Expect decision tree to be non empty" in
-  assert_equal true @@ (not ((List.length decision_trees) = 0));
-  List.iter decision_trees ~f:(fun decision_tree ->
+  assert_equal true @@ (not ((Decision_trees.count decision_trees) = 0));
+  Decision_trees.with_trees decision_trees ~init:() ~f:(fun _ decision_tree ->
+      let open Decision_trees in
       assert_equal ~msg:non_empty_tree_msg 
-        true @@ not ((G.number_of_nodes decision_tree)=0);
+        true @@ not ((DecisionTree.count decision_tree)=0);
       assert_equal ~msg:expect_entry_msg 
-        true @@ (G.Node.mem entry decision_tree);
-      assert_equal ~msg:expect_zero_msg 
-        true @@ (G.Node.mem zero decision_tree);
+        true @@ (DecisionTree.mem entry decision_tree);
     )
 
 let test_loop_scc test_ctxt = 
@@ -706,7 +703,7 @@ let test_calculate_delta test_ctxt =
           List.fold ~init:option_set options ~f:Addr.Set.add) in
   let is_option = Set.mem option_set in
   let deltas = Decision_trees.calculate_deltas 
-      superset ~entries is_option in
+      superset ~entries ~is_option in
   let expected_deltas =
     Seq.to_list @@ G.Node.succs tail_addr insn_risg in
   let num_expected = List.(length expected_deltas) in
