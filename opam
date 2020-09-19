@@ -8,7 +8,7 @@ authors: [
 ]
 license: "MIT"
 build: [
-  [make]
+  [oasis setup -setup-update dynamic ; make]
 ]
 
 install: [
