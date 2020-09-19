@@ -1,9 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Regular.Std
-open Format
 open Bap_knowledge
-open Bap_future.Std
 open Bap_core_theory
 open Monads.Std
 open Cmdoptions
@@ -11,37 +9,29 @@ open Cmdoptions
 include Self()
 module Dis = Disasm_expert.Basic
 
+let () =
+  let open KB.Syntax in
+  Theory.declare ~name:"is-valid" (
+      Theory.instance () >>=
+        Theory.require >>|
+        fun (module Base) : Theory.core -> (module struct
+                                             include Base
+                                             let add x y =
+                                               printf "add is called!\n%!";
+                                               add x y
+                                           end)
+    )
+           
 let superdisasm options =
+  let open Bap_future.Std in
+  let open Format in
   let module Program =
     With_options(struct
         let options = options
       end) in
   let open Program in
-  info "superset disasm";
-  let promise_addrs () =
-    Knowledge.promise Dis.Insn.slot (fun obj ->
-    KB.(collect Dis.Insn.slot obj >>|
-    (fun insn ->
-    match insn with
-    | None ->  insn
-    | Some insn ->
-       KB.Value.put Dis.Insn.slot insn
-      ))) in
-  let open Knowledge in
-  List.iter (Documentation.classes ()) ~f:(fun (c,ps) ->
-      List.iter ps ~f:(fun prop ->
-          return @@ print_endline (Documentation.Property.desc prop)
-        );
-      return @@ print_endline (Documentation.Class.desc c)
-    );
-  print_endline "finished classes";
-  List.iter (Documentation.agents ()) ~f:(fun agnt ->
-      return @@ print_endline (Documentation.Agent.desc agnt);
-    );
-  print_endline "finished agents";
   let req = Stream.zip Project.Info.arch Project.Info.code in
   Stream.observe req (fun (arch,cd) ->
-      info "Stream.observe (arch,code)";
       let codes = (Memmap.to_sequence cd) in
       let superset = Superset.Core.empty arch in
       let superset =
@@ -49,7 +39,7 @@ let superdisasm options =
           ~f:(fun superset (mem,v) ->
             Superset.Core.update_with_mem superset mem
           ) in
-
+      let superset = with_options superset in
       Superset.ISG.iter_vertex superset (fun v ->
           (* report the remaining as truths to the knowledge base *)
           ()

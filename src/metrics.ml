@@ -122,7 +122,7 @@ let true_positives_of_ground_truth superset ground_truth =
   let true_positives = Addr.Hash_set.create () in
   Set.iter ground_truth ~f:(fun addr -> 
       if Superset.ISG.mem_vertex superset addr then
-        Superset.with_descendents_at
+        Traverse.with_descendents_at
           ~visited:true_positives
           superset addr;
     );
@@ -208,7 +208,7 @@ let gather_metrics ~bin superset =
   let datas = Addr.Hash_set.create () in
   let detected_insns = Addr.Hash_set.create () in
   let dfs_find_conflicts addr =
-    Superset.with_descendents_at ~visited:detected_insns superset addr
+    Traverse.with_descendents_at ~visited:detected_insns superset addr
       ~pre:(fun v -> Superset.Occlusion.with_data_of_insn superset v
              ~f:(fun x -> Hash_set.add datas x)) in
   let reduced_occlusion () = Hash_set.fold ~init:0 datas
@@ -217,6 +217,7 @@ let gather_metrics ~bin superset =
           then ro+1 else ro) in
   let num_bytes = Superset.Inspection.total_bytes superset in
   let entries = Superset.entries_of_isg superset in
+  (* TODO per feature reporting to replace individually specified items *)
   let branches = Grammar.linear_branch_sweep superset entries in
   let fp_branches, tp_branches = check_tp_set true_positives branches in
   printf "Num f.p. branches: %d, num tp branches: %d\n" fp_branches tp_branches;

@@ -64,7 +64,7 @@ let tag_callsites visited ?callsites superset =
   let callsites = Option.value callsites 
       ~default:(get_callsites ~threshold:6 superset) in
   Hash_set.iter callsites ~f:(fun callsite ->
-      Superset.with_descendents_at ~visited
+      Traverse.with_descendents_at ~visited
         ?post:None ?pre:None superset callsite;
     );
   superset
@@ -104,7 +104,7 @@ let restricted_clamp superset =
           if Set.mem conflicts v then
             b := true
           else to_clamp := Set.add (!to_clamp) v
-      in Superset.with_ancestors_at ~post:(fun _ -> ()) ~pre superset entry;
+      in Traverse.with_ancestors_at ~post:(fun _ -> ()) ~pre superset entry;
     );
   !to_clamp
 
@@ -193,74 +193,86 @@ let stddev_of hs average pmap =
    descendants (as execution would move). *)
 let pre_ssa superset lift factors var_use addr =
   match Superset.Core.lookup superset addr with
-  | Some (mem, insn) ->
-    let bil = lift (mem, insn) in
-    Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
-        let use_vars = Abstract_ssa.use_ssa bil in
-        Set.iter use_vars ~f:(fun use_var -> 
-            var_use := Map.set !var_use use_var addr
-          )
-      )
+  | Some (mem, insn) -> (
+     try 
+       let bil = lift (mem, insn) in
+       Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
+           let use_vars = Abstract_ssa.use_ssa bil in
+           Set.iter use_vars ~f:(fun use_var -> 
+               var_use := Map.set !var_use use_var addr
+             )
+         )
+     with _ -> ()
+  )
   | None -> ()
 
 let pre_freevarssa superset lift factors var_use addr =
   match Superset.Core.lookup superset addr with
-  | Some (mem, insn) ->
-    let bil = lift (mem, insn) in
-    Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
-        let use_vars = Abstract_ssa.use_freevars bil in
-        Set.iter use_vars ~f:(fun use_var -> 
-            var_use := Map.set !var_use use_var addr
-          )
-      )
+  | Some (mem, insn) -> (
+    try 
+      let bil = lift (mem, insn) in
+      Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
+          let use_vars = Abstract_ssa.use_freevars bil in
+          Set.iter use_vars ~f:(fun use_var -> 
+              var_use := Map.set !var_use use_var addr
+            )
+        )
+    with _ -> ()
+  )
   | None -> ()
 
 let post_ssa_with superset lift var_use addr f = 
   match Superset.Core.lookup superset addr with
-  | Some (mem, insn) ->
-    let bil = lift (mem, insn) in
-    Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
-        let use_vars = Abstract_ssa.use_ssa bil in
-        Set.iter use_vars ~f:(fun use_var -> 
-            var_use := Map.remove !var_use use_var;
-          );
-        let var_defs = Abstract_ssa.def_ssa bil in
-        Set.iter var_defs ~f:(fun var_def -> 
-            match Map.find !var_use var_def with
-            | Some(waddr) ->
-              if not Addr.(waddr = addr) then (
-                f waddr addr
-              )
-            | None -> ()
-          );
-        Set.iter var_defs ~f:(fun write_reg -> 
-            var_use := Map.remove !var_use write_reg
-          )
-      )
+  | Some (mem, insn) -> (
+     try 
+       let bil = lift (mem, insn) in
+       Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
+           let use_vars = Abstract_ssa.use_ssa bil in
+           Set.iter use_vars ~f:(fun use_var -> 
+               var_use := Map.remove !var_use use_var;
+             );
+           let var_defs = Abstract_ssa.def_ssa bil in
+           Set.iter var_defs ~f:(fun var_def -> 
+               match Map.find !var_use var_def with
+               | Some(waddr) ->
+                  if not Addr.(waddr = addr) then (
+                    f waddr addr
+                  )
+               | None -> ()
+             );
+           Set.iter var_defs ~f:(fun write_reg -> 
+               var_use := Map.remove !var_use write_reg
+             )
+         )
+     with _ -> ()
+  )
   | None -> ()
 
 let post_freevarssa_with superset lift var_use addr f = 
   match Superset.Core.lookup superset addr with
-  | Some (mem, insn) ->
-    let bil = lift (mem, insn) in
-    Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
-        let use_vars = Abstract_ssa.use_freevars bil in
-        let var_defs = Abstract_ssa.def_freevars bil in
-        Set.iter var_defs ~f:(fun var_def -> 
-            match Map.find !var_use var_def with
-            | Some(waddr) ->
-              if not Set.(mem use_vars var_def) then (
-                f waddr addr
-              )
-            | None -> ()
-          );
-        Set.iter use_vars ~f:(fun use_var -> 
-            var_use := Map.remove !var_use use_var;
-          );
-        Set.iter var_defs ~f:(fun write_reg -> 
-            var_use := Map.remove !var_use write_reg
-          )
-      )
+  | Some (mem, insn) -> (
+     try 
+       let bil = lift (mem, insn) in
+       Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
+           let use_vars = Abstract_ssa.use_freevars bil in
+           let var_defs = Abstract_ssa.def_freevars bil in
+           Set.iter var_defs ~f:(fun var_def -> 
+               match Map.find !var_use var_def with
+               | Some(waddr) ->
+                  if not Set.(mem use_vars var_def) then (
+                    f waddr addr
+                  )
+               | None -> ()
+             );
+           Set.iter use_vars ~f:(fun use_var -> 
+               var_use := Map.remove !var_use use_var;
+             );
+           Set.iter var_defs ~f:(fun write_reg -> 
+               var_use := Map.remove !var_use write_reg
+             )
+         )
+     with _ -> ()
+  )
   | None -> ()
 
 let extract_ssa_to_map superset =
@@ -275,7 +287,7 @@ let extract_ssa_to_map superset =
       addr add_to_map in
   let entries = Superset.entries_of_isg superset in
   Hash_set.iter entries ~f:(fun addr ->
-      Superset.with_ancestors_at superset addr ~post ~pre;
+      Traverse.with_ancestors_at superset addr ~post ~pre;
       var_use := Exp.Map.empty
     );
   !defuse_map
@@ -292,7 +304,7 @@ let extract_freevarssa_to_map superset =
       addr add_to_map in
   let entries = Superset.entries_of_isg superset in
   Hash_set.iter entries ~f:(fun addr -> 
-      Superset.with_ancestors_at superset addr ~post ~pre;
+      Traverse.with_ancestors_at superset addr ~post ~pre;
       var_use := Var.Map.empty
     );
   !defuse_map
@@ -326,7 +338,7 @@ let extract_trim_clamped superset =
   Set.iter to_clamp ~f:(fun c -> 
       if not Hash_set.(mem visited c) then
         if Superset.Core.mem superset c then (
-          Superset.mark_descendent_bodies_at
+          Traverse.mark_descendent_bodies_at
             ~visited ~datas superset c
         )
     );
@@ -366,7 +378,7 @@ let fixpoint_descendants superset extractf depth =
       let subset_features = Addr.Hash_set.create () in
       Hash_set.iter cur_features ~f:(fun cur ->
           if not Hash_set.(mem visited cur) then
-            Superset.with_descendents_at superset
+            Traverse.with_descendents_at superset
               ~pre:(fun v ->
                   if Hash_set.(mem cur_features v)
                   && not Addr.(cur = v) then
@@ -386,7 +398,7 @@ let fixpoint_map superset feature_pmap =
       if not Hash_set.(mem visited cur) then
         let prev = ref [] in
         let feature_pmap = ref feature_pmap in
-        Superset.with_descendents_at ~pre:(fun v ->
+        Traverse.with_descendents_at ~pre:(fun v ->
             match Map.find !feature_pmap v with
             | None -> ()
             | Some(p) ->
@@ -540,7 +552,7 @@ let extract_exitless superset =
   let returned = Addr.Hash_set.create () in
   let entries = Superset.entries_of_isg superset in
   Hash_set.iter entries ~f:(fun entry -> 
-      Superset.with_ancestors_at superset
+      Traverse.with_ancestors_at superset
         ?post:None ~pre:(Hash_set.add returned) entry
     );
   Superset.Core.fold superset ~f:(fun ~key ~data exitless ->
@@ -554,7 +566,7 @@ let collect_descendants superset ?insn_isg ?visited ?datas targets =
   let datas = Option.value datas ~default:(Addr.Hash_set.create ()) in
   Hash_set.iter targets ~f:(fun v -> 
       if not Hash_set.(mem visited v) then
-        Superset.mark_descendent_bodies_at ~visited ~datas superset v      
+        Traverse.mark_descendent_bodies_at ~visited ~datas superset v      
     )
 
 let extract_img_entry superset =
@@ -581,7 +593,7 @@ let extract_trim_loops_with_break superset =
   superset
 let extract_trim_entry superset =
   let imgentry = extract_img_entry superset in
-  Set.iter imgentry ~f:Superset.(mark_descendent_bodies_at superset);
+  Set.iter imgentry ~f:Traverse.(mark_descendent_bodies_at superset);
   superset
 let extract_trim_branch_violations superset = 
   Invariants.tag_branch_violations superset
@@ -645,7 +657,7 @@ let extract_trim_fixpoint_tails superset =
   Superset.Core.clear_all_bad superset;
   Hash_set.iter tdesc ~f:(fun v -> 
       if not Hash_set.(mem visited v) then
-        Superset.mark_descendent_bodies_at ~visited ~datas superset v
+        Traverse.mark_descendent_bodies_at ~visited ~datas superset v
     );
   Hash_set.iter datas ~f:(fun d -> 
       if Hash_set.(mem visited d) || Hash_set.(mem tdesc d) then
@@ -796,7 +808,7 @@ let apply_featurepmap featureset ?(threshold=50) superset =
   let superset = tag_callsites visited ~callsites superset in
   Superset.Core.clear_all_bad superset;
   List.iter Map.(keys feature_pmap) ~f:(fun addr -> 
-      Superset.mark_descendent_bodies_at superset ~visited addr
+      Traverse.mark_descendent_bodies_at superset ~visited addr
     );
   clear_each superset visited;
   superset

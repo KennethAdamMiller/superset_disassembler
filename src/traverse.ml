@@ -1,5 +1,36 @@
 open Core_kernel
 open Bap.Std
+open Superset
+   
+(** Abstract dfs from a given starting point. *)
+let iter_component ?(terminator=(fun _ -> true))
+    ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ())  =
+  ISG.dfs ~terminator ?visited ~pre ~post ISG.ancestors
+
+(** This function starts at a given address and traverses toward 
+ every statically visible descendant. It is used to maximally 
+ propagate a given function application. *)
+let with_descendents_at ?visited ?post ?pre superset addr =
+  ISG.dfs ?visited ?post ?pre ISG.descendants superset addr
+
+(** This function starts at a given address and traverses toward 
+ every statically visible ancestor. It is used to maximally 
+ propagate a given function application. *)
+let with_ancestors_at ?visited ?post ?pre superset addr =
+  ISG.dfs ?visited ?post ?pre ISG.ancestors superset addr
+
+(** From the starting point specified, this reviews all descendants 
+    and marks their bodies as bad. For speed, an isg can be provided, 
+    in which case the reverse does not have to be computed repeatedly. *)
+let mark_descendent_bodies_at ?visited ?datas superset addr =
+  let datas = Option.value datas 
+      ~default:(Addr.Hash_set.create ()) in
+  let mark_bad = Core.mark_bad superset in
+  with_descendents_at ?visited superset addr
+    ~pre:(fun v ->
+        Occlusion.with_data_of_insn superset v ~f:mark_bad;
+        Occlusion.with_data_of_insn superset v ~f:(Hash_set.add datas);
+      )
 
 (** A clean wrapper around raw superset that does some management of
     visited nodes for efficiency behind the scenes. *)
@@ -11,28 +42,13 @@ let visit ?visited ~pre ~post superset entries =
     pre addr in
   Hash_set.iter entries ~f:(fun addr ->
       if not (Hash_set.mem visited addr) then
-        Superset.with_ancestors_at superset ~visited ~pre ~post addr
+        with_ancestors_at superset ~visited ~pre ~post addr
     )
 
-(** A delta from decision trees is constructed and passed to the
-    visitor functions during a visit. *)
-let visit_with_deltas ?pre ?post ~is_option superset entries =
-  let pre = Option.value pre ~default:(fun _ _ -> ()) in
-  let post = Option.value post ~default:(fun _ _ -> ()) in
-  let deltas = ref (Decision_trees.calculate_deltas
-                      superset ~entries ~is_option) in
-  let pre addr = 
-    pre !deltas addr in
-  let post addr = 
-    post !deltas addr;
-    deltas := Map.remove !deltas addr
-  in
-  visit ~pre ~post superset entries
 
 (** This traversal unlinks all non-branch jumps, collects every
     entry, which now includes newly unlinked blocks in order to
     provide a separation over traversal. *)
-(* TODO I think that this can be removed.  *)
 let visit_by_block superset
     ?(pre=(fun _ _ _ -> ())) ?(post=(fun _ _ _ -> ())) entries = 
   let (jmps,targets) = Superset.ISG.fold_edges superset

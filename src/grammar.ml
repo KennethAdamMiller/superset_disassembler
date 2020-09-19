@@ -54,7 +54,6 @@ let increment_map_at m ?(x=1) addr =
              ~f:(fun hits -> hits +x));
   Option.value ~default:x Map.(find !m addr)
 
-(* TODO think that this can be removed *)
 (** This searches through the set of blocks starting from entries for
     branches that got hit at least twice. The idea is to respect the
     diamond structure of control flow, which is that both sides
@@ -85,7 +84,6 @@ let linear_branch_sweep superset entries =
     );
   final_jmps
 
-(* TODO I think that this can be removed. *)
 (** The objective here is to tag grammar structures while traversing 
     topologically in such a manner that we can converge the 
     probability of recognizing an intended sequence by the 
@@ -138,12 +136,11 @@ let tag_by_traversal ?(threshold=8) superset =
       | _ :: remaining -> positives := remaining
       | [] -> ();
     ) in
-  Traverse.visit
+  Traverse.visit ~visited
     ~pre ~post superset entries;
-  let visited = Addr.Hash_set.create () in
   Hash_set.iter tps ~f:(fun tp -> 
       if not (Hash_set.mem visited tp) then (
-        Superset.with_descendents_at superset tp ~pre:(fun tp -> 
+        Traverse.with_descendents_at superset tp ~pre:(fun tp -> 
             let mark_bad addr =
               if Superset.ISG.mem_vertex superset addr then (
                 Superset.Core.mark_bad superset addr

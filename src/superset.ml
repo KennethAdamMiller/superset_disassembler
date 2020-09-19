@@ -27,92 +27,6 @@ let add_to_graph superset mem insn =
   let insn_risg = G.Node.insert addr superset.insn_risg in
   { superset with insn_risg }
 
-module ISG = struct
-  let ancestors superset =
-    OG.succ superset.insn_risg
-
-  let descendants superset =
-    OG.pred superset.insn_risg
-
-  let iter_vertex superset f =
-    OG.iter_vertex f superset.insn_risg
-
-  let fold_edges superset f =
-    let insn_risg = superset.insn_risg in 
-    OG.fold_edges f insn_risg
-
-  let link superset v1 v2 =
-    let e = G.Edge.create v1 v2 () in
-    let insn_risg = G.Edge.insert e superset.insn_risg in
-    { superset with insn_risg }
-
-  let unlink superset v1 v2 = 
-    let insn_risg = OG.remove_edge superset.insn_risg v1 v2 in
-    { superset with insn_risg }
-
-  let remove superset addr =
-    let insn_risg = OG.remove_vertex superset.insn_risg addr in
-    { superset with insn_risg } 
-
-  let mem_vertex superset = OG.mem_vertex superset.insn_risg
-
-  let check_connected superset e1 e2 =
-    match OG.find_all_edges
-            superset.insn_risg e1 e2 with
-    | [] -> false | _ -> true
-
-  let raw_loops superset = 
-    StrongComponents.scc_list superset.insn_risg
-
-  let dfs_fold ?visited superset =
-    fold_component ?visited superset.insn_risg
-
-  let print_dot ?colorings superset =
-    (*if not (colorings = String.Map.empty) then*)
-    let colorings = Option.value colorings ~default:String.Map.empty in
-    let fout =
-      Out_channel.create @@ Option.value_exn superset.filename
-                            ^ ".dot" in
-    let superset_isg = Oper.mirror superset.insn_risg in
-    let insn_map = superset.insn_map in
-    let module Layout =
-      Make(struct
-          let instance = (superset_isg, colorings, insn_map)
-        end) in
-    Layout.Dot.output_graph fout (superset_isg, colorings, insn_map)
-
-  let format_isg ?format superset =
-    let format = Option.value format ~default:Format.std_formatter in
-    Gml.print format superset.insn_risg
-
-  let isg_to_string superset = 
-    let format = Format.str_formatter in
-    format_isg ~format superset;
-    Format.flush_str_formatter ()
-
-  let filter superset subgraph =
-    let insn_risg = superset.insn_risg in
-    let g = Graphlib.create (module G) () in
-    let g =
-      Hash_set.fold subgraph ~init:g ~f:(fun g addr ->
-          let g = OG.add_vertex g addr in
-          let g = OG.fold_succ
-                    (fun s g ->
-                      if Hash_set.mem subgraph s then
-                        OG.add_edge g addr s
-                      else g
-                    ) insn_risg addr g in
-          let g = OG.fold_pred
-                    (fun s g ->
-                      if Hash_set.mem subgraph s then
-                        OG.add_edge g s addr
-                      else g
-                    ) insn_risg addr g in g
-        ) in 
-    { superset with insn_risg =g; }
-
-end
-
 module Core = struct
   let add superset mem insn =
     let superset = add_to_graph superset mem insn in
@@ -235,6 +149,107 @@ module Core = struct
         OG.(mem_vertex superset_risg vert)
       ) insn_map in
     { superset with insn_risg =superset_risg; insn_map; }
+
+end
+
+  
+module ISG = struct
+  let ancestors superset =
+    OG.succ superset.insn_risg
+
+  let descendants superset =
+    OG.pred superset.insn_risg
+
+  let iter_vertex superset f =
+    OG.iter_vertex f superset.insn_risg
+
+  let fold_edges superset f =
+    let insn_risg = superset.insn_risg in 
+    OG.fold_edges f insn_risg
+
+  let link superset v1 v2 =
+    let e = G.Edge.create v1 v2 () in
+    let insn_risg = G.Edge.insert e superset.insn_risg in
+    { superset with insn_risg }
+
+  let unlink superset v1 v2 = 
+    let insn_risg = OG.remove_edge superset.insn_risg v1 v2 in
+    { superset with insn_risg }
+
+  let remove superset addr =
+    let insn_risg = OG.remove_vertex superset.insn_risg addr in
+    { superset with insn_risg } 
+
+  let mem_vertex superset = OG.mem_vertex superset.insn_risg
+
+  let check_connected superset e1 e2 =
+    match OG.find_all_edges
+            superset.insn_risg e1 e2 with
+    | [] -> false | _ -> true
+
+  let raw_loops superset = 
+    StrongComponents.scc_list superset.insn_risg
+
+  let dfs_fold ?visited superset =
+    fold_component ?visited superset.insn_risg
+
+  let dfs ?(terminator=(fun _ -> true))
+        ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) explore superset v =
+    let visited = Option.value visited 
+                    ~default:(Addr.Hash_set.create ()) in
+    let rec visit v =
+      Hash_set.add visited v;
+      pre v;
+      List.iter (explore superset v)
+        ~f:(fun w ->
+          if (not (Hash_set.mem visited w)) && (terminator w) then
+            visit w) ;
+      post v
+    in if Core.mem superset v then visit v
+
+  let print_dot ?colorings superset =
+    (*if not (colorings = String.Map.empty) then*)
+    let colorings = Option.value colorings ~default:String.Map.empty in
+    let fout =
+      Out_channel.create @@ Option.value_exn superset.filename
+                            ^ ".dot" in
+    let superset_isg = Oper.mirror superset.insn_risg in
+    let insn_map = superset.insn_map in
+    let module Layout =
+      Make(struct
+          let instance = (superset_isg, colorings, insn_map)
+        end) in
+    Layout.Dot.output_graph fout (superset_isg, colorings, insn_map)
+
+  let format_isg ?format superset =
+    let format = Option.value format ~default:Format.std_formatter in
+    Gml.print format superset.insn_risg
+
+  let isg_to_string superset = 
+    let format = Format.str_formatter in
+    format_isg ~format superset;
+    Format.flush_str_formatter ()
+
+  let filter superset subgraph =
+    let insn_risg = superset.insn_risg in
+    let g = Graphlib.create (module G) () in
+    let g =
+      Hash_set.fold subgraph ~init:g ~f:(fun g addr ->
+          let g = OG.add_vertex g addr in
+          let g = OG.fold_succ
+                    (fun s g ->
+                      if Hash_set.mem subgraph s then
+                        OG.add_edge g addr s
+                      else g
+                    ) insn_risg addr g in
+          let g = OG.fold_pred
+                    (fun s g ->
+                      if Hash_set.mem subgraph s then
+                        OG.add_edge g s addr
+                      else g
+                    ) insn_risg addr g in g
+        ) in 
+    { superset with insn_risg =g; }
 
 end
 
@@ -461,40 +476,6 @@ let get_callers superset addr =
     List.filter callers ~f:(fun caller ->
         not (is_fall_through superset caller addr))
   else []
-
-let dfs ?(terminator=(fun _ -> true))
-    ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ()) explore superset v =
-  let visited = Option.value visited 
-      ~default:(Addr.Hash_set.create ()) in
-  let rec visit v =
-    Hash_set.add visited v;
-    pre v;
-    List.iter (explore superset v)
-      ~f:(fun w ->
-          if (not (Hash_set.mem visited w)) && (terminator w) then
-            visit w) ;
-    post v
-  in if Core.mem superset v then visit v
-
-let iter_component ?(terminator=(fun _ -> true))
-    ?visited ?(pre=fun _ -> ()) ?(post=fun _ -> ())  =
-  dfs ~terminator ?visited ~pre ~post ISG.ancestors
-
-let with_descendents_at ?visited ?post ?pre superset addr =
-  dfs ?visited ?post ?pre ISG.descendants superset addr
-
-let with_ancestors_at ?visited ?post ?pre superset addr =
-  dfs ?visited ?post ?pre ISG.ancestors superset addr
-
-let mark_descendent_bodies_at ?visited ?datas superset addr =
-  let datas = Option.value datas 
-      ~default:(Addr.Hash_set.create ()) in
-  let mark_bad = Core.mark_bad superset in
-  with_descendents_at ?visited superset addr
-    ~pre:(fun v ->
-        Occlusion.with_data_of_insn superset v ~f:mark_bad;
-        Occlusion.with_data_of_insn superset v ~f:(Hash_set.add datas);
-      )
 
 let sexp_of_mem mem = 
   let endianness = Memory.endian mem in

@@ -32,6 +32,10 @@ module ISG : sig
   val dfs_fold :
     ?visited:Addr.Hash_set.t -> t -> pre:('a -> addr -> 'a) ->
     post:('a -> addr -> 'a) -> 'a -> addr -> 'a
+  val dfs : ?terminator:(addr -> bool) -> ?visited:Addr.Hash_set.t ->
+            ?pre:(addr -> unit) -> ?post:(addr -> unit) ->
+            (t -> addr -> addr list) -> t -> addr -> unit
+
   (** Print the graph to file for a given superset *)
   val print_dot : ?colorings:Addr.Hash_set.t String.Map.t -> t -> unit
   (** For all items in the address hash set, remove them from the
@@ -262,36 +266,6 @@ val get_branches : t -> Addr.Hash_set.t
 val with_bad :
   t -> ?visited:Addr.Hash_set.t -> pre:('b -> addr -> 'c) ->
   post:('c -> addr -> 'b) -> 'b -> 'b
-
-(** Abstract dfs from a given starting point. *)
-val iter_component : ?terminator:((addr -> bool)) ->
-  ?visited:Addr.Hash_set.t -> ?pre:(addr -> unit) -> ?post:(addr -> unit) ->
-  t -> addr -> unit
-
-(** This function starts at a given address and traverses toward 
- every statically visible descendant. It is used to maximally 
- propagate a given function application. *)
-(* TODO belongs in traverse *)
-val with_descendents_at :
-  ?visited:'a Addr.Hash_set.t_ ->
-  ?post:(addr -> unit) -> ?pre:(addr -> unit) ->
-  t -> addr ->  unit
-
-(** This function starts at a given address and traverses toward 
- every statically visible ancestor. It is used to maximally 
- propagate a given function application. *)
-val with_ancestors_at :
-  ?visited:'a Addr.Hash_set.t_ ->
-  ?post:(addr -> unit) -> ?pre:(addr -> unit)  ->
-  t -> addr -> unit
-
-(** From the starting point specified, this reviews all descendants 
-    and marks their bodies as bad. For speed, an isg can be provided, 
-    in which case the reverse does not have to be computed repeatedly. *)
-val mark_descendent_bodies_at :
-  ?visited:'a Addr.Hash_set.t_ ->
-  ?datas:'b Addr.Hash_set.t_ ->
-  t -> addr -> unit
 
 (** Read a given superset from file. *)
 val import : string -> t

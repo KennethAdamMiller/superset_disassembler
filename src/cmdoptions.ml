@@ -468,7 +468,7 @@ module With_options(Conf : Provider)  = struct
          let terminator _ =
            !depth < len &&
              Hash_set.(length subgraph) < len in
-         Superset.iter_component ~terminator ~pre ~post superset addr;
+         Traverse.iter_component ~terminator ~pre ~post superset addr;
          let superset = Superset.ISG.filter superset subgraph in 
          Superset.ISG.print_dot ~colorings:results superset
       | Interval, addr, len ->
@@ -517,21 +517,9 @@ module With_options(Conf : Provider)  = struct
        let superset = dis_method bin in
        with_invariants superset invariants
 
-  let main () =
+  let with_options superset =
     let phases = options.phases in
     let analyses = options.analyses in
-    let format = match options.metrics_format with
-      | Latex -> Metrics.format_latex
-      | Standard -> Metrics.format_standard in
-    let _ = 
-      if options.save_gt then
-        let gt = Metrics.ground_truth_of_unstripped_bin
-            options.target |> ok_exn in
-        let gt = Seq.map gt ~f:Addr.to_string in
-        Seq.iter gt ~f:print_endline;
-        exit 0
-      else () in
-    let superset = checkpoint options.target phases in
     let trim = options.trim_method in
     let superset = with_analyses superset analyses in
     let (trim,metrics) = build_metrics trim phases in
@@ -545,8 +533,25 @@ module With_options(Conf : Provider)  = struct
       else () in
     let results = apply_setops setops options.setops in
     let results =
-      collect_results superset options.ground_truth_file results metrics setops tracker in
+      collect_results superset
+        options.ground_truth_file results metrics setops tracker in
     process_cut superset options results;
+    superset
+       
+  let main () =
+    let format = match options.metrics_format with
+      | Latex -> Metrics.format_latex
+      | Standard -> Metrics.format_standard in
+    let _ = 
+      if options.save_gt then
+        let gt = Metrics.ground_truth_of_unstripped_bin
+            options.target |> ok_exn in
+        let gt = Seq.map gt ~f:Addr.to_string in
+        Seq.iter gt ~f:print_endline;
+        exit 0
+      else () in
+    let superset = checkpoint options.target options.phases in
+    let superset = with_options superset in
     match options.ground_truth_bin with
     | Some bin -> 
       Metrics.gather_metrics ~bin superset |> format |> print_endline

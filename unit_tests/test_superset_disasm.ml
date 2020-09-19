@@ -786,7 +786,7 @@ let test_dfs_iter_order test_ctxt =
   let visit_order = ref [] in
   let superset =
     Superset_impl.of_components ~insn_map ~insn_risg arch in
-  Superset.with_ancestors_at 
+  Traverse.with_ancestors_at 
     ~pre:(fun v -> visit_order := v :: !visit_order) 
     superset start;
   visit_order := List.rev !visit_order;

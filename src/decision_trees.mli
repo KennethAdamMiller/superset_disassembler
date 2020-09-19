@@ -35,3 +35,10 @@ val calculate_deltas :
   Superset.t -> (Addr.Hash_set.t * Addr.Hash_set.t) Addr.Map.t
 val tails_of_conflicts :
   Superset.t -> Addr.Set.t -> addr list Addr.Map.t
+val visit_with_deltas :
+  ?pre:(('a Addr.Hash_set.t_ * 'b Addr.Hash_set.t_)
+          Addr.Map.t -> addr -> unit) ->
+  ?post:(('a Bap.Std.Addr.Hash_set.t_ * 'b Bap.Std.Addr.Hash_set.t_)
+           Addr.Map.t -> addr -> unit) ->
+  is_option:(addr -> bool) ->
+  Superset.t -> Addr.Hash_set.t -> unit

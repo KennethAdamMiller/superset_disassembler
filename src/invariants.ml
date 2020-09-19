@@ -68,7 +68,7 @@ let tag_layer_violations superset =
     tag_violators deltas addr;
     Hash_set.remove insns addr;
     remove_data_of_insn datas addr in
-  Traverse.visit_with_deltas 
+  Decision_trees.visit_with_deltas 
     ~is_option ~pre ~post superset entries;
   superset
 

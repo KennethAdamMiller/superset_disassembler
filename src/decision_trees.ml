@@ -1,7 +1,6 @@
 open Core_kernel
 open Bap.Std
 open Graphlib.Std
-open Graph
 
 module G = Graphlib.Make(Addr)(Unit)
 
@@ -268,7 +267,7 @@ let calculate_deltas ?entries ?is_option superset =
   in
   let visited = Addr.Hash_set.create () in
   Hash_set.iter entries 
-    ~f:(Superset.with_ancestors_at
+    ~f:(Traverse.with_ancestors_at
           ~visited ~post:make_deltas ?pre:None superset);
   !deltas
 
@@ -276,3 +275,18 @@ module Speculate = struct
   let weigh_possibilities _ _ = ()
   let make_choices x _ _ = x
 end                         
+
+(** A delta from decision trees is constructed and passed to the
+    visitor functions during a visit. *)
+let visit_with_deltas ?pre ?post ~is_option superset entries =
+  let pre = Option.value pre ~default:(fun _ _ -> ()) in
+  let post = Option.value post ~default:(fun _ _ -> ()) in
+  let deltas = ref (calculate_deltas
+                      superset ~entries ~is_option) in
+  let pre addr = 
+    pre !deltas addr in
+  let post addr = 
+    post !deltas addr;
+    deltas := Map.remove !deltas addr
+  in
+  Traverse.visit ~pre ~post superset entries

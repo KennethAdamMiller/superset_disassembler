@@ -64,7 +64,7 @@ let mark_threshold_with_pmap ?visited ?datas superset pmap threshold =
       let p = data in
       if p > threshold then (
         if Superset.Core.mem superset addr then
-          Superset.mark_descendent_bodies_at
+          Traverse.mark_descendent_bodies_at
             ~datas ~visited superset addr;
       )
     )
@@ -96,7 +96,7 @@ let collect_set_report
         if not Hash_set.(mem tps e) && not Hash_set.(mem fps e) then (
           if not (Hash_set.mem visited e) && 
              Superset.Core.mem superset e then
-            Superset.with_descendents_at ~pre:(fun tp -> 
+            Traverse.with_descendents_at ~pre:(fun tp -> 
                 let mark_bad addr = 
                   if Superset.Core.mem superset addr then
                     Superset.Core.mark_bad superset addr in
