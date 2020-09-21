@@ -8,7 +8,6 @@ authors: [
 ]
 license: "MIT"
 build: [
-  [oasis setup -setup-update dynamic]
   [make]
 ]
 
@@ -33,18 +32,12 @@ depends: [
 
 depexts: [
     [["ubuntu"] [
-        "libgmp-dev"
         "libzip-dev"
-        "libcurl4-gnutls-dev"
-        "llvm-3.4-dev"
-        "time"
         "clang"
         "llvm"
         "m4"
      ]]
      [["osx" "macports"] [
-        "gmp"
-        "llvm-3.4"
         "graphviz"
         "curl"
         "libzip"
