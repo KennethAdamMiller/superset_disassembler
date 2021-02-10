@@ -14,21 +14,21 @@ RUN git clone https://github.com/schieb/ELFManip && cd ELFManip && sudo python s
 ##### SPEC CPU 2006
 COPY ./cpu2006-103.zip ./
 RUN unzip cpu2006-103.zip && rm cpu2006-103.zip && rm -rf __MAXOSX result/* && cd cpu2006-103 && $(printf "yes\n") | ./install.sh
-COPY Example-linux64-amd64-gcc41.cfg /home/bap/workspace/cpu2006-103/config/
-WORKDIR /home/bap/workspace/cpu2006-103
+COPY Example-linux64-amd64-gcc41.cfg /home/opam/workspace/cpu2006-103/config/
+WORKDIR /home/opam/workspace/cpu2006-103
 RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=run gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
 
 ##### multiverse
 RUN sudo pip install --upgrade pip && sudo python -m pip install --upgrade pyelftools==0.24 && sudo pip install pwntools && sudo pip uninstall capstone -y
-WORKDIR /home/bap/workspace/capstone
+WORKDIR /home/opam/workspace/capstone
 RUN ./make.sh && sudo ./make.sh install && cd bindings/python && sudo python setup.py install
-WORKDIR /home/bap/workspace/multiverse
+WORKDIR /home/opam/workspace/multiverse
 ENV TERM="xterm"
 RUN echo "import curses; curses.setupterm();" > x64_asmblr.py && cat x64_assembler.py >> x64_asmblr.py && mv x64_asmblr.py x64_assembler.py
 RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh
-WORKDIR /home/bap/workspace/superset_disasm
+WORKDIR /home/opam/workspace/superset_disasm
 
 RUN chmod u+x scripts/*
 RUN scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_analyses.sh
-RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/bap/workspace/rq3_binaries
+RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/opam/workspace/rq3_binaries
 RUN scripts/rq3.sh > rq3.txt
