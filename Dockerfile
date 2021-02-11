@@ -3,7 +3,7 @@ FROM binaryanalysisplatform/bap
 USER root
 RUN mkdir -p /home/opam/workspace/superset_disasm
 COPY ./ /home/opam/workspace/superset_disasm/
-RUN chown -R opam:opam /home/opam/
+RUN chown -R opam:opam /home/opam/workspace
 USER opam
 
 WORKDIR /home/opam/workspace/superset_disasm
