@@ -294,7 +294,8 @@ module Inspection = struct
     | Some(mem, _) -> Memory.length mem
   let get_base superset =
     let insn_map = get_map superset in
-    let (base_addr, _)  = Addr.Map.min_elt insn_map |> Option.value_exn in
+    let x = Addr.Map.min_elt insn_map in
+    let (base_addr, _)  = Option.value_exn x in
     base_addr
   let num_bad superset =
     Hash_set.length superset.bad

@@ -89,7 +89,7 @@ module DeadblockTolerantReducer : Reducer = struct
   let check_post superset accu addr =
     match accu with
     | Some(mem,insn) ->
-      if Memory.(min_addr mem) = addr then
+      if Addr.equal Memory.(min_addr mem) addr then
         None
       else accu
     | None -> accu

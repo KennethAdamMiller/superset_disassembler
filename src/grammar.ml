@@ -129,7 +129,7 @@ let tag_by_traversal ?(threshold=8) superset =
     ) in
   let post addr =
     entry := Option.value_map !entry ~default:!entry
-        ~f:(fun e -> if e = addr then None else Some(e));
+        ~f:(fun e -> if Addr.(e = addr) then None else Some(e));
     if Hash_set.mem branches addr then (
       cur_total := !cur_total - 1;
       match !positives with

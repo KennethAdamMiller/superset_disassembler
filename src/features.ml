@@ -462,7 +462,8 @@ let get_branches superset =
   transform branches
 
 let branch_map_of_branches superset branches =
-  let name = Superset.Inspection.filename superset |> Option.value_exn in
+  let name = Superset.Inspection.filename superset in
+  let name = Option.value_exn name in
   let true_positives = Metrics.true_positives superset name in
   let branches = 
     Hash_set.fold true_positives ~init:branches ~f:Set.remove in

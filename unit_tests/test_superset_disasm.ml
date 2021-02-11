@@ -6,7 +6,7 @@ open Superset
 open Bap_plugins.Std
 open Graphlib.Std
 
-let () = Pervasives.ignore(Plugins.load ())
+let () = Stdlib.ignore(Plugins.load ())
 let _ = Bap_main.init ()
 
 let create_memory arch min_addr data =
@@ -636,7 +636,7 @@ let test_topological_revisit ctxt =
   let start = Addr.of_int 0 ~width in
   let stop = Addr.of_int 2 ~width in
   let rec make_if insn_risg current stop =
-    if not (current = stop) then
+    if not Addr.(current = stop) then
       let next = Addr.succ current in
       let insn_risg = add_edge insn_risg current next in
       make_if insn_risg next stop else insn_risg in
@@ -831,8 +831,8 @@ let test_graph_edge_behavior test_ctxt =
   let insn_risg = add_edge insn_risg start Addr.(succ start) in
   let insn_risg = add_edge insn_risg start Addr.(succ start) in
   let edges = Seq.filter (G.edges insn_risg) ~f:(fun e ->
-                  (G.Edge.src e) = start
-                  && (G.Edge.dst e) = Addr.(succ start)) in
+                  Addr.((G.Edge.src e) = start)
+                  && Addr.((G.Edge.dst e) = Addr.(succ start))) in
   let msg = "expect single edge between nodes" in
   assert_equal ~msg Seq.(length edges) 1
 

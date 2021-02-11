@@ -62,7 +62,7 @@ let mark_threshold_with_pmap ?visited ?datas superset pmap threshold =
   Map.iteri pmap ~f:(fun ~key ~data ->
       let addr = key in
       let p = data in
-      if p > threshold then (
+      if Float.(p > threshold) then (
         if Superset.Core.mem superset addr then
           Traverse.mark_descendent_bodies_at
             ~datas ~visited superset addr;
@@ -116,22 +116,22 @@ let collect_set_report
       ~f:(fun ~key ~data (tp_max, tp_min, fp_max, fp_min) -> 
           let tp_max, tp_min = 
             if Hash_set.mem tps key then
-              max tp_max data, min tp_min data
+              Float.max tp_max data, Float.min tp_min data
             else tp_max, tp_min in
           let fp_max, fp_min = 
             if Hash_set.mem fps key then
-              max fp_max data, min fp_min data
+              Float.max fp_max data, Float.min fp_min data
             else fp_max, fp_min in
           tp_max, tp_min, fp_max, fp_min
         ) in
   let overlap_max =
-    if tp_min > fp_max then tp_min 
-    else if fp_min > tp_max then fp_min 
-    else max tp_min fp_min in
+    if Float.(tp_min > fp_max) then tp_min 
+    else if Float.(fp_min > tp_max) then fp_min 
+    else Float.max tp_min fp_min in
   let overlap_min =
-    if tp_min < fp_max then tp_min
-    else if fp_min < tp_max then fp_min 
-    else min tp_min fp_min in
+    if Float.(tp_min < fp_max) then tp_min
+    else if Float.(fp_min < tp_max) then fp_min 
+    else Float.min tp_min fp_min in
   let overlap_space = overlap_max -. overlap_min in
   let visited = Addr.Hash_set.create () in
   let datas = Addr.Hash_set.create () in

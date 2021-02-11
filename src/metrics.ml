@@ -62,7 +62,7 @@ struct
   let check_post superset (accu : acc) addr =
     (match !cur_root with
      | None -> ()
-     | Some x -> if x = addr then cur_root := None);
+     | Some x -> if Addr.(x = addr) then cur_root := None);
     accu
   let check_elim _ _ _ = true
   let mark superset accu addr =
@@ -217,7 +217,6 @@ let gather_metrics ~bin superset =
           then ro+1 else ro) in
   let num_bytes = Superset.Inspection.total_bytes superset in
   let entries = Superset.entries_of_isg superset in
-  (* TODO per feature reporting to replace individually specified items *)
   let branches = Grammar.linear_branch_sweep superset entries in
   let fp_branches, tp_branches = check_tp_set true_positives branches in
   printf "Num f.p. branches: %d, num tp branches: %d\n" fp_branches tp_branches;
