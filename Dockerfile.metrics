@@ -12,7 +12,7 @@ RUN git clone https://github.com/KennethAdamMiller/multiverse.git && make -C mul
 RUN git clone https://github.com/schieb/ELFManip && cd ELFManip && sudo python setup.py install
 
 ##### SPEC CPU 2006
-RUN pip install gdown && gdown  https://drive.google.com/uc?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs
+RUN pip install gdown && /home/opam/.local/lib/python2.7/site-packages/gdown  https://drive.google.com/uc?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs
 RUN unzip cpu2006-103.zip && rm cpu2006-103.zip && rm -rf __MAXOSX result/* && cd cpu2006-103 && $(printf "yes\n") | ./install.sh
 COPY Example-linux64-amd64-gcc41.cfg /home/opam/workspace/cpu2006-103/config/
 WORKDIR /home/opam/workspace/cpu2006-103
