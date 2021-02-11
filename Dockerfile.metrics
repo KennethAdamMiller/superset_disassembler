@@ -1,7 +1,7 @@
 FROM kennethadammiller/superset_disasm
 ARG testsize=999999
-WORKDIR /home/bap/workspace
-ENV PATH="/home/bap/.opam/4.05.0/bin:"$PATH
+WORKDIR /home/opam/workspace
+ENV PATH="/home/opam/.opam/4.05.0/bin:"$PATH
 
 RUN sudo apt-get update && sudo apt-get install libc6-dev-i386 -y
 
