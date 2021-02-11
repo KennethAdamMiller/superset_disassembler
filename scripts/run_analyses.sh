@@ -11,7 +11,7 @@ analyze() {
     has_error=true
     while ${has_error}; do
 	has_error=false
-	cat ../${src}.txt | whle read f ; do   
+	cat ../${src}.txt | while read f ; do   
             name="./$(basename "${f}").metrics"
 	    if [[ ! -f "${name}" ]]; then
 		    echo "no file!"
