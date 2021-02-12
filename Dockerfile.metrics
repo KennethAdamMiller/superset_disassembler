@@ -1,7 +1,7 @@
 FROM kennethadammiller/superset_disasm
 ARG testsize=999999
 WORKDIR /home/opam/workspace
-ENV PATH="/home/opam/.opam/4.09.0/bin:"$PATH
+ENV PATH="/home/opam/.opam/4.09/bin:"$PATH
 
 RUN sudo apt-get update && sudo apt-get install libc6-dev-i386 -y
 
@@ -17,7 +17,7 @@ USER root
 RUN chown -R opam:opam /home/opam/.local/
 USER opam
 RUN /home/opam/.local/bin/gdown  https://drive.google.com/uc?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs
-RUN unzip cpu2006-103.zip && rm cpu2006-103.zip && rm -rf __MAXOSX result/* && cd cpu2006-103 && $(printf "yes\n") | ./install.sh
+RUN unzip -q cpu2006-103.zip && rm cpu2006-103.zip && rm -rf __MAXOSX result/* && cd cpu2006-103 && $(printf "yes\n") | ./install.sh
 COPY Example-linux64-amd64-gcc41.cfg /home/opam/workspace/cpu2006-103/config/
 WORKDIR /home/opam/workspace/cpu2006-103
 #RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=run gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
