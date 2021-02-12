@@ -30,8 +30,9 @@ WORKDIR /home/opam/workspace/multiverse
 ENV TERM="xterm"
 RUN echo "import curses; curses.setupterm();" > x64_asmblr.py && cat x64_assembler.py >> x64_asmblr.py && mv x64_asmblr.py x64_assembler.py
 RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh
-WORKDIR /home/opam/workspace/superset_disasm
 
+##### superset_disasm performance
+WORKDIR /home/opam/workspace/superset_disasm
 RUN chmod u+x scripts/*
 RUN scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_analyses.sh
 RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/opam/workspace/rq3_binaries
