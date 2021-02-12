@@ -23,7 +23,7 @@ WORKDIR /home/opam/workspace/cpu2006-103
 #RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=run gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
 
 ##### multiverse
-RUN sudo apt-get install wget && wget https://bootstrap.pypa.io/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py && python -m pip install --upgrade pyelftools==0.24 && pip install setuptools_rust && pip install pwntools=3.12.2 && sudo pip uninstall capstone -y
+RUN sudo apt-get install wget && wget https://bootstrap.pypa.io/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py && python -m pip install --upgrade pyelftools==0.24 && pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y
 WORKDIR /home/opam/workspace/capstone
 RUN ./make.sh && sudo ./make.sh install && cd bindings/python && sudo python setup.py install
 WORKDIR /home/opam/workspace/multiverse
