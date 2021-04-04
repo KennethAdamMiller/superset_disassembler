@@ -6,3 +6,5 @@ install:
   - docker build . -t kennethadammiller/superset_disasm
 #TODO run tests
 #  - docker build . -f Dockerfile.metrics -t kennethadammiller/superset_disasm_metrics
+script:
+  - echo "Finished!"
