@@ -1,34 +1,10 @@
 FROM kennethadammiller/superset_disasm
-ARG testsize=999999
-WORKDIR /home/opam/workspace
-ENV PATH="/home/opam/.opam/4.09/bin:"$PATH
 
-RUN sudo apt-get update && sudo apt-get install libc6-dev-i386 -y
+##### SPEC CPU 2006 performance
+RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=run gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
 
-RUN git clone https://github.com/BinaryAnalysisPlatform/x86-binaries.git 
-RUN git clone https://github.com/BinaryAnalysisPlatform/x86_64-binaries.git
-RUN git clone https://github.com/baumane/capstone.git
-RUN git clone https://github.com/KennethAdamMiller/multiverse.git && make -C multiverse
-RUN git clone https://github.com/schieb/ELFManip && cd ELFManip && sudo python setup.py install
 
-##### SPEC CPU 2006
-RUN pip install gdown
-USER root
-RUN chown -R opam:opam /home/opam/.local/
-USER opam
-RUN /home/opam/.local/bin/gdown  https://drive.google.com/uc?id=1Pcqp7OfkTvlXn-rtIMDUPh4IjdBrixEs
-RUN unzip -q cpu2006-103.zip && rm cpu2006-103.zip && rm -rf __MAXOSX result/* && cd cpu2006-103 && $(printf "yes\n") | ./install.sh
-COPY Example-linux64-amd64-gcc41.cfg /home/opam/workspace/cpu2006-103/config/
-WORKDIR /home/opam/workspace/cpu2006-103
-#RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=run gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
-
-##### multiverse
-RUN sudo apt-get install wget && wget https://bootstrap.pypa.io/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py && python -m pip install --upgrade pyelftools==0.24 && pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y
-WORKDIR /home/opam/workspace/capstone
-RUN ./make.sh && sudo ./make.sh install && cd bindings/python && sudo python setup.py install
-WORKDIR /home/opam/workspace/multiverse
-ENV TERM="xterm"
-RUN echo "import curses; curses.setupterm();" > x64_asmblr.py && cat x64_assembler.py >> x64_asmblr.py && mv x64_asmblr.py x64_assembler.py
+##### multiverse performance
 RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh
 
 ##### superset_disasm performance

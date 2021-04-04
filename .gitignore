@@ -1,7 +1,6 @@
 **/_build/**
 /*.native
 /setup.log
-/setup.ml
 /setup.data
 /reduced_occlusion.txt
 /superset_disasm.tar
