@@ -1,7 +1,7 @@
 language: c
 services:
   - docker
-before_install:
+install:
   - docker pull binaryanalysisplatform/bap
   - docker build . -t kennethadammiller/superset_disasm
 #TODO run tests
