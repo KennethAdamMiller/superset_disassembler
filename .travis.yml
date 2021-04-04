@@ -5,4 +5,3 @@ before_install:
   - docker pull binaryanalysisplatform/bap
   - docker build . -t kennethadammiller/superset_disasm
 #  - docker build . -f Dockerfile.metrics -t kennethadammiller/superset_disasm_metrics
-install: travis_wait 45
