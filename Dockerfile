@@ -19,7 +19,7 @@ RUN git clone https://github.com/BinaryAnalysisPlatform/x86-binaries.git
 RUN git clone https://github.com/BinaryAnalysisPlatform/x86_64-binaries.git
 RUN git clone https://github.com/baumane/capstone.git
 RUN git clone https://github.com/KennethAdamMiller/multiverse.git && make -C multiverse
-RUN git clone https://github.com/schieb/ELFManip && cd ELFManip && sudo python setup.py install
+RUN git clone https://github.com/schieb/ELFManip
 
 ##### SPEC CPU 2006
 RUN pip install gdown
@@ -33,7 +33,7 @@ WORKDIR /home/opam/workspace/cpu2006-103
 
 ##### multiverse
 #python -m pip install --upgrade pyelftools==0.24 &&
-RUN sudo apt-get install wget && wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py &&  pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y
+RUN sudo apt-get install wget && cd /home/opam/workspace/ && wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py && cd /home/opam/workspace/ELFManip && sudo python setup.py install && pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y
 WORKDIR /home/opam/workspace/capstone
 RUN ./make.sh && sudo ./make.sh install && cd bindings/python && sudo python setup.py install
 WORKDIR /home/opam/workspace/multiverse
