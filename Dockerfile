@@ -32,7 +32,8 @@ COPY Example-linux64-amd64-gcc41.cfg /home/opam/workspace/cpu2006-103/config/
 WORKDIR /home/opam/workspace/cpu2006-103
 
 ##### multiverse
-RUN sudo apt-get install wget && wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py && python -m pip install --upgrade pyelftools==0.24 && pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y
+#python -m pip install --upgrade pyelftools==0.24 &&
+RUN sudo apt-get install wget && wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && python ./get-pip.py && rm ./get-pip.py &&  pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y
 WORKDIR /home/opam/workspace/capstone
 RUN ./make.sh && sudo ./make.sh install && cd bindings/python && sudo python setup.py install
 WORKDIR /home/opam/workspace/multiverse
