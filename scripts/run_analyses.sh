@@ -2,7 +2,7 @@
 
 analyze() {
     src=binaries
-    workdir="${2}${src}${3}_results"
+    workdir="${1}${src}${2}_results"
     unstripped=${HOME}/workspace/unstripped/
     disasm_dir=${HOME}/workspace/superset_disasm/
 #    rm -rf "${workdir}"
@@ -21,7 +21,7 @@ analyze() {
 	    fi	
 	    if [[ (! -f "${name}") || (-z $(cat "${name}" | grep "True positives")) ]]; then
 		echo "Processing: ${f}"
-		${disasm_dir}/superset_disasm.native --phases="${1}" --target="${f}" --ground_truth_bin="${unstripped}/$(basename "${f}")" --save_addrs --enable_feature="${2}" --rounds=2 --tp_threshold="${3}" >> "${name}";
+		${disasm_dir}/superset_disasm.native --target="${f}" --ground_truth_bin="${unstripped}/$(basename "${f}")" --save_addrs --enable_feature="${1}" --rounds=2 --tp_threshold="${2}" >> "${name}";
 		if [ $? -ne 0 ]; then
 		    printf "\t... error on file ${f}, will need to reprocess\n"
 		    has_error=true
@@ -33,7 +33,7 @@ analyze() {
     popd
 }
 
-#j1= analyze "All Instruction invariants" "" "0.99"& 
+#j1= analyze "" "" "0.99"& 
 #j2= analyze "Target_out_of_bounds" "" "0.99"& 
 #j3= analyze "Target_is_bad" "" "0.99"& 
 #j4= analyze "Invalid memory accesses" "" "0.99"& 
@@ -48,10 +48,10 @@ analyze() {
 #
 #j1= analyze "Strongly Connected Component Data" "" "0.99"& 
 #j2= analyze "Cross Layer Invalidation" "" "0.99"& 
-j3= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.99" &
-j4= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.98" &
-j5= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.97" &
-j6= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.90" &
+j3= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.99" &
+j4= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.98" &
+j5= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.97" &
+j6= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.90" &
 ##j5= analyze "Grammar convergent" "" &
 #wait ${j1}
 #wait ${j2}
@@ -59,16 +59,16 @@ wait ${j3}
 wait ${j4}
 wait ${j5}
 wait ${j6}
-j1= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.80" &
-j2= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.70" &
-j3= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.50" &
+j1= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.80" &
+j2= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.70" &
+j3= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.50" &
 wait ${j1}
 wait ${j2}
 wait ${j3}
 
-j1= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointSSA,TrimFixpointGrammar" "0.990" &
-j2= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointSSA" "0.990" &
-j3= analyze "All Instruction invariants" "TrimLimitedClamped,TrimFixpointGrammar" "0.990" &
+j1= analyze "TrimLimitedClamped,TrimFixpointSSA,TrimFixpointGrammar" "0.990" &
+j2= analyze "TrimLimitedClamped,TrimFixpointSSA" "0.990" &
+j3= analyze "TrimLimitedClamped,TrimFixpointGrammar" "0.990" &
 wait ${j1}
 wait ${j2}
 wait ${j3}
