@@ -1,19 +1,20 @@
-FROM binaryanalysisplatform/bap
+FROM binaryanalysisplatform/bap:2.1.0
 
 USER root
+#TODO this should use git clone
 RUN mkdir -p /home/opam/workspace/superset_disasm
 COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace
 USER opam
 
+RUN sudo apt-get update && sudo apt-get install libc6-dev-i386 -y
 WORKDIR /home/opam/workspace/superset_disasm
-RUN rm setup.data ; eval `opam config env` ; opam update ; opam install ounit fmt logs ; make clean ; make ; opam pin add superset_disasm ./ -y --use-internal-solver ; opam depext --install bap-byteweight-frontend
+RUN rm setup.data ; eval `opam config env` ; make clean ; make ; opam pin add superset_disasm ./ -y --use-internal-solver ; opam depext --install bap-byteweight-frontend
 
 ARG testsize=999999
 WORKDIR /home/opam/workspace
 ENV PATH="/home/opam/.opam/4.09/bin:"$PATH
 
-RUN sudo apt-get update && sudo apt-get install libc6-dev-i386 -y
 
 RUN git clone https://github.com/BinaryAnalysisPlatform/x86-binaries.git 
 RUN git clone https://github.com/BinaryAnalysisPlatform/x86_64-binaries.git
