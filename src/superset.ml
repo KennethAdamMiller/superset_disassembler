@@ -81,7 +81,7 @@ module Core = struct
   the memory mem. *)
   let run_seq dis mem =
     let open Seq.Generator in 
-    let rec disasm cur_mem = 
+    let rec disasm cur_mem =
       let elem = match Dis.insn_of_mem dis cur_mem with
         | Ok (m, insn, _) -> (m, insn)
         | Error _ -> (cur_mem, None) in
@@ -96,9 +96,22 @@ module Core = struct
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
   (** This builds the disasm type, and runs it on the memory. *)
-  let disasm ?(backend="llvm") ~accu ~f arch mem =
+  let disasm ?(backend="llvm") ~accu ~f arch memry =
     Dis.with_disasm ~backend (Arch.to_string arch)
-      ~f:(fun d -> Ok(run d ~accu ~f mem))
+      ~f:(fun d ->
+        let next state m accu =
+          match next_chunk memry ~addr:(Memory.min_addr m) with
+          | Error _ -> Dis.stop state accu
+          | Ok(next) -> Dis.jump state next accu in
+        let invalid state m accu =
+          let accu = f (m, None) accu in
+          next state m accu in
+        let hit state m insn accu =
+          let accu = f (m, (Some insn)) accu in 
+          next state m accu in
+        Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
+          ~hit d ~init:accu ~return:ident memry)
+      (*Ok(run d ~accu ~f mem)*))
 
   let lift_insn superset (mem,insn) =
     let insn = Option.map insn ~f:(superset.lifter mem) in
