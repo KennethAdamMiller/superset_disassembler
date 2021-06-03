@@ -6,7 +6,7 @@ open Format
 open Or_error
 open Metrics
 
-let () = Pervasives.ignore(Plugins.load ())
+let () = Stdlib.ignore(Plugins.load ())
 let _ = Bap_main.init ()
 
 module Cmdline = struct

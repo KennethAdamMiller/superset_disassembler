@@ -228,7 +228,7 @@ module Make(T : sig val instance : colored_superset end) = struct
     ]
 
     let edge_attributes e =
-      let (src,dst) = M.E.src e,M.E.dst e in
+      (*let (src,dst) = M.E.src e,M.E.dst e in*)
       (*let color,weight = match kind,arity with
         | `Fall,`Many -> 0x660000, 4
         | `Fall,`Mono -> 0x000066, 8
