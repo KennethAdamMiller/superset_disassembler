@@ -11,11 +11,9 @@ Pros:
 * No false negatives
 * Very low false positive rate
 * Very well tested
-* Amenable to further improvement
 
 Cons:
-* Slower than linear sweep
-* Requires BAP as a dependency, which itself large
+* Large dependencies (if that is considered a drawback)
 * Requires occlusive false positive mitigation
 
 
