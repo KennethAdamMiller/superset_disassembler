@@ -2,8 +2,8 @@ language: c
 services:
   - docker
 install:
-  - docker pull binaryanalysisplatform/bap
-  - docker build . -t kennethadammiller/superset_disasm
+  - docker pull binaryanalysisplatform/bap:2.1.0
+  - docker build . -t kennethadammiller/superset_disasm:dev
 #TODO run tests
 #  - docker build . -f Dockerfile.metrics -t kennethadammiller/superset_disasm_metrics
 script:
