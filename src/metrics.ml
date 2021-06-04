@@ -205,16 +205,17 @@ let gather_metrics ~bin superset =
         Superset.Inspection.contains_addr superset e
       )) in
   let true_positives = true_positives_of_ground_truth superset ground_truth in
-  let datas = Addr.Hash_set.create () in
+  let datas = ref 0 in
+  let ro = ref 0 in
   let detected_insns = Addr.Hash_set.create () in
   let dfs_find_conflicts addr =
     Traverse.with_descendents_at ~visited:detected_insns superset addr
-      ~pre:(fun v -> Superset.Occlusion.with_data_of_insn superset v
-             ~f:(fun x -> Hash_set.add datas x)) in
-  let reduced_occlusion () = Hash_set.fold ~init:0 datas
-      ~f:(fun ro d ->
-          if Superset.Core.(mem superset d)
-          then ro+1 else ro) in
+      ~pre:(fun v ->
+        Superset.Occlusion.with_data_of_insn superset v
+          ~f:(fun x ->
+            if Superset.Core.(mem superset x)
+            then ro := !ro+1; 
+            datas := !datas +1)) in
   let num_bytes = Superset.Inspection.total_bytes superset in
   let entries = Superset.entries_of_isg superset in
   let branches = Grammar.linear_branch_sweep superset entries in
@@ -224,15 +225,15 @@ let gather_metrics ~bin superset =
   let total_clean,_ =
     Set.fold ground_truth ~init:(0,0) ~f:(fun (n,prev) x ->
         dfs_find_conflicts x;
-        if Hash_set.length datas > prev then
-          ((n),Hash_set.(length datas))
+        if !ro > prev then
+          ((n),!ro)
         else ((n+1),prev)
       ) in
   printf "Number of functions precisely trimmed: %d of %d\n"
     total_clean Set.(length ground_truth);
   printf "Number of possible reduced false positives: %d\n" 
-    Hash_set.(length datas);
-  printf "Reduced occlusion: %d\n" (reduced_occlusion ());
+    !datas;
+  printf "Reduced occlusion: %d\n" (!ro);
   printf "True positives: %d\n" Hash_set.(length true_positives);
   let fn_entries = check_fn_entries superset ground_truth in
   if not (Set.length fn_entries = 0) then
