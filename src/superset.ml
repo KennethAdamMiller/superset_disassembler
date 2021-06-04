@@ -137,6 +137,8 @@ module Core = struct
       update (mem, insn) superset in
     disasm ?backend ~accu:superset ~f superset.arch mem |> ok_exn
 
+  let is_unbalanced superset =
+    Map.length superset.insn_map <> OG.nb_vertex superset.insn_risg
 
   (** This function is required by the differences between propagating
   data removal maximally and maintaining associations between the
@@ -150,17 +152,22 @@ module Core = struct
   let rebalance superset =
     let insn_map = get_map superset in
     let superset_risg = get_graph superset in
-    OG.iter_vertex (fun vert ->
-        if not Map.(mem insn_map vert) then (
-          mark_bad superset vert;
-        )
-      ) superset_risg;
-    let insn_map = Map.filteri ~f:(fun ~key ~data -> 
-        let vert = key in
-        (*let (mem, insn) = data in
+    if is_unbalanced superset then
+      OG.iter_vertex (fun vert ->
+          if not Map.(mem insn_map vert) then (
+            mark_bad superset vert;
+          )
+        ) superset_risg;
+    let insn_map = 
+      if Hash_set.length superset.bad > 0 ||
+           is_unbalanced superset then
+        Map.filteri ~f:(fun ~key ~data -> 
+            let vert = key in
+            (*let (mem, insn) = data in
           Option.is_some insn && *)
-        OG.(mem_vertex superset_risg vert)
-      ) insn_map in
+            OG.(mem_vertex superset_risg vert)
+          ) insn_map
+      else superset.insn_map  in
     { superset with insn_risg =superset_risg; insn_map; }
 
 end
@@ -445,7 +452,7 @@ let mergers superset =
       else mergers) insn_risg Addr.Set.empty
 
 let is_branch superset addr =
-  OG.in_degree superset.insn_risg addr = 2
+  OG.in_degree superset.insn_risg addr >= 2
 
 let get_branches superset =
   let branches = Addr.Hash_set.create () in
