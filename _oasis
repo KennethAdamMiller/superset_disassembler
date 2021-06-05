@@ -1,7 +1,7 @@
 OASISFormat: 0.4
 Name:        superset_disasm
 Version:     0.1
-Synopsis:    A whole program, superset disassembler equipped to discriminate more deftly against false interpretations using contextual information and with various possible actions upon either unavailability of information or .
+Synopsis:    A superset disassembler that strives to make the minimum superset of disassembly possible, starting from every byte offset by default.
 Authors:     Kenneth Adam Miller <kennethadammiller@gmail.com>
 Maintainers: Kenneth Adam Miller <kennethadammiller@gmail.com>
 License:     MIT
@@ -13,13 +13,16 @@ BuildDepends:
               core_kernel,
               bap,
               ppx_inline_test,
-              graphlib
+              graphlib,
+              landmarks,
+              bap-future
 
 Library superset_disassemblers
   Path:                 src/
   Install:		true
   CompiledObject:	best
-  BuildDepends:		bap, core_kernel, cmdliner, graphlib, ppx_inline_test
+  BuildDepends:		bap, core_kernel, cmdliner, graphlib, ppx_inline_test, bap-future, landmarks.ppx
+  XMetaExtraLines:      ppxopt = "landmarks.ppx"
   Modules:		
                         Superset,
                         Metrics,
@@ -33,12 +36,13 @@ Library superset_disassemblers
                         Abstract_ssa,
                         Features,
                         Report,
+                        Streams,
                         Superset_impl
 
 Document "superset_disassemblers_api"
   Type: ocamlbuild (0.4)
   BuildTools: ocamldoc
-  Title: API reference for FooB
+  Title: API reference for superset_disasm
   XOCamlbuildPath: .
   XOCamlbuildExtraArgs:
     "-docflags '-colorize-code -short-functors -charset utf-8'"
@@ -49,11 +53,11 @@ Executable superset_disasm
   Install:        	true
   MainIs:	  	superset_disasm.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, threads, superset_disassemblers
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx
 
 Executable test_superset
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, threads, oUnit, superset_disassemblers, graphlib, ppx_inline_test
+  BuildDepends:		core_kernel, bap, cmdliner, oUnit, superset_disassemblers, graphlib, ppx_inline_test
   CompiledObject:	best

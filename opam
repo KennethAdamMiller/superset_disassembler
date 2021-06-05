@@ -29,6 +29,8 @@ depends: [
     "core_kernel"
     "cmdliner"
     "ocamlgraph"
+    "landmarks"
+    "bap-future"
 ]
 
 depexts: [
