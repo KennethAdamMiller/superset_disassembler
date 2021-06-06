@@ -53,7 +53,7 @@ Executable superset_disasm
   Install:        	true
   MainIs:	  	superset_disasm.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx, bap-future
 
 Executable test_superset
   Path:			unit_tests
