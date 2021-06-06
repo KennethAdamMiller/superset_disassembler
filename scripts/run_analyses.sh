@@ -24,7 +24,7 @@ analyze() {
 		    has_error=true
 		fi
 	    fi
-	    count = $(( ${count}+1 ))
+	    count=$(( ${count}+1 ))
 	    printf "Finished with ${count} of ${total}\n"
 	done
     done
