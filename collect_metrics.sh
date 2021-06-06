@@ -1,1 +1,1 @@
-sudo docker build . -f Dockerfile.metrics --build-arg testsize=3 -t superset_disasm_metrics
+sudo time docker build . -f Dockerfile.metrics --build-arg testsize=3 --build-arg TAG=$(git branch --show-current)-$(git rev-parse --short HEAD) -t superset_disasm_metrics:$(git branch --show-current)-$(git rev-parse --short HEAD)-test

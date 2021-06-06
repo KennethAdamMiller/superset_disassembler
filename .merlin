@@ -4,6 +4,9 @@ PKG ounit2
 PKG bap.plugins
 PKG graphlib
 PKG monads
+PKG landmarks
+PKG bap-future
+PKG bap-knowledge
 
 S src/
 
