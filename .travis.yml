@@ -4,6 +4,7 @@ services:
 install:
   - docker pull binaryanalysisplatform/bap:2.1.0
   - docker build . -t kennethadammiller/superset_disasm:dev
+  - docker build . -f Dockerfile.test -t kennethadammiller/superset_disasm_tests
 #TODO run tests
 #  - docker build . -f Dockerfile.metrics -t kennethadammiller/superset_disasm_metrics
 script:

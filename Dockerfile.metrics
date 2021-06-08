@@ -1,15 +1,22 @@
-FROM kennethadammiller/superset_disasm
+ARG TAG=master
+FROM superset_disasm:$TAG
+ARG testsize=99999
 
 ##### SPEC CPU 2006 performance
-RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=run gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
+WORKDIR $HOME/workspace/cpu2006-103
+#RUN unzip -q cpu2006-103.zip && cd cpu2006-103/ && . ./shrc && $(printf "yes\n") | ./install.sh
+#COPY Example-linux64-amd64-gcc41.cfg ./cpu2006-103/config/
+RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=build gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
 
-
-##### multiverse performance
-RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh
 
 ##### superset_disasm performance
 WORKDIR /home/opam/workspace/superset_disasm
-RUN chmod u+x scripts/*
-RUN scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_analyses.sh
+RUN make clean && make && chmod u+x scripts/*
+RUN echo "testsize=${testsize}" && scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_analyses.sh
+#TODO could move this to the base docker file
 RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/opam/workspace/rq3_binaries
 RUN scripts/rq3.sh > rq3.txt
+
+##### multiverse performance
+WORKDIR $HOME/workspace/multiverse
+RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh

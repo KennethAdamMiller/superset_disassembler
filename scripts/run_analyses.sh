@@ -18,7 +18,7 @@ analyze() {
 	    if [[ (! -f "${name}") || (-z $(cat "${name}" | grep "True positives")) ]]; then
 		echo "Processing ${f} for ${1}${src}${2}"
 		rm -f "${name}"
-		${disasm_dir}/superset_disasm.native --target="${f}" --ground_truth_bin="${unstripped}/$(basename "${f}")" --save_addrs --enable_feature="${1}" --rounds=2 >> "${name}";
+		${disasm_dir}/superset_disasm.native --target="${f}" --ground_truth_bin="${unstripped}/$(basename "${f}")" --save_addrs --enable_feature="${1}" --rounds=2 --collect_reports >> "${name}";
 		if [ $? -ne 0 ]; then
 		    printf "\t... error on file ${f}, will need to reprocess\n"
 		    has_error=true
