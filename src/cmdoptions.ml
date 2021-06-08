@@ -146,11 +146,10 @@ type t = {
   save_addrs         : bool;
   collect_report     : bool;
   dforest            : forester option;
-  tp_threshold       : float  option;
+  tp_threshold       : float;
   rounds             : int;
   featureset         : string list;
-} [@@deriving sexp, fields]
-
+} [@@deriving sexp, fields]       
 
 let save_gt =
   let doc =
@@ -179,7 +178,7 @@ let featureset_opt =
 let tp_threshold =
   let doc = 
     "Used for specifying a tp trimming threshold" in
-  Cmdliner.Arg.(value & opt (some float) (Some 0.99)
+  Cmdliner.Arg.(value & opt (float) (0.99)
                 & info ["tp_threshold"] ~doc)
 
 let read_addrs width ic : addr list = 
@@ -209,10 +208,6 @@ let save_dot =
     "Without any cut operations, you can specify to still save the
      entire graph. Not recommended - disassembly tends to be large" in
   Cmdliner.Arg.(value & flag & info ["save_dot"] ~doc)
-
-module type Provider = sig
-  val options : t
-end
 
 let backend = 
   let doc = "The particular backend disassembler to use; llvm/IDA/ect" in
@@ -412,7 +407,11 @@ let apply_setops metrics setops =
          results
     ) 
 
-  
+
+module type Provider = sig
+  val options : t
+end
+
 module With_options(Conf : Provider)  = struct
   open Conf
   open Metrics.Opts
@@ -420,7 +419,6 @@ module With_options(Conf : Provider)  = struct
   open Format
 
   let with_invariants superset invariants =
-    let invariants = Invariants.tag_success :: invariants in 
     time ~name:"tagging"
       (Invariants.tag_superset ~invariants) superset
 
@@ -542,18 +540,20 @@ module With_options(Conf : Provider)  = struct
     let format = match options.metrics_format with
       | Latex -> Metrics.format_latex
       | Standard -> Metrics.format_standard in
-    let _ = 
-      if options.save_gt then
-        let gt = Metrics.ground_truth_of_unstripped_bin
-            options.target |> ok_exn in
-        let gt = Seq.map gt ~f:Addr.to_string in
-        Seq.iter gt ~f:print_endline;
-        exit 0
-      else () in
     let superset = checkpoint options.target options.phases in
     let superset = with_options superset in
+    (* TODO duplicate of collect_results *)
     match options.ground_truth_bin with
-    | Some bin -> 
+    | Some bin ->
+       let _ = 
+         if options.save_gt then
+           let gt = Metrics.ground_truth_of_unstripped_bin
+                      bin |> ok_exn in
+           let gt = Seq.map gt ~f:Addr.to_string in
+           Seq.iter gt ~f:print_endline;
+           exit 0
+         else () in
+       (* TODO replace gather_metrics with report *)
       Metrics.gather_metrics ~bin superset |> format |> print_endline
     | None -> ()
 
