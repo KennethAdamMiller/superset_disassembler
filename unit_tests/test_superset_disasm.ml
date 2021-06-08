@@ -139,6 +139,36 @@ let test_can_lift test_ctxt =
       ) 
   with _ -> ()  
 
+let test_brancher test_ctxt =
+  let bytes = "\x77\x77" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
+  let superset = Superset.Core.update_with_mem
+                   superset mem ~f in
+  match Superset.Core.lookup superset Memory.(min_addr mem) with
+  | Some (mem, insn) -> 
+     let ss =
+       Superset.Inspection.static_successors superset mem insn in
+     let msg = sprintf "Should be two static successors here" in                 
+     assert_bool msg (List.(length ss) > 1)
+  | None -> assert_bool "should be an instruction at 0" false
+
+let test_lift test_ctxt =
+  let bytes = "\x77\x77" in
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
+  let superset = Superset.Core.update_with_mem
+                   superset mem ~f in
+  match Superset.Core.lookup superset Memory.(min_addr mem) with
+  | Some (mem, insn) -> 
+     let lifted =
+       Superset.Core.lift_insn superset (mem, insn) in
+     let msg = sprintf "Should be able to lift" in
+     assert_bool msg Option.(is_some lifted)
+  | None -> assert_bool "should be an instruction at 0" false
+
 (* TODO want a bil language oriented way to specify the construction of a superset *)
 let dis_with_invariants bytes invariants = 
   let mem, arch = make_params bytes in
@@ -159,15 +189,26 @@ let dis_with_invariants bytes invariants =
   assert_bool msg (not offset_one)
   
 let test_tag_non_mem_access test_ctxt =
-  let bytes = "\xb8\x00\x00\x00\x00" in
-  dis_with_invariants bytes [Invariants.tag_non_mem_access]
+  let bytes = "\xb8\xef\xbe\xad\xde" in (* int a = *( int * )0xdeadbeef *)
+  let mem, arch = make_params bytes in
+  let superset = of_mem arch mem in
+  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
+  let superset = Superset.Core.update_with_mem superset mem ~f in (
+      match Superset.Core.lookup superset Memory.(min_addr mem) with
+      | Some (mem, insn) ->
+         let expect = Invariants.accesses_non_mem superset mem insn () in
+         let msg = "Expected to find non memory access" in
+         assert_bool msg expect
+      | None -> assert_bool "should be an instruction at 0" false  
+    );
+  dis_with_invariants bytes [Invariants.tag_success; Invariants.tag_non_mem_access]
 
 let test_tag_non_insn test_ctxt =
   dis_with_invariants "\x0f\xff" [Invariants.tag_non_insn]
 
 let test_tag_target_is_bad test_ctxt =
-  let bytes = "\x77\x77" in
-  dis_with_invariants bytes [Invariants.tag_target_is_bad]
+  let bytes = "\x77\xfe" in
+  dis_with_invariants bytes [Invariants.tag_success; Invariants.tag_target_is_bad]
 
 let test_target_in_body test_ctxt =
   let bytes = "\x77\xFF" in
@@ -867,7 +908,9 @@ let () =
       "test_graph_edge_behavior" >:: test_graph_edge_behavior;
       "test_can_lift" >:: test_can_lift;
       "test_static_successors_includes_fall_through" >::
-      test_static_successors_includes_fall_through;
+        test_static_successors_includes_fall_through;
+      "test_brancher" >:: test_brancher;
+      "test_lift" >:: test_lift;
       "test_successor_calculation" >:: test_successor_calculation;
       "test_superset_contains_addr" >:: test_superset_contains_addr;
       "test_tag_non_mem_access" >:: test_tag_non_mem_access;
