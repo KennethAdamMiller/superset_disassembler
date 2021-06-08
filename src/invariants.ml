@@ -125,13 +125,14 @@ let find_non_mem_accesses superset =
       check_return_addr r addr
   end)
 
+
 (** This is a strong invariant. It looks for places where
     find_non_mem_accesses is tripped. *)
 let accesses_non_mem superset mem insn _ =
   try
     let bil = Superset.Core.lift_insn superset ((mem, insn)) in
     let _, bil = Option.value ~default:(mem,[]) bil in
-    let status = List.fold bil ~init:None ~f:(fun status _stmt -> 
+    let status = List.fold bil ~init:(Some(false)) ~f:(fun status _stmt ->
         Option.value_map status ~default:(Some(false)) ~f:(fun status ->
             if not status then
               Stmt.find (find_non_mem_accesses superset) _stmt

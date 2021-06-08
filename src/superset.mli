@@ -250,6 +250,15 @@ val is_entry : t -> addr -> bool
 (** Return all addresses in a set for which is_entry returns true *)
 val entries_of_isg : t -> Addr.Hash_set.t
 
+(** A frond point is a point that is distant most of a terminating
+ ** instruction, meaning it may be the first instruction of a
+ ** function. However, these could actually occur either within or
+ ** beyond the body of instruction sequence intended.  *)
+val is_frond_point : t -> addr -> bool
+
+(** Return all addresses in a set for which is_front_point is true *)
+val frond_of_isg : t -> Addr.Hash_set.t
+  
 (** Return the set of addreses for which more than one other
     instruction targets it. *)
 val mergers : t -> Addr.Set.t

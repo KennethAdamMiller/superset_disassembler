@@ -294,9 +294,9 @@ let extract_ssa_to_map superset =
 
 let extract_freevarssa_to_map superset =
   let var_use = ref Var.Map.empty in
-  let defuse_map = ref Addr.Map.empty in
+  let defuse_map = Addr.Table.create () in
   let add_to_map def use = 
-    defuse_map := Map.set !defuse_map def use in
+    Stdlib.ignore @@ Addr.Table.add defuse_map ~key:def ~data:use in
   let lift (mem, insn) =
     Superset.Core.lift_insn superset ((mem, insn)) in
   let pre = pre_freevarssa superset lift () var_use in
@@ -307,7 +307,7 @@ let extract_freevarssa_to_map superset =
       Traverse.with_ancestors_at superset addr ~post ~pre;
       var_use := Var.Map.empty
     );
-  !defuse_map
+  defuse_map
 
 let extract_cross_section_jmps superset = 
   let segments = Superset.Inspection.get_memmap superset in
@@ -335,18 +335,19 @@ let extract_trim_clamped superset =
   let to_clamp = find_free_insns superset in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  Set.iter to_clamp ~f:(fun c -> 
+  List.iter to_clamp ~f:(fun c -> 
       if not Hash_set.(mem visited c) then
         if Superset.Core.mem superset c then (
           Traverse.mark_descendent_bodies_at
             ~visited ~datas superset c
         )
     );
-  Hash_set.iter datas ~f:(fun d -> 
+  (*Hash_set.iter datas ~f:(fun d -> 
       if Hash_set.(mem visited d) || Set.(mem to_clamp d) then
         Superset.Core.clear_bad superset d
-    );
+    );*)
   clear_each superset visited;
+  List.iter to_clamp ~f:(Superset.Core.clear_bad superset);
   superset
 
 let time ?(name="") f x =
@@ -393,7 +394,7 @@ let fixpoint_descendants superset extractf depth =
 
 let fixpoint_map superset feature_pmap = 
   let visited = Addr.Hash_set.create () in
-  let entries = Superset.entries_of_isg superset in
+  let entries = Superset.frond_of_isg superset in
   Hash_set.fold ~init:feature_pmap entries ~f:(fun feature_pmap cur -> 
       if not Hash_set.(mem visited cur) then
         let prev = ref [] in
@@ -426,7 +427,7 @@ let fixpoint_freevarssa superset depth =
   let extractf superset = 
     let freevars_map = extract_freevarssa_to_map superset in
     let freevars = Addr.Hash_set.create () in
-    List.iter Map.(data freevars_map) ~f:Hash_set.(add freevars);
+    List.iter Addr.Table.(data freevars_map) ~f:Hash_set.(add freevars);
     freevars in
   fixpoint_descendants superset extractf depth
 
@@ -476,9 +477,7 @@ let branch_map_of_branches superset branches =
 let extract_fp_branches superset = 
   let branches = get_branches superset in
   branch_map_of_branches superset branches
-let extract_fp_branches superset = 
-  let branches = get_branches superset in
-  branch_map_of_branches superset branches
+
 let extract_filter_fp_branches superset =
   let superset = Invariants.tag_layer_violations superset in
   let violations = Superset.Core.copy_bad superset in
@@ -710,7 +709,8 @@ let _exfiltset = [
   ("Callsites3",
    ((fun x -> transform (get_callsites
                            ~threshold:6 x)), unfiltered));
-  ("Clamped", (find_free_insns, unfiltered));
+  ("Clamped",
+   ((fun s -> Addr.Set.of_list @@ find_free_insns s), unfiltered));
   ("RestrictedClamped", (restricted_clamp, unfiltered));
   ("ExtendedClamped", (extended_clamp, unfiltered));
   ("UnfilteredSCC", (extract_loops_to_set,unfiltered));
@@ -731,7 +731,7 @@ let _exfiltmap = [
   ("FalseBranchMap", (extract_fp_branches, unfiltered));
   ("FilteredFalseBranchMap", (extract_filter_fp_branches, unfiltered))
   ;
-  ("FreeVarSSA", (extract_freevarssa_to_map, unfiltered));
+    (*("FreeVarSSA", (extract_freevarssa_to_map, unfiltered));*)
   ("SSA", (extract_ssa_to_map, unfiltered));
 ]
 let exfiltmap : ((unit, Addr.t) mapexfilt) String.Map.t

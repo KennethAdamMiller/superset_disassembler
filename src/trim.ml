@@ -27,7 +27,8 @@ module Reduction(R : Reducer) = struct
     R.check_post superset accu addr
 
   let trim superset =
-    let superset = Superset.Core.rebalance superset in
+    (*let superset =
+      time ~name:"rebalance" Superset.Core.rebalance superset in*)
     (* let orig_size = (G.nb_vertex superset_risg) in *)
     let post = post superset in
     let pre = R.check_pre superset in

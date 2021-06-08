@@ -68,7 +68,8 @@ module Core = struct
     Hash_set.clear superset.bad
 
   let mark_bad superset addr =
-    Hash_set.add superset.bad addr
+    if OG.mem_vertex superset.insn_risg addr then
+      Hash_set.add superset.bad addr
 
   let copy_bad superset =
     Hash_set.copy superset.bad
@@ -431,6 +432,8 @@ module Metrics = struct
   let record superset = ()
 end
 
+(** An address is an entry for an isg if it could be the return
+ ** terminating instruction at the end of a function. *)
 let is_entry superset addr =
   let insn_isg = superset.insn_risg in
   OG.in_degree insn_isg addr  = 0 &&
@@ -444,6 +447,23 @@ let entries_of_isg superset =
       else accu)
     insn_isg (Addr.Hash_set.create ())
 
+(** A frond point is a point that is distant most of a terminating
+ ** instruction, meaning it may be the first instruction of a
+ ** function. However, these could actually occur either within or
+ ** beyond the body of instruction sequence intended.  *)
+let is_frond_point superset addr =
+  let insn_isg = superset.insn_risg in
+  OG.in_degree insn_isg addr  > 0 &&
+  OG.out_degree insn_isg addr = 0
+
+let frond_of_isg superset =
+  let insn_isg = superset.insn_risg in
+  OG.fold_vertex (fun addr accu ->
+      if is_frond_point superset addr then
+        (Hash_set.add accu addr; accu)
+      else accu)
+    insn_isg (Addr.Hash_set.create ())
+  
 let mergers superset =
   let insn_risg= superset.insn_risg in
   OG.fold_vertex (fun addr mergers ->

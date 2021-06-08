@@ -20,8 +20,7 @@ let with_ancestors_at ?visited ?post ?pre superset addr =
   ISG.dfs ?visited ?post ?pre ISG.ancestors superset addr
 
 (** From the starting point specified, this reviews all descendants 
-    and marks their bodies as bad. For speed, an isg can be provided, 
-    in which case the reverse does not have to be computed repeatedly. *)
+    and marks their bodies as bad. *)
 let mark_descendent_bodies_at ?visited ?datas superset addr =
   let datas = Option.value datas 
       ~default:(Addr.Hash_set.create ()) in
