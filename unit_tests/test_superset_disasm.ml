@@ -5,6 +5,7 @@ open Or_error
 open Superset
 open Bap_plugins.Std
 open Graphlib.Std
+open Bap_future.Std
 
 let () = Stdlib.ignore(Plugins.load ())
 let _ = Bap_main.init ()
@@ -880,6 +881,9 @@ let test_graph_edge_behavior test_ctxt =
   let msg = "expect single edge between nodes" in
   assert_equal ~msg Seq.(length edges) 1
 
+let test_streams test_ctxt = ()
+let test_parallel test_ctxt = ()
+  
 
 let () =
   let suite = 
@@ -921,6 +925,8 @@ let () =
       "test_tag_non_insn" >:: test_tag_non_insn;
       "test_tag_target_is_bad" >:: test_tag_target_is_bad;
       "test_target_in_body" >:: test_target_in_body;
+      "test_streams" >:: test_streams;
+      "test_parallel" >:: test_parallel
     ] in
   run_test_tt_main suite
 ;;
