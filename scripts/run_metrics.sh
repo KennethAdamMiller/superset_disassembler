@@ -41,7 +41,7 @@ analyze() {
     ${disasm_dir}/scripts/collect_results.sh
     popd
 }
-
+export -f analyze
 
 bindir=${HOME}/workspace/
 jobs=6
