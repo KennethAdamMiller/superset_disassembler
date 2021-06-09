@@ -73,17 +73,16 @@ let find_free_insns superset =
   let mem = Superset.Core.mem superset in
   let all_conflicts = Addr.Hash_set.create () in
   let to_clamp =
-    Superset.Core.fold superset ~init:(Addr.Set.empty)
+    Superset.Core.fold superset ~init:([])
       ~f:(fun ~key ~data to_clamp ->
           let (addr,(memory,_)) = key, data in
           let len = Memory.length memory in
           let conflicts = Superset.Occlusion.range_seq_of_conflicts
               ~mem addr len in
           let no_conflicts = Seq.is_empty conflicts in
-          Seq.iter conflicts ~f:(fun c ->
-              Hash_set.add all_conflicts c);
+          Seq.iter conflicts ~f:(fun c -> Hash_set.add all_conflicts c);
           if no_conflicts && not Hash_set.(mem all_conflicts addr) then
-            Set.add to_clamp addr
+            addr :: to_clamp
           else (
             to_clamp
           )
@@ -110,7 +109,7 @@ let restricted_clamp superset =
 
 let extended_clamp superset = 
   let to_clamp = find_free_insns superset in
-  Set.fold to_clamp ~init:Addr.Set.empty ~f:(fun to_clamp clamp -> 
+  List.fold to_clamp ~init:Addr.Set.empty ~f:(fun to_clamp clamp -> 
       let _, to_clamp =
         Superset.ISG.dfs_fold superset
           ~pre:(fun (struck,to_clamp) addr ->
