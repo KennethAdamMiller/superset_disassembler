@@ -1,3 +1,4 @@
+#!/bin/bash
 rm -f metrics.txt
 rm -f final_total.txt
 rm -f mem_size.txt
