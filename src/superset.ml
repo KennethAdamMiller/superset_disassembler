@@ -45,8 +45,8 @@ module Core = struct
       brancher;
       endianness= None;
       lifter;
-      balanced = true;
       insn_map = Addr.Map.empty;
+      lifted   = Addr.Table.create ();
       insn_risg = Graphlib.create (module G) ();
       bad         = Addr.Hash_set.create ();
       keep        = Addr.Hash_set.create ();
@@ -115,20 +115,19 @@ module Core = struct
       (*Ok(run d ~accu ~f mem)*))
 
   let lift_insn superset (mem,insn) =
-    let insn = Option.map insn ~f:(superset.lifter mem) in
-    Option.map insn ~f:(fun bil -> (mem, bil |> ok_exn))
-
-  let lift superset insns =
-    let lifted_superset = Addr.Map.empty in
-    List.fold insns ~init:lifted_superset
-      ~f:(fun lifted_superset (mem, insn) -> 
-          match lift_insn superset (mem, insn) with
-          | Some (mem, bil) -> 
-            let addr = Memory.min_addr mem in 
-            Map.set lifted_superset ~key:addr
-              ~data:(bil, Memory.length mem)
-          | None -> lifted_superset
-        )
+    let addr = Memory.(min_addr mem) in
+    match Addr.Table.find superset.lifted addr with
+    | Some (bil) -> Some (mem, bil)
+    | None -> 
+       let bil =
+         Option.value_map insn ~default:[] ~f:(fun insn ->
+             match (superset.lifter mem insn) with
+             | Ok bil -> 
+                Addr.Table.set superset.lifted ~key:addr ~data:bil;
+                bil
+             | _ -> []
+           ) in
+       Some (mem, bil)
 
   (** Perform superset disassembly on mem and add the results. *)
   let update_with_mem ?backend ?f superset mem =
@@ -152,13 +151,13 @@ module Core = struct
   to rule that out, however. *)
   let rebalance superset =
     let insn_map = get_map superset in
-    let superset_risg = get_graph superset in
+    let insn_risg = get_graph superset in
     if is_unbalanced superset then
       OG.iter_vertex (fun vert ->
           if not Map.(mem insn_map vert) then (
             mark_bad superset vert;
           )
-        ) superset_risg;
+        ) insn_risg;
     let insn_map = 
       if Hash_set.length superset.bad > 0 ||
            is_unbalanced superset then
@@ -166,10 +165,15 @@ module Core = struct
             let vert = key in
             (*let (mem, insn) = data in
           Option.is_some insn && *)
-            OG.(mem_vertex superset_risg vert)
+            OG.(mem_vertex insn_risg vert)
           ) insn_map
       else superset.insn_map  in
-    { superset with insn_risg =superset_risg; insn_map; }
+    let lifted =
+      if is_unbalanced superset then
+        let f ~key ~data = OG.mem_vertex insn_risg key in
+        Addr.Table.filteri superset.lifted ~f
+      else superset.lifted in
+    { superset with insn_risg; insn_map; lifted; }
 
 end
 
@@ -301,12 +305,25 @@ module Inspection = struct
     match insn with 
     | None -> [None, `Fall]
     | Some insn -> 
-      try 
-        Brancher.resolve brancher mem insn
-      with _ -> (
+       try
+         (*match KB.Value.get Insn.Slot.dests insn with 
+         | None -> KB.return []
+         | Some dsts ->
+            let open KB.Syntax in
+            KB.all @@
+            List.map (Set.to_list dsts) ~f:(fun branchlbl ->
+                Theory.Label.target branchlbl >>= fun tgt -> (
+                  KB.collect Theory.Label.addr branchlbl >>= fun addr ->
+                  KB.return @@ Option.map addr ~f:(fun addr ->
+                      (Word.code_addr tgt addr, `Fall)
+                    )
+                )
+              )*)
+         Brancher.resolve brancher mem insn
+       with _ -> (
           print_endline @@ 
           "Target resolve failed on memory at " ^ Memory.to_string mem; 
-          [None, `Fall]
+          [None, `Fall] (*KB.return []*)
         )
   let len_at superset at = 
     let insn_map = get_map superset in
@@ -345,24 +362,9 @@ module Occlusion = struct
         gen_next_addr next_addr
     in run (gen_next_addr Addr.(succ addr))
 
-  let range_seq superset =
-    let insn_map = superset.insn_map in
-    let map_seq = Addr.Map.to_sequence insn_map in
-    Seq.bind map_seq (fun (addr, (mem, _)) -> 
-        seq_of_addr_range addr (Memory.length mem)
-      )
-
   let range_seq_of_conflicts ~mem addr len = 
     let range_seq = seq_of_addr_range addr len in
     Seq.filter range_seq ~f:mem
-
-  let seq_of_all_conflicts superset =
-    let insn_map = superset.insn_map in
-    let insn_map_seq = Addr.Map.to_sequence insn_map in
-    let check_mem = Addr.Map.(mem insn_map) in
-    Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 
-        range_seq_of_conflicts ~mem:check_mem addr (Memory.length mem)
-      )
 
   let conflict_seq_at superset addr =
     let insn_map = superset.insn_map in

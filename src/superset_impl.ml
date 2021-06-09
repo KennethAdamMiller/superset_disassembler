@@ -19,8 +19,8 @@ type t = {
   brancher    : Brancher.t;
   endianness  : endian option;
   lifter      : lifter;
-  balanced    : bool;
   insn_map    : (mem * (Dis.full_insn option)) Addr.Map.t;
+  lifted      : bil Addr.Table.t;
   insn_risg   : G.t;
   bad         : Addr.Hash_set.t;
   keep        : Addr.Hash_set.t;
@@ -38,8 +38,7 @@ let of_components
     | None -> Graphlib.create (module G) () in
   let segments = Option.value segments ~default:Memmap.empty in
   let insn_map  = Option.value insn_map ~default:Addr.Map.empty in
-  let balanced =
-    Map.(length insn_map) = (G.number_of_nodes insn_risg) in
+  let lifted = Addr.Table.create ()  in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
   {
@@ -50,9 +49,9 @@ let of_components
     endianness  = None;
     lifter      = lifter;
     main_entry;
-    balanced;
     insn_map;
     insn_risg;
+    lifted;
     bad         = Addr.Hash_set.create ();
     keep        = Addr.Hash_set.create ();
   }

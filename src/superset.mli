@@ -87,10 +87,6 @@ module Core : sig
   (** Lift a single disassembled memory and instruction pair *)
   val lift_insn :
     t -> (mem * Dis.full_insn option) -> (mem * bil) option
-  (** Lift all insns using the configuration provided by the  *)
-  val lift : t -> 
-    (mem * Dis.full_insn option) List.t ->
-    (bil * int) Addr.Map.t
 
   (** The primary disassembler design interface. Implementing a
       disassembler from the ground up almost certainly uses this as
@@ -214,17 +210,9 @@ module Occlusion : sig
   (** A vital address range sequence creator. *)
   val seq_of_addr_range : addr -> int -> addr seq 
 
-  (** For a given superset, create a single sequence over all current
-      addresses of current disassembled instructions, binding the
-      sequence between instructions. *)
-  val range_seq : t -> addr seq
-
   (** A sequence view of conflicts within a given disassembled
       instruction at a given address for a given length. *)
   val range_seq_of_conflicts : mem:(addr -> bool) -> addr -> int -> addr seq
-
-  (** A sequence view of all conflicts. *)
-  val seq_of_all_conflicts : t -> addr seq
 
   (** At a given address, return all addresses within its body for
       which there exists another conflicting instruction. *)
