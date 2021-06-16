@@ -12,27 +12,31 @@ find results -size 0 -exec rm {} \;
 
 analyze() {
     src=binaries
-    workdir="${1}${src}${2}_results"
-    unstripped=${HOME}/workspace/unstripped/
+    workdir="${src}${2}_results"
     disasm_dir=${HOME}/workspace/superset_disasm/
 #    rm -rf "${workdir}"
-    mkdir "${workdir}"
+    mkdir -p "${workdir}"
     pushd "${workdir}"
     has_error=true
     while ${has_error}; do
 	has_error=false
-	total=$(wc -l ../${src}.txt)
+	total=$(wc -l ${src}.txt)
 	#count=0
 	#cat ../${src}.txt | while read f ; do   
             name="./$(basename "${1}").metrics"
 	    if [[ (! -f "${workdir}/${name}") || (-z $(cat "${workdir}/${name}" | grep "True positives")) ]]; then
-		echo "Processing ${f} for ${1}${src}${2}"
+		echo "Processing ${1} for ${src}${2}"
 		rm -f "${name}"
-		time ${disasm_dir}/superset_disasm.native --target="${1}" --ground_truth_bin="${unstripped}/$(basename "${1}")" --save_addrs --checkpoint=Export --enable_feature="${2}" --rounds=2 --collect_reports >> "${workdir}/${name}";
+		cp "${1}" ./
+		strip "./$(basename ${1})"
+		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --ground_truth_bin="${1}" --save_addrs --checkpoint=Export --enable_feature="${2}" --rounds=2 --collect_reports >> "${name}";
+		rm -f "./$(basename ${1})"
 		if [ $? -ne 0 ]; then
 		    printf "\t... error on file ${f}, will need to reprocess\n"
 		    has_error=true
 		fi
+		gzip "./$(basename ${1}).graph"
+		gzip "./$(basename ${1}).map"
 	    fi
 	    #count=$(( ${count}+1 ))
 	    printf "Finished with of ${name}\n"
@@ -44,13 +48,18 @@ analyze() {
 export -f analyze
 
 bindir=${HOME}/workspace/
-jobs=6
+export jobs=9
 #command=' [[ -f results/$(basename {.}).metrics ]] || ~/workspace/superset_disassembler/superset_disasm.native --checkpoint=Export --ground_truth {.} --target {.} --enable_feature="${1}" --rounds=2 --collect_reports >> results/$(basename {.})_metrics.txt '
-command=' analyze {.} "TrimLimitedClamped,TrimFixpointSSA,TrimFixpointGrammar" '
+#TrimLimitedClamped,TrimFixpointSSA,TrimFixpointGrammar
+command=' analyze {.} "${1}" '
+echo "command=${command}"
 run() {
     jobs=$1
     subdir=$2
-    find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | parallel -j${jobs} ${command}
+    echo "Running ${subdir} with ${jobs} jobs"
+    total=$(find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | wc -l)
+    echo "There are ${total} binaries"
+    find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | parallel -u -j${jobs} ${command}
 }
 
 run ${jobs} x86_64-binaries/elf/coreutils
