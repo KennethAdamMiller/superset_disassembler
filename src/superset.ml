@@ -114,21 +114,29 @@ module Core = struct
           ~hit d ~init:accu ~return:ident memry)
       (*Ok(run d ~accu ~f mem)*))
 
+  let lift_at superset addr =
+    match Addr.Table.find superset.lifted addr with
+    | Some (bil) -> Some (bil)
+    | None -> (
+      match lookup superset addr with
+      | Some (mem, insn) -> (
+        let bil =
+          Option.value_map insn ~default:[] ~f:(fun insn ->
+              match (superset.lifter mem insn) with
+              | Ok bil -> 
+                 Addr.Table.set superset.lifted ~key:addr ~data:bil;
+                 bil
+              | _ -> []
+            ) in
+        Some (bil)
+      )
+      | None -> None
+       )
+    
   let lift_insn superset (mem,insn) =
     let addr = Memory.(min_addr mem) in
-    match Addr.Table.find superset.lifted addr with
-    | Some (bil) -> Some (mem, bil)
-    | None -> 
-       let bil =
-         Option.value_map insn ~default:[] ~f:(fun insn ->
-             match (superset.lifter mem insn) with
-             | Ok bil -> 
-                Addr.Table.set superset.lifted ~key:addr ~data:bil;
-                bil
-             | _ -> []
-           ) in
-       Some (mem, bil)
-
+    lift_at superset addr
+       
   (** Perform superset disassembly on mem and add the results. *)
   let update_with_mem ?backend ?f superset mem =
     let update = Option.value f ~default:(fun (m, i) a -> a) in
@@ -203,6 +211,7 @@ module ISG = struct
 
   let remove superset addr =
     let insn_risg = OG.remove_vertex superset.insn_risg addr in
+    Addr.Table.remove superset.lifted addr;
     { superset with insn_risg } 
 
   let mem_vertex superset = OG.mem_vertex superset.insn_risg
@@ -302,11 +311,18 @@ module Inspection = struct
   let filename superset = superset.filename
   let static_successors superset mem insn =
     let brancher = superset.brancher in
-    match insn with 
-    | None -> [None, `Fall]
-    | Some insn -> 
-       try
-         (*match KB.Value.get Insn.Slot.dests insn with 
+    let addr = Memory.min_addr mem in
+    if Addr.Table.mem superset.lifted addr then
+      let l = ISG.descendants superset addr in
+      List.map l ~f:(fun dst ->
+          (Some dst, `Fall)
+        )
+    else
+      match insn with 
+      | None -> [None, `Fall]
+      | Some insn -> 
+         try
+           (*match KB.Value.get Insn.Slot.dests insn with 
          | None -> KB.return []
          | Some dsts ->
             let open KB.Syntax in
@@ -319,12 +335,12 @@ module Inspection = struct
                     )
                 )
               )*)
-         Brancher.resolve brancher mem insn
-       with _ -> (
-          print_endline @@ 
-          "Target resolve failed on memory at " ^ Memory.to_string mem; 
-          [None, `Fall] (*KB.return []*)
-        )
+           Brancher.resolve brancher mem insn
+         with _ -> (
+           print_endline @@ 
+             "Target resolve failed on memory at " ^ Memory.to_string mem; 
+           [None, `Fall] (*KB.return []*)
+         )
   let len_at superset at = 
     let insn_map = get_map superset in
     match Map.find insn_map at with

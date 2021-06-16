@@ -55,9 +55,17 @@ Executable superset_disasm
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx, bap-future
 
+Executable with_report
+  Path:			src/
+  Install:        	true
+  MainIs:	  	with_report.ml
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx, bap-future
+
+
 Executable test_superset
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false
-  BuildDepends:		core_kernel, bap, cmdliner, oUnit, superset_disassemblers, graphlib, ppx_inline_test
+  BuildDepends:		core_kernel, bap, cmdliner, oUnit, superset_disassemblers, graphlib, ppx_inline_test, bap-future
   CompiledObject:	best

@@ -293,69 +293,202 @@ let build_setops trim setops =
       add (add (trim,metrics) f1) f2
     )
 
-let collect_results superset ground_truth_file results metrics setops tracker =
-  match ground_truth_file with
-  | Some (gt) ->
-     let remaining = Addr.Hash_set.create () in
-     let remaining = 
-       Superset.Core.fold superset ~init:remaining
-         ~f:(fun ~key ~data remaining ->
-           Hash_set.add remaining key; remaining
-         ) in
-     (* apply setops within ground truth? *)
-     Map.iteri setops ~f:(fun ~key ~data ->
-         let s = sprintf "%s - %d" key Hash_set.(length data) in
-         print_endline s;
-         Hash_set.iter data ~f:(Hash_set.remove remaining);
-       );
-     let min_addr = Superset.Inspection.get_base superset in
-     let tp = read_addrs Addr.(bitwidth min_addr) gt in
-     let tps = Addr.Hash_set.create () in
-     List.iter tp ~f:(Hash_set.add tps);
-     let fps = Addr.Hash_set.create () in
-     let _ = Hash_set.iter remaining ~f:(fun key -> 
-                 if not (Hash_set.mem tps key) then
-                   Hash_set.add fps key
-               ) in
-     let fns = Addr.Hash_set.create () in
-     Hash_set.iter tps ~f:(fun v -> 
-         if not (Hash_set.mem remaining v) then
-           Hash_set.add fns v;
-       );
-     let s = sprintf "tracker size: %d" Map.(length tracker) in
-     print_endline s;
-     Map.iteri tracker ~f:(fun ~key ~data ->
-         let d = !data in
-         let s = sprintf "tracker %s size: %d"
-                   key Map.(length d) in
-         print_endline s;
-         Map.iteri !data ~f:(fun ~key ~data ->
-             if (not Superset.Core.(mem superset key))
-                && Hash_set.(mem tps key) then (
-               let memstr =
-                 match Superset.Core.lookup superset key with
-                 | Some (mem, _ ) -> Memory.str () mem
-                 | None -> "" in
-               let s =
-                 sprintf
-                   "marked fn bad with mem %s of removal size %d"
-                   memstr Set.(length data) in
-               print_endline s;
-             );
-             Set.iter data ~f:(fun x ->
-                 let s = sprintf "marked fn bad at %s"
-                           Addr.(to_string key) in
-                 let s = sprintf "%s, ancestor fn at %s"
-                           s Addr.(to_string x) in
-                 print_endline s;
-               ) ; 
-           )
-       );
-     let results = String.Map.set results "True Positives" tps in
-     let results = String.Map.set results "False Positives" fps in
-     let results = String.Map.set results "False Negatives" fns in
-     results
-  | None -> results 
+(* TODO belongs in fixpoint *)
+let percent_of_pnts pnts =
+  1.0 -. 1.0/.(Float.of_int pnts)
+let pnts_of_percent prcnt =
+  Int.of_float (1.0/.(1.0-.prcnt))
+
+(* TODO move this to within the with_featuremap *)
+let trim_with rounds f superset =
+  let (superset,accu) = f superset in
+  let rec do_analysis round superset = 
+    if round = rounds then superset, accu else
+      let (superset,_) = f superset in
+      let before = Superset.Inspection.count superset in
+      let superset = Trim.Default.trim superset in
+      let after = Superset.Inspection.count superset in
+      print_endline @@ sprintf "removed %d" (before - after);
+      do_analysis (round+1) superset in
+  do_analysis 1 superset
+
+let converge options superset =
+  let threshold = options.tp_threshold in
+  let featureset = options.featureset in
+  let visited = Addr.Hash_set.create () in
+  let callsites = Features.get_callsites ~threshold:5 superset in
+  let superset = Features.tag_callsites visited ~callsites superset in
+  Features.with_featurepmap featureset superset
+    ~f:(fun pmap featureset superset ->
+      print_endline @@ sprintf "raw pmap size: %d, threshold: %d"
+                         (Map.length pmap) (pnts_of_percent threshold);
+      let total_of_features l =
+        List.fold ~init:0 ~f:(fun x (y,_,_) -> x + y) l in
+      let mxlen =Map.fold pmap ~init:0 ~f:(fun ~key ~data mx ->
+                     max mx (List.length data)) in
+      let feature_pmap = 
+        Map.map pmap ~f:(total_of_features) in
+      let mxp = Map.fold feature_pmap ~init:0 ~f:(fun ~key ~data mx ->
+                    max mx data) in
+      let feature_pmap = 
+        Map.filter feature_pmap (fun total ->
+            Float.((percent_of_pnts total) > threshold)) in
+      print_endline
+      @@ sprintf "filtered pmap size: %d, mxp: %d, mxlen: %d"
+           (Map.length feature_pmap) mxp mxlen;
+      let f superset = 
+        let before = Superset.Inspection.count superset in
+        let superset = 
+          Features.with_featureset featureset superset
+            ~init:(superset)
+            ~f:(fun fname feature (superset) ->
+              let before = Superset.Inspection.count superset in
+              let superset =
+                Trim.Default.trim @@ time ~name:fname feature superset in
+              let after = Superset.Inspection.count superset in
+              print_endline @@
+                sprintf "with_featureset ~f %s %d, before %d, after %d, removed %d"
+                  fname List.(length featureset) before after (before - after);
+
+              superset
+            ) in
+        let after = Superset.Inspection.count superset in
+        print_endline @@
+          sprintf "converge: feat set %d, before %d, after %d, removed %d"
+            List.(length featureset) before after (before - after);
+        let before = Superset.Inspection.count superset in
+        let superset = Trim.Default.trim superset in
+        let after = Superset.Inspection.count superset in
+        print_endline @@
+          sprintf "featureset %d, before %d, after %d, removed %d"
+            List.(length featureset) before after (before - after);
+
+        let cache = Addr.Hash_set.create () in
+        List.iter Map.(keys feature_pmap) ~f:(fun addr -> 
+            Traverse.mark_descendent_bodies_at superset ~visited:cache addr
+          );
+        Hash_set.iter visited ~f:(fun v ->
+            Superset.Core.clear_bad superset v;
+          );
+        (* A visited address is expected to be a true positive, but under
+         * some unexpectedly complicated possibilities at edge corner
+         * cases, they could get marked bad by belonging on the edge. *)
+        (*Features.clear_each superset visited;*)
+        print_endline
+        @@ sprintf "superset marked bad after callsite descendant removal: %d"
+             (Hash_set.length @@ Superset.Core.copy_bad superset);
+        print_endline
+        @@ sprintf "feature_pmap: %d" @@ Map.length feature_pmap;
+        let before = Superset.Inspection.count superset in
+        let superset = Trim.Default.trim superset in
+        let after = Superset.Inspection.count superset in
+        print_endline @@
+          sprintf "featureset %d, before %d, after %d, removed %d"
+            List.(length featureset) before after (before - after);
+        print_endline
+        @@ sprintf "marked bad after trim: %d"
+             (Hash_set.length @@ Superset.Core.copy_bad superset);
+        superset,pmap
+      in
+      let name = sprintf "trim_with %d" options.rounds in
+      time ~name (trim_with options.rounds f) superset
+    )
+  
+(* TODO belongs in metrics or report *)
+(* TODO needs comments for the role of results metrics setops
+ * tracker *)
+(* TODO split into smaller functions *)
+let collect_results superset options pmap results metrics setops
+      tracker =
+  let ground_truth_file = options.ground_truth_file in
+  let tps = Addr.Hash_set.create () in
+  let _ = 
+    match ground_truth_file with
+    | Some (gt) -> (
+      let min_addr = Superset.Inspection.get_base superset in
+      let tp = read_addrs Addr.(bitwidth min_addr) gt in
+      List.iter tp ~f:(Hash_set.add tps);
+    )
+    | None -> (
+      match options.ground_truth_bin with
+      | Some (gt) ->
+         let gt = Metrics.ground_truth_of_unstripped_bin
+                    gt |> ok_exn in
+         let tps = Addr.Hash_set.create () in
+         Seq.iter gt ~f:(Hash_set.add tps);
+      | None -> ()
+    ) in
+  let _ =
+    if options.collect_report then (
+      print_endline "Report:";
+      let threshold = (pnts_of_percent options.tp_threshold) in
+      let init = Report.Distribution.empty threshold in
+      let dist =
+        List.fold (Map.data pmap) ~init ~f:(fun dist p_at ->
+            List.fold p_at ~init:dist ~f:(fun dist p_inst ->
+                Report.Distribution.add tps dist p_inst
+              )
+          ) in
+      print_endline (Sexp.to_string
+                     @@ Report.Distribution.sexp_of_t dist);
+    ) else () in
+  if Hash_set.length tps > 0 then
+    let remaining = Addr.Hash_set.create () in
+    let remaining = 
+      Superset.Core.fold superset ~init:remaining
+        ~f:(fun ~key ~data remaining ->
+          Hash_set.add remaining key; remaining
+        ) in
+    (* apply setops within ground truth? *)
+    Map.iteri setops ~f:(fun ~key ~data ->
+        let s = sprintf "%s - %d" key Hash_set.(length data) in
+        print_endline s;
+        Hash_set.iter data ~f:(Hash_set.remove remaining);
+      );
+    let fps = Addr.Hash_set.create () in
+    let _ = Hash_set.iter remaining ~f:(fun key -> 
+                if not (Hash_set.mem tps key) then
+                  Hash_set.add fps key
+              ) in
+    let fns = Addr.Hash_set.create () in
+    Hash_set.iter tps ~f:(fun v -> 
+        if not (Hash_set.mem remaining v) then
+          Hash_set.add fns v;
+      );
+    let s = sprintf "tracker size: %d" Map.(length tracker) in
+    print_endline s;
+    Map.iteri tracker ~f:(fun ~key ~data ->
+        let d = !data in
+        let s = sprintf "tracker %s size: %d"
+                  key Map.(length d) in
+        print_endline s;
+        Map.iteri !data ~f:(fun ~key ~data ->
+            if (not Superset.Core.(mem superset key))
+               && Hash_set.(mem tps key) then (
+              let memstr =
+                match Superset.Core.lookup superset key with
+                | Some (mem, _ ) -> Memory.str () mem
+                | None -> "" in
+              let s =
+                sprintf
+                  "marked fn bad with mem %s of removal size %d"
+                  memstr Set.(length data) in
+              print_endline s;
+            );
+            Set.iter data ~f:(fun x ->
+                let s = sprintf "marked fn bad at %s"
+                          Addr.(to_string key) in
+                let s = sprintf "%s, ancestor fn at %s"
+                          s Addr.(to_string x) in
+                print_endline s;
+              ) ; 
+          )
+      );
+    let results = String.Map.set results "True Positives" tps in
+    let results = String.Map.set results "False Positives" fps in
+    let results = String.Map.set results "False Negatives" fns in
+    results
+  else results
 
 (* might be able to adjust this with new cmd features. *)
 let apply_setops metrics setops =
@@ -423,20 +556,7 @@ module With_options(Conf : Provider)  = struct
       (Invariants.tag_superset ~invariants) superset
 
   let with_analyses superset analyses =
-    let tps = Addr.Hash_set.create () in
-    let fps = Addr.Hash_set.create () in
-    let ro = Addr.Hash_set.create () in
     List.fold analyses ~init:superset ~f:(fun superset analyze ->
-        if options.collect_report then (
-          let analysis = "" in
-          match Map.find Features.exfiltmap analysis with
-          | Some (extractf, filterf) ->
-             let pmap = Features.make_featurepmap options.featureset superset in
-             let report = 
-               Report.collect_map_report superset extractf filterf tps
-                 ro fps  in ()
-          | None -> ()
-        );
         analyze superset
       )
  
@@ -479,16 +599,53 @@ module With_options(Conf : Provider)  = struct
          Superset.ISG.print_dot ~colorings:results superset
     )
 
-  let converge featureset superset =
-    let superset = Features.apply_featureset featureset superset in
-    Features.apply_featurepmap featureset superset
+  (* TODO would be better having been passed the pmap *)
+  let collect_map_distribution superset feature f =
+    if options.collect_report then (
+      let tps = Addr.Hash_set.create () in
+      let fps = Addr.Hash_set.create () in
+      let ro = Addr.Hash_set.create () in
+      match Map.find Features.exfiltmap feature with
+      | Some (extractf, filterf) ->
+         (* TODO need to correct the pmap type *)
+         let pmap =
+           Features.make_featurepmap options.featureset superset in
+         let pmap = Features.fixpoint_map superset pmap in
+         (* TODO with_featurepmap *)
+         let pmap = Map.filter_mapi pmap ~f:(fun ~key ~data ->
+                        List.find data ~f:(fun (p,x,feat) ->
+                            String.equal feature feat
+                          )
+                      ) in
+         let report = 
+           Report.collect_map_report superset extractf filterf tps
+             ro fps pmap in
+         print_endline @@ Report.format_report report
+      | None -> ()
+    )
 
-  let trim_with f superset =
-    let rec do_analysis round superset = 
-      if round = options.rounds then superset else
-        let superset = Trim.Default.trim @@ f superset in
-        do_analysis (round+1) superset in
-    do_analysis 0 superset
+  let collect_set_distribution superset feature f =
+    if options.collect_report then (
+      let tps = Addr.Hash_set.create () in
+      let fps = Addr.Hash_set.create () in
+      let ro = Addr.Hash_set.create () in
+      match Map.find Features.exfiltset feature with
+      | Some (extractf,_) ->
+         let pmap =
+           Features.make_featurepmap options.featureset superset in
+         let pmap = Features.fixpoint_map superset pmap in
+         (* TODO with_featurepmap *)
+         let pmap = Map.filter_mapi pmap ~f:(fun ~key ~data ->
+                        List.find data ~f:(fun (p,x,feat) ->
+                            String.equal feature feat
+                          )
+                      ) in
+         let report = 
+           Report.collect_set_report superset extractf (fun _ x -> x)
+             tps ro fps pmap in
+         print_endline @@ Report.format_report report
+      | None -> ()
+    )
 
   let checkpoint bin invariants =
     let backend = options.disassembler in
@@ -519,12 +676,30 @@ module With_options(Conf : Provider)  = struct
     let phases = options.phases in
     let analyses = options.analyses in
     let trim = options.trim_method in
-    let superset = with_analyses superset analyses in
+    let before = Superset.Inspection.count superset in
     let (trim,metrics) = build_metrics trim phases in
     let (trim,tracker) = build_tracker trim phases in
     let (trim,setops) = build_setops trim options.setops in
+    (* TODO did not pass trim in in order for it to be used *)
+    print_endline @@
+      sprintf "\t num branches: %d"
+        Hash_set.(length @@ Superset.get_branches superset);
     let superset = trim superset in
-    let superset = trim_with (converge options.featureset) superset in
+    let after = Superset.Inspection.count superset in
+    print_endline @@
+      sprintf "invariants: before %d, after %d, removed %d"
+        before after (before - after);
+    print_endline @@
+      sprintf "\t num branches: %d"
+        Hash_set.(length @@ Superset.get_branches superset);
+    let before = after in
+    let superset = with_analyses superset analyses in
+    let superset = trim superset in
+    let after = Superset.Inspection.count superset in
+    print_endline @@
+      sprintf "analyses: before %d, after %d, removed %d"
+        before after (before - after);
+    let superset,pmap = converge options superset in
     let _ =
       if options.save_addrs then
         Superset.export_addrs options.target superset
@@ -532,7 +707,7 @@ module With_options(Conf : Provider)  = struct
     let results = apply_setops setops options.setops in
     let results =
       collect_results superset
-        options.ground_truth_file results metrics setops tracker in
+        options pmap results metrics setops tracker in
     process_cut superset options results;
     superset
        

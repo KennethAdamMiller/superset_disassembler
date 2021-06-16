@@ -168,8 +168,8 @@ let test_lift test_ctxt =
        Superset.Core.lift_insn superset (mem, insn) in
      let msg = sprintf "Should be able to lift" in
      assert_bool msg Option.(is_some lifted);
-     let r = Option.value_map ~default:false lifted ~f:(fun (_,l) ->
-                 List.length l > 0) in
+     let r = Option.value_map ~default:false lifted ~f:(fun (bil) ->
+                 List.length bil > 0) in
      assert_bool "Should support this!" r
   | None -> assert_bool "should be an instruction at 0" false
 

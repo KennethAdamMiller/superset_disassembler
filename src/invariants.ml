@@ -130,8 +130,8 @@ let find_non_mem_accesses superset =
     find_non_mem_accesses is tripped. *)
 let accesses_non_mem superset mem insn _ =
   try
-    let bil = Superset.Core.lift_insn superset ((mem, insn)) in
-    let _, bil = Option.value ~default:(mem,[]) bil in
+    let bil = Superset.Core.lift_at superset (Memory.min_addr mem) in
+    let bil = Option.value ~default:([]) bil in
     let status = List.fold bil ~init:(Some(false)) ~f:(fun status _stmt ->
         Option.value_map status ~default:(Some(false)) ~f:(fun status ->
             if not status then

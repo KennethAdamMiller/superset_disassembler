@@ -22,17 +22,17 @@ let stmt_def_freevars =
   object(self)
     inherit [Var.Set.t] Stmt.visitor
     method enter_move def use accu =
-      if not Var.(is_virtual def) then
+      (*if not Var.(is_virtual def) then*)
         Set.add accu def
-      else accu
+                (*else accu*)
   end
 
 let stmt_use_freevars =
   object(self)
     inherit [Var.Set.t] Stmt.visitor
     method enter_move def use accu =
-      let free_vars = 
-        Set.filter ~f:(fun v -> not Var.(is_virtual v)) (Exp.free_vars use)
+      let free_vars = (Exp.free_vars use)
+        (*Set.filter ~f:(fun v -> not Var.(is_virtual v)) (Exp.free_vars use)*)
       in Set.union accu free_vars
   end
 

@@ -10,15 +10,48 @@ type map_report = {
   fp_to_fp                 : int;
 } [@@deriving sexp]
 
+module Distribution = struct
+  type t = {
+      (* The ith elem says the number (int) of insns with i
+       accumulated total feature instances *)
+      fp_at             : int array;
+      tp_at             : int array;
+      (* The ith list elem (x, y list) says the number (x) of true
+       positives that have i many features in their favor and how
+       many false positives (y) they occlude with j number of features. *)
+      fp_competitors_at : (int * int array) array;
+    } [@@deriving sexp]
+
+  let empty threshold =
+    let len = threshold + 1 in
+    {
+      fp_at             = Array.create ~len 0;
+      tp_at             = Array.create ~len 0;
+      fp_competitors_at = Array.create ~len (0,Array.create ~len 0);
+    }
+
+  let add tps dist inst =
+    let (p,addr,feature) = inst in
+    let p = min p @@ Array.length dist.fp_at in
+    let insert c =
+      let cur = Array.get c p  in
+      Array.set c p (cur+1) in
+    let _ = 
+      if Hash_set.mem tps addr then
+        insert dist.tp_at
+      else insert dist.fp_at in
+    dist
+end
+   
 type report = {
   actual_tp_cases          : int;
   outbound_cases           : int;
   outbound_inflicted_fn    : int;
   raw_cases                : int;
   total_cases_identified   : int;
-  overlap_space            : float;
-  overlap_max              : float;
-  overlap_min              : float;
+  overlap_space            : int;
+  overlap_max              : int;
+  overlap_min              : int;
   analysis_fp              : int;
   analysis_cleansed        : int;
   analysis_fn              : int;
@@ -36,7 +69,7 @@ let format_map_details md =
                   md.tp_to_tp md.tp_to_fp md.fp_to_tp md.fp_to_fp
 
 let format_report r =
-  sprintf "\tReport: \n%s %d \n%s%d\n%s%d\n%s%f\n%s%d\n%s%d\n%s%d\n%s %d\n%s %s\n%s%d\n%s%d\n%s%d\n%s%s\n%s%s\n%s\n\n"
+  sprintf "\tReport: \n%s %d \n%s%d\n%s%d\n%s%d\n%s%d\n%s%d\n%s%d\n%s %d\n%s %s\n%s%d\n%s%d\n%s%d\n%s%s\n%s%s\n%s\n\n"
     "actual tp cases: " r.actual_tp_cases
     "raw_cases: " r.raw_cases
     "total identified: " r.total_cases_identified
@@ -54,6 +87,7 @@ let format_report r =
     "================="
 
 (* TODO duplicates in other places *)
+(* TODO belongs in fixpoint, probably named as converge *)
 let mark_threshold_with_pmap ?visited ?datas superset pmap threshold = 
   let visited = Option.value visited 
       ~default:(Addr.Hash_set.create ()) in
@@ -61,8 +95,8 @@ let mark_threshold_with_pmap ?visited ?datas superset pmap threshold =
       ~default:(Addr.Hash_set.create ()) in
   Map.iteri pmap ~f:(fun ~key ~data ->
       let addr = key in
-      let p = data in
-      if Float.(p > threshold) then (
+      let (p,_,_) = data in
+      if (p > threshold) then (
         if Superset.Core.mem superset addr then
           Traverse.mark_descendent_bodies_at
             ~datas ~visited superset addr;
@@ -112,30 +146,35 @@ let collect_set_report
     Hash_set.fold ~init:0 outbound ~f:(fun inflicted o -> 
         if Hash_set.mem tps o then inflicted+1 else inflicted
       ) in
-  let (tp_max, tp_min, fp_max, fp_min) = Map.fold pmap ~init:(0.0, 0.0, 0.0, 0.0) 
+  let mx = max (*Float.max in*) in
+  let mn = min (*Float.min in*) in
+  let (tp_max, tp_min, fp_max, fp_min) = Map.fold pmap ~init:(0, 0, 0, 0) 
       ~f:(fun ~key ~data (tp_max, tp_min, fp_max, fp_min) -> 
+          let (data,_,_) = data in
           let tp_max, tp_min = 
             if Hash_set.mem tps key then
-              Float.max tp_max data, Float.min tp_min data
+              mx tp_max data, mn tp_min data
             else tp_max, tp_min in
           let fp_max, fp_min = 
             if Hash_set.mem fps key then
-              Float.max fp_max data, Float.min fp_min data
+              mx fp_max data, mn fp_min data
             else fp_max, fp_min in
           tp_max, tp_min, fp_max, fp_min
         ) in
   let overlap_max =
-    if Float.(tp_min > fp_max) then tp_min 
-    else if Float.(fp_min > tp_max) then fp_min 
-    else Float.max tp_min fp_min in
+    if (tp_min > fp_max) then tp_min 
+    else if (fp_min > tp_max) then fp_min 
+    else mx tp_min fp_min in
   let overlap_min =
-    if Float.(tp_min < fp_max) then tp_min
-    else if Float.(fp_min < tp_max) then fp_min 
-    else Float.min tp_min fp_min in
-  let overlap_space = overlap_max -. overlap_min in
+    if (tp_min < fp_max) then tp_min
+    else if (fp_min < tp_max) then fp_min 
+    else mn tp_min fp_min in
+  let overlap_space = overlap_max - overlap_min in
   let visited = Addr.Hash_set.create () in
   let datas = Addr.Hash_set.create () in
-  mark_threshold_with_pmap ~visited ~datas superset pmap 0.99;
+  (* TODO a hardcoded threshold has been used *)
+  (* report collection should not be trimming, but only traversing *)
+  mark_threshold_with_pmap ~visited ~datas superset pmap 50;
   let removed = Superset.Core.copy_bad superset in
   let analysis_cleansed = Hash_set.length removed in
   let (analysis_fn,analysis_fp) =
@@ -231,3 +270,4 @@ let collect_map_report
     exfp  = r.exfp;
     map_details;
   }
+    

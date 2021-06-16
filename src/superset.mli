@@ -86,8 +86,12 @@ module Core : sig
     Arch.t -> mem -> 'a Or_error.t
   (** Lift a single disassembled memory and instruction pair *)
   val lift_insn :
-    t -> (mem * Dis.full_insn option) -> (mem * bil) option
+    t -> (mem * Dis.full_insn option) -> (bil) option
 
+  (** Given an address, lift a single instruction at that address *)
+  val lift_at :
+    t -> (addr) -> bil option
+    
   (** The primary disassembler design interface. Implementing a
       disassembler from the ground up almost certainly uses this as
       it loads the memory images into the superset. *)
