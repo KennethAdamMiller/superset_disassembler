@@ -1,4 +1,7 @@
 #!/bin/bash
+echo "Usage: $0 <features> <numbinaries>"
+export testsize=${2}
+if [ -z ${testsize} ]; then testsize=9999; fi
 rm -f metrics.txt
 rm -f final_total.txt
 rm -f mem_size.txt
@@ -29,7 +32,7 @@ analyze() {
 		rm -f "${name}"
 		cp "${1}" ./
 		strip "./$(basename ${1})"
-		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --ground_truth_bin="${1}" --save_addrs --checkpoint=Export --enable_feature="${2}" --rounds=2 --collect_reports >> "${name}";
+		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --ground_truth_bin="${1}" --save_addrs --checkpoint=Export --enable_feature="${2}" --rounds=6 --collect_reports >> "${name}";
 		rm -f "./$(basename ${1})"
 		if [ $? -ne 0 ]; then
 		    printf "\t... error on file ${f}, will need to reprocess\n"
@@ -59,7 +62,7 @@ run() {
     echo "Running ${subdir} with ${jobs} jobs"
     total=$(find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | wc -l)
     echo "There are ${total} binaries"
-    find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | parallel -u -j${jobs} ${command}
+    find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | head -n ${testsize} | parallel -u -j${jobs} ${command}
 }
 
 run ${jobs} x86_64-binaries/elf/coreutils
