@@ -401,36 +401,56 @@ let converge options superset =
 let collect_results superset options pmap results metrics setops
       tracker =
   let ground_truth_file = options.ground_truth_file in
-  let tps = Addr.Hash_set.create () in
-  let _ = 
+  let tps = 
     match ground_truth_file with
     | Some (gt) -> (
       let min_addr = Superset.Inspection.get_base superset in
       let tp = read_addrs Addr.(bitwidth min_addr) gt in
+      let tps = Addr.Hash_set.create () in
       List.iter tp ~f:(Hash_set.add tps);
+      tps
     )
     | None -> (
       match options.ground_truth_bin with
       | Some (gt) ->
-         let gt = Metrics.ground_truth_of_unstripped_bin
-                    gt |> ok_exn in
-         let tps = Addr.Hash_set.create () in
-         Seq.iter gt ~f:(Hash_set.add tps);
-      | None -> ()
+         print_endline "Using gt bin";
+         Metrics.true_positives superset gt
+      | None -> Addr.Hash_set.create () 
     ) in
   let _ =
     if options.collect_report then (
       print_endline "Report:";
       let threshold = (pnts_of_percent options.tp_threshold) in
-      let init = Report.Distribution.empty threshold in
-      let dist =
-        List.fold (Map.data pmap) ~init ~f:(fun dist p_at ->
-            List.fold p_at ~init:dist ~f:(fun dist p_inst ->
-                Report.Distribution.add tps dist p_inst
+      let init = String.Map.empty in
+      let pmap =
+        Map.mapi pmap ~f:(fun ~key ~data ->
+            List.fold data ~init:String.Map.empty
+              ~f:(fun dist (p,addr,ftname) ->
+                String.Map.update dist ftname ~f:(fun total ->
+                    (Option.value total ~default:0) + p
+                  )
               )
           ) in
-      print_endline (Sexp.to_string
-                     @@ Report.Distribution.sexp_of_t dist);
+      let reports =
+        List.fold (Addr.Map.to_alist pmap) ~init ~f:(fun reports (p_at,fttot) ->
+            String.Map.fold fttot ~init:reports
+              ~f:(fun ~key ~data reports ->
+                let name = key in
+                let p = data in
+                String.Map.update reports name ~f:(fun dist ->
+                    let dist =
+                      Option.value dist
+                        ~default:(Report.Distribution.empty threshold)
+                    in Report.Distribution.add dist tps (p,p_at,name)
+                  )
+              )
+          ) in
+      Map.iteri reports ~f:(fun ~key ~data ->
+          let dist = data in
+          print_endline @@ key ^ " " ^ (Sexp.to_string
+                                     @@ Report.Distribution.sexp_of_t
+                                          dist);
+        );
     ) else () in
   if Hash_set.length tps > 0 then
     let remaining = Addr.Hash_set.create () in
@@ -551,10 +571,6 @@ module With_options(Conf : Provider)  = struct
   open Or_error
   open Format
 
-  let with_invariants superset invariants =
-    time ~name:"tagging"
-      (Invariants.tag_superset ~invariants) superset
-
   let with_analyses superset analyses =
     List.fold analyses ~init:superset ~f:(fun superset analyze ->
         analyze superset
@@ -652,25 +668,26 @@ module With_options(Conf : Provider)  = struct
     let dis_method x =
       let f x =
         Superset.superset_disasm_of_file ~backend x
-          ~f:(Invariants.tag ~invariants:[Invariants.tag_success])
+          ~f:(Invariants.tag ~invariants:(Invariants.tag_success::invariants))
       in time ~name:"disasm binary" f x in
     match options.checkpoint with
     | Some Import -> 
-       let superset = time ~name:"import" Superset.import bin in
-       with_invariants superset invariants
+       time ~name:"import" Superset.import bin
+    (*with_invariants superset invariants*)
     | Some Export ->
        let superset = dis_method bin in
-       let superset = with_invariants superset invariants in
+       (*let superset = with_invariants superset invariants in*)
        Superset.export bin superset;
        superset
     | Some Update ->
        let superset = Superset.import bin in
-       let superset = with_invariants superset invariants in
+       (*let superset = with_invariants superset invariants in*)
        Superset.export bin superset;
        superset
     | None ->
        let superset = dis_method bin in
-       with_invariants superset invariants
+       (*with_invariants superset invariants*)
+       superset
 
   let with_options superset =
     let phases = options.phases in
@@ -680,7 +697,6 @@ module With_options(Conf : Provider)  = struct
     let (trim,metrics) = build_metrics trim phases in
     let (trim,tracker) = build_tracker trim phases in
     let (trim,setops) = build_setops trim options.setops in
-    (* TODO did not pass trim in in order for it to be used *)
     print_endline @@
       sprintf "\t num branches: %d"
         Hash_set.(length @@ Superset.get_branches superset);

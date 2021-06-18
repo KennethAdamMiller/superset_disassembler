@@ -13,7 +13,7 @@ RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cf
 ##### superset_disasm performance
 WORKDIR $HOME/workspace/superset_disasm
 RUN make clean && make && chmod u+x scripts/*
-RUN sudo apt-get update && sudo apt-get install parallel -y
+RUN sudo apt-get update && sudo apt-get install parallel time -y
 #RUN echo "testsize=${testsize}" && scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_metrics.sh #&& scripts/run_analyses.sh
 RUN echo "testsize=${testsize}, features=${features}" && scripts/run_metrics.sh ${features} ${testsize} # scripts/strip_binaries.sh && scripts/run_analyses.sh
 RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/opam/workspace/rq3_binaries
