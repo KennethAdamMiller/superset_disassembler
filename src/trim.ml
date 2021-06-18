@@ -43,7 +43,7 @@ module Reduction(R : Reducer) = struct
       let num_removed = orig_size - trimmed_size in
       printf "%d vertices after trimming, removing %d\n" 
       trimmed_size num_removed;*)
-    Superset.Core.rebalance superset
+    superset
 
 end
 

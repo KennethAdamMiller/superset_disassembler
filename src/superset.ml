@@ -162,7 +162,8 @@ module Core = struct
     let insn_risg = get_graph superset in
     if is_unbalanced superset then
       OG.iter_vertex (fun vert ->
-          if not Map.(mem insn_map vert) then (
+          if not Map.(mem insn_map vert)
+             && Memmap.contains superset.sections vert then (
             mark_bad superset vert;
           )
         ) insn_risg;
@@ -171,8 +172,6 @@ module Core = struct
            is_unbalanced superset then
         Map.filteri ~f:(fun ~key ~data -> 
             let vert = key in
-            (*let (mem, insn) = data in
-          Option.is_some insn && *)
             OG.(mem_vertex insn_risg vert)
           ) insn_map
       else superset.insn_map  in
@@ -211,8 +210,9 @@ module ISG = struct
 
   let remove superset addr =
     let insn_risg = OG.remove_vertex superset.insn_risg addr in
+    let insn_map = Map.remove superset.insn_map addr in
     Addr.Table.remove superset.lifted addr;
-    { superset with insn_risg } 
+    { superset with insn_risg; insn_map } 
 
   let mem_vertex superset = OG.mem_vertex superset.insn_risg
 

@@ -30,9 +30,9 @@ module Distribution = struct
       fp_competitors_at = Array.create ~len (0,Array.create ~len 0);
     }
 
-  let add tps dist inst =
+  let add dist tps inst =
     let (p,addr,feature) = inst in
-    let p = min p @@ Array.length dist.fp_at in
+    let p = min p @@ ((Array.length dist.fp_at) - 1) in
     let insert c =
       let cur = Array.get c p  in
       Array.set c p (cur+1) in
