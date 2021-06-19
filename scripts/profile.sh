@@ -6,4 +6,3 @@ time ./superset_disasm.native --target ${HOME}/workspace/x86-binaries/elf/binuti
 
 time ./superset_disasm.native --target ${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram --rounds=3  --enable_feature="TrimLimitedClamped,TrimFixpointGrammar,TrimFixpointSSA" --analyses="Strongly Connected Component Data"  --ground_truth_bin=${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram 2>&1 gcc_findutils_32_O0_bigram.profile
 
-export 

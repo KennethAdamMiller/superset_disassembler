@@ -1,0 +1,26 @@
+FROM ocaml/opam2:ubuntu-18.04
+
+RUN sudo apt-get update  \
+ && opam update \
+ && opam switch install 4.09.0+flambda \
+ && eval "$(opam env)" \
+ && opam remote set-url default https://opam.ocaml.org \
+ && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
+ && opam update \
+ && opam depext --install bap --yes -j 1 \
+ && opam clean -acrs \
+ && rm -rf /home/opam/.opam/4.0[2-8,10] \
+ && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
+ && rm -rf /home/opam/opam-repository
+
+USER root
+#TODO this should use git clone
+RUN mkdir -p /home/opam/workspace/superset_disasm
+WORKDIR $HOME/workspace/superset_disasm
+COPY ./ /home/opam/workspace/superset_disasm/
+RUN chown -R opam:opam /home/opam/workspace/superset_disasm/
+USER opam
+RUN rm setup.data ; eval `opam config env` ; opam depext --install bap-byteweight-frontend landmarks ; make clean ; make ; opam pin add superset_disasm ./ -y --use-internal-solver ; 
+
+RUN sudo apt-get install time parallel -y
+RUN ./scripts/flambda_profile.sh
