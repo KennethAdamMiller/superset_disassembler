@@ -317,8 +317,8 @@ let converge options superset =
   let featureset = options.featureset in
   let visited = Addr.Hash_set.create () in
   (* TODO what callsite protection value would serve the best? *)
-  (*let callsites = Features.get_callsites ~threshold:0 superset in
-  let superset = Features.tag_callsites visited ~callsites superset in*)
+  let callsites = Features.get_callsites ~threshold:0 superset in
+  let superset = Features.tag_callsites visited ~callsites superset in
   Features.with_featurepmap featureset superset
     ~f:(fun pmap featureset superset ->
       print_endline @@ sprintf "raw pmap size: %d, threshold: %d"
