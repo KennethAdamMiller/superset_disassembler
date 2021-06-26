@@ -3,5 +3,5 @@ FROM superset_disasm:$TAG
 ARG CACHEBUST
 
 WORKDIR /home/opam/workspace/superset_disasm
-RUN make clean ; make ; opam pin add superset_disasm ./ -y --use-internal-solver ;
+RUN make clean ; make ; opam pin add superset_disasm ./ -y --use-internal-solver ; pushd plugin ; ./build.sh ; popd
 RUN ./test_superset_disasm.native ; ./functional_tests/test_cmdline.sh ; ./functional_tests/test_run.sh

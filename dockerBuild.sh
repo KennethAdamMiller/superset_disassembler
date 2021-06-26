@@ -1,1 +1,1 @@
-sudo docker build . -f Dockerfile -t superset_disasm:$(git branch --show-current)-$(git rev-parse --short HEAD)
+sudo docker build . -f Dockerfile -t superset_disasm:$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)

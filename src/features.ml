@@ -214,6 +214,19 @@ let pre_freevarssa superset lift factors var_use addr =
   )
   | None -> ()
 
+let pre_mem_ssa superset lift factors var_use addr =
+  match Superset.Core.lift_at superset addr with
+  | Some (bil) -> (
+    try 
+      let use_vars = Abstract_ssa.use_mem_ssa bil in
+      Set.iter use_vars ~f:(fun use_var -> 
+          var_use := Map.set !var_use use_var addr
+        )
+    with _ -> ()
+  )
+  | None -> ()
+
+          
 let post_ssa_with superset lift var_use addr f = 
   match Superset.Core.lift_at superset addr with
   | Some (bil) -> (
@@ -262,6 +275,31 @@ let post_freevarssa_with superset lift var_use addr f =
   )
   | None -> ()
 
+          
+let post_mem_ssa_with superset lift var_use addr f = 
+  match Superset.Core.lift_at superset addr with
+  | Some (bil) -> (
+    try 
+      let use_vars = Abstract_ssa.use_mem_ssa bil in
+      let var_defs = Abstract_ssa.def_mem_ssa bil in
+      Set.iter var_defs ~f:(fun var_def -> 
+          match Map.find !var_use var_def with
+          | Some(waddr) ->
+             if not Set.(mem use_vars var_def) then (
+               f waddr addr
+             )
+          | None -> ()
+        );
+      Set.iter use_vars ~f:(fun use_var -> 
+          var_use := Map.remove !var_use use_var;
+        );
+      Set.iter var_defs ~f:(fun write_reg -> 
+          var_use := Map.remove !var_use write_reg
+        )
+     with _ -> ()
+  )
+  | None -> ()
+
 let extract_ssa_to_map superset =
   let var_use = ref Exp.Map.empty in
   let defuse_map = ref Addr.Map.empty in
@@ -273,8 +311,9 @@ let extract_ssa_to_map superset =
   let post addr = post_ssa_with superset lift var_use
       addr add_to_map in
   let entries = Superset.entries_of_isg superset in
+  let visited = Addr.Hash_set.create () in
   Hash_set.iter entries ~f:(fun addr ->
-      Traverse.with_ancestors_at superset addr ~post ~pre;
+      Traverse.with_ancestors_at superset ~visited addr ~post ~pre;
       var_use := Exp.Map.empty
     );
   !defuse_map
@@ -300,6 +339,28 @@ let extract_freevarssa_to_map superset =
     );
   defuse_map
 
+let extract_mem_ssa_to_map superset =
+  let var_use = ref Exp.Map.empty in
+  let defuse_map = Addr.Table.create () in
+  let add_to_map def use = 
+    Stdlib.ignore @@ Addr.Table.add defuse_map ~key:def ~data:use in
+  let lift (mem, insn) =
+    Superset.Core.lift_insn superset ((mem, insn)) in
+  let pre = pre_mem_ssa superset lift () var_use in
+  let post addr = post_mem_ssa_with superset lift var_use
+      addr add_to_map in
+  let entries = Superset.entries_of_isg superset in
+  (* TODO because visited is being used, there is a possibility of
+  some missed results. *)
+  let visited = Addr.Hash_set.create () in
+  Hash_set.iter entries ~f:(fun addr -> 
+      Traverse.with_ancestors_at superset ~visited addr ~post ~pre;
+      (* TODO: I don't think that this is a very good implementation *)
+      var_use := Exp.Map.empty
+    );
+  print_endline @@ sprintf "mem_ssa size is %d" Addr.Table.(length defuse_map);
+  defuse_map
+  
 let extract_cross_section_jmps superset = 
   let segments = Superset.Inspection.get_memmap superset in
   let cross_section_edges = Superset.ISG.fold_edges superset
@@ -348,19 +409,23 @@ let time ?(name="") f x =
   print_endline s;
   fx
 
-
-
-let extract_trim_limited_clamped superset = 
-  let visited = Addr.Hash_set.create () in
-  let callsites = get_callsites ~threshold:0 superset in
-  let f s = tag_callsites visited ~callsites s in
-  let superset = time ~name:"tagging callsites: " f superset in
-  let () = Superset.Core.clear_all_bad superset in
+(* TODO call to Safely.protected *)
+(* TODO can optimize this just for a few seconds off, but it results
+ * in lower accuracy *)
+let extract_trim_limited_clamped superset =
+  let protection = Addr.Hash_set.create () in
+  if Hash_set.length protection = 0 then (
+    let callsites = get_callsites ~threshold:0 superset in
+    let f s = tag_callsites protection ~callsites s in
+    let superset = time ~name:"tagging callsites: " f superset in
+    Superset.Core.clear_all_bad superset
+  );
+  Superset.Core.clear_all_bad superset;
   let superset = time ~name:"extract_trim_clamped "
-      extract_trim_clamped superset in
-  clear_each superset visited;
-  superset
+                   extract_trim_clamped superset in
+  clear_each superset protection; superset
 
+(* TODO move to fixpoint *)
 let fixpoint_descendants superset extractf depth = 
   let rec fix_descendants cur_features d =
     if d >= depth then
@@ -413,6 +478,15 @@ let fixpoint_ssa superset depth =
     List.iter Map.(data ssa_map) ~f:Hash_set.(add ssa);
     ssa in
   fixpoint_descendants superset extractf depth
+
+let fixpoint_memssa superset = 
+  let extractf superset = 
+    let ssa_map = extract_mem_ssa_to_map superset in
+    let ssa = Addr.Hash_set.create () in
+    let memssa = Addr.Hash_set.create () in
+    List.iter Addr.Table.(data ssa_map) ~f:Hash_set.(add memssa);
+    ssa in
+  fixpoint_descendants superset extractf 2
 
 let fixpoint_freevarssa superset depth = 
   let extractf superset = 
@@ -765,6 +839,7 @@ let with_featureset ~f ~init featureset superset =
 let fdists = String.Map.empty
 let fdists = String.Map.set fdists "FixpointGrammar" 5
 let fdists = String.Map.set fdists "FixpointFreevarSSA" 3
+let fdists = String.Map.set fdists "FixpointMemSSA" 1
 
 let make_featurepmap featureset superset = 
   List.fold ~f:(fun (feature_pmap) feature -> 

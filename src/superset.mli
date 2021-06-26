@@ -62,6 +62,8 @@ module Core : sig
     mem ->
     (mem * (Dis.asm, Dis.kinds) Dis.insn option) seq
 
+  val seq_of_addr_range : addr -> int -> addr seq
+    
   (** This primary core function is the core of disassembly, and simply 
    reads each byte consecutively in memory by address successor. It 
    is alike to run_seq, but it hides the sequence part, and accepts 
@@ -71,7 +73,16 @@ module Core : sig
     accu:'c ->
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'c -> 'c) ->
     mem -> 'c
-  (** This primary core function is the core of disassembly, and simply 
+
+  (** This function is the fundamental superset disassembly, and
+      disassembles at the addresses given by the supplied sequence. *)
+  val disasm :
+    ?backend:string ->
+    addrs:addr seq -> accu:'a -> 
+    f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'a -> 'a) ->
+    Arch.t -> mem -> 'a Or_error.t
+
+  (** This function is the core of disassembly, and simply 
    reads each byte consecutively in memory by address successor. It 
    builds the disassembler and runs the superset behind the 
    scenes. One can accumulate with any arbitrary type. Later 
@@ -79,11 +90,12 @@ module Core : sig
    representation with graph specializations suited to the 
    invariants, heuristics and performance that are vital to good 
    operation. *)
-  val disasm :
+  val disasm_all :
     ?backend:string ->
-    accu:'a ->
+    accu:'a -> 
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'a -> 'a) ->
     Arch.t -> mem -> 'a Or_error.t
+
   (** Lift a single disassembled memory and instruction pair *)
   val lift_insn :
     t -> (mem * Dis.full_insn option) -> (bil) option
@@ -97,6 +109,7 @@ module Core : sig
       it loads the memory images into the superset. *)
   val update_with_mem :
     ?backend:string ->
+    ?addrs:addr seq ->
     ?f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> t -> t) ->
     t -> mem -> t
 
@@ -211,9 +224,6 @@ module Occlusion : sig
       to conflicts_within_insns in implementation. *)
   val find_all_conflicts : ?mem:(addr -> bool) -> t -> Addr.Set.t
 
-  (** A vital address range sequence creator. *)
-  val seq_of_addr_range : addr -> int -> addr seq 
-
   (** A sequence view of conflicts within a given disassembled
       instruction at a given address for a given length. *)
   val range_seq_of_conflicts : mem:(addr -> bool) -> addr -> int -> addr seq
@@ -269,7 +279,7 @@ val with_bad :
   post:('c -> addr -> 'b) -> 'b -> 'b
 
 (** Read a given superset from file. *)
-val import : string -> t
+val import : string -> string -> string -> t
 (** Save a superset to a given file location. *)
 val export : string -> t -> unit
 (** Save only the remaining disassembled addresses. *)

@@ -78,41 +78,64 @@ module Core = struct
     let next_addr = Addr.succ addr in
     Memory.view ~from:next_addr mem
 
+  let seq_of_addr_range addr len = 
+    let open Seq.Generator in
+    let rec gen_next_addr cur_addr = 
+      if Addr.(cur_addr >= (addr ++ len)) then
+        return ()
+      else
+        yield cur_addr >>=  fun () -> 
+        let next_addr = Addr.succ cur_addr in
+        gen_next_addr next_addr
+    in run (gen_next_addr Addr.(succ addr))
+    
   (** Builds a sequence disassembly sequence at every byte offset of
   the memory mem. *)
   let run_seq dis mem =
-    let open Seq.Generator in 
-    let rec disasm cur_mem =
-      let elem = match Dis.insn_of_mem dis cur_mem with
-        | Ok (m, insn, _) -> (m, insn)
-        | Error _ -> (cur_mem, None) in
-      yield elem >>= fun () ->
-      match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
-      | Ok next -> disasm next
-      | Error _ -> return () in
-    run (disasm mem)
+    let start_addr = Memory.min_addr mem in
+    let len = Memory.length mem in
+    let addrs = seq_of_addr_range start_addr len in
+    Seq.filter_map addrs ~f:(fun addr ->
+        let m = Memory.view ~from:addr mem in
+        match m with
+        | Error _ -> None
+        | Ok m -> (
+            match Dis.insn_of_mem dis m with
+            | Ok (m, insn, _) -> Some (m, insn)
+            | Error _ -> Some (m, None)
+          )
+      )
 
   (** Fold over the memory at every byte offset with function f *)
   let run dis ~accu ~f mem =
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
   (** This builds the disasm type, and runs it on the memory. *)
-  let disasm ?(backend="llvm") ~accu ~f arch memry =
-    Dis.with_disasm ~backend (Arch.to_string arch)
-      ~f:(fun d ->
-        let next state m accu =
-          match next_chunk memry ~addr:(Memory.min_addr m) with
-          | Error _ -> Dis.stop state accu
-          | Ok(next) -> Dis.jump state next accu in
-        let invalid state m accu =
-          let accu = f (m, None) accu in
-          next state m accu in
-        let hit state m insn accu =
-          let accu = f (m, (Some insn)) accu in 
-          next state m accu in
-        Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
-          ~hit d ~init:accu ~return:ident memry)
-      (*Ok(run d ~accu ~f mem)*))
+  let disasm ?(backend="llvm") ~addrs ~accu ~f arch memry =
+    Or_error.map 
+      (Dis.with_disasm ~backend (Arch.to_string arch)
+        ~f:(fun d ->
+          let rec next state (addrs,accu) =
+            match Seq.next addrs with
+            | None -> Dis.stop state (addrs,accu)
+            | Some(addr,addrs) ->
+               match Memory.view ~from:addr memry with
+               | Error _ -> next state (addrs,accu)
+               | Ok jtgt -> Dis.jump state jtgt (addrs,accu) in
+          let invalid state m (addrs,accu) =
+            let accu = f (m, None) accu in
+            next state (addrs,accu) in
+          let hit state m insn (addrs,accu) =
+            let accu = f (m, (Some insn)) accu in 
+            next state (addrs,accu) in
+          Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
+               ~hit d ~init:(addrs,accu) ~return:ident memry)
+        )) ~f:(fun (_,accu) -> accu)
+
+  let disasm_all ?(backend="llvm") ~accu ~f arch memry =
+    let addrs = seq_of_addr_range
+                  (Memory.min_addr memry) (Memory.length memry) in
+    disasm ~backend ~addrs ~accu ~f arch memry 
 
   let lift_at superset addr =
     match Addr.Table.find superset.lifted addr with
@@ -138,12 +161,12 @@ module Core = struct
     lift_at superset addr
        
   (** Perform superset disassembly on mem and add the results. *)
-  let update_with_mem ?backend ?f superset mem =
-    let update = Option.value f ~default:(fun (m, i) a -> a) in
-    let f (mem, insn) superset =
-      let superset = add superset mem insn in
-      update (mem, insn) superset in
-    disasm ?backend ~accu:superset ~f superset.arch mem |> ok_exn
+  let update_with_mem ?backend ?addrs ?f superset mem =
+    let f = Option.value f ~default:(fun (m, i) a -> a) in
+    let default = seq_of_addr_range
+                    (Memory.min_addr mem) (Memory.length mem) in
+    let addrs = Option.value addrs ~default  in
+    disasm ?backend ~accu:superset ~f ~addrs superset.arch mem |> ok_exn
 
   let is_unbalanced superset =
     Map.length superset.insn_map <> OG.nb_vertex superset.insn_risg
@@ -257,12 +280,44 @@ module ISG = struct
 
   let format_isg ?format superset =
     let format = Option.value format ~default:Format.std_formatter in
-    Gml.print format superset.insn_risg
+    let format =
+      fold_edges superset (fun src dst format ->
+          Format.pp_print_string format @@ Addr.to_string src;
+          Format.pp_print_string format @@ "-";
+          Format.pp_print_string format @@ Addr.to_string dst;
+          Format.pp_print_string format @@ "\n";
+          format
+        ) format in
+    Format.pp_print_string format @@ "\n";
+    iter_vertex superset (fun v ->
+        Format.pp_print_string format @@ Addr.to_string v;
+        Format.pp_print_string format @@ "\n";
+      )
 
   let isg_to_string superset = 
     let format = Format.str_formatter in
     format_isg ~format superset;
     Format.flush_str_formatter ()
+
+  let parse_isg bin =
+    let str = In_channel.read_all bin in
+    let gstr = String.split_lines str in (* heh *)
+    let init = false,Graphlib.create (module G) ()  in
+    let _,g = List.fold ~init gstr ~f:(fun (status,g) line ->
+                  if not status then (
+                    if String.equal line "" then true,g else (
+                      let l = String.split line ~on:'-' in
+                      let l = List.map l ~f:Addr.of_string in
+                      match l with
+                      | [src;dst] ->
+                         let e = G.Edge.create src dst () in
+                         status,G.Edge.insert e g
+                      | _ -> status,g
+                    )
+                  ) else (
+                    status, OG.add_vertex g @@ Addr.of_string line
+                  )
+      ) in g
 
   let filter superset subgraph =
     let insn_risg = superset.insn_risg in
@@ -367,19 +422,9 @@ module Inspection = struct
 end
 
 module Occlusion = struct
-  let seq_of_addr_range addr len = 
-    let open Seq.Generator in
-    let rec gen_next_addr cur_addr = 
-      if Addr.(cur_addr >= (addr ++ len)) then
-        return ()
-      else
-        yield cur_addr >>=  fun () -> 
-        let next_addr = Addr.succ cur_addr in
-        gen_next_addr next_addr
-    in run (gen_next_addr Addr.(succ addr))
 
   let range_seq_of_conflicts ~mem addr len = 
-    let range_seq = seq_of_addr_range addr len in
+    let range_seq = Core.seq_of_addr_range addr len in
     Seq.filter range_seq ~f:mem
 
   let conflict_seq_at superset addr =
@@ -393,7 +438,7 @@ module Occlusion = struct
 
   let with_data_of_insn superset at ~f =
     let len = Inspection.len_at superset at in
-    let body = seq_of_addr_range at len in
+    let body = Core.seq_of_addr_range at len in
     Seq.iter body ~f
 
   let conflicts_within_insn_at superset ?mem ?conflicts addr =
@@ -536,58 +581,12 @@ let get_callers superset addr =
         not (is_fall_through superset caller addr))
   else []
 
-let sexp_of_mem mem = 
-  let endianness = Memory.endian mem in
-  let maddr = Memory.min_addr mem in
-  let bstr_mem = Memory.to_string mem in
-  Tuple3.sexp_of_t 
-    Addr.sexp_of_endian
-    Addr.sexp_of_t
-    String.sexp_of_t (endianness, maddr, bstr_mem)
-
-let mem_of_sexp sexp_mem =
-  let (endianness, maddr, mem) = 
-    Tuple3.t_of_sexp
-      Addr.endian_of_sexp
-      Addr.t_of_sexp
-      String.t_of_sexp sexp_mem in
-  let mem = Bigstring.of_string mem in
-  Memory.create endianness maddr mem |> ok_exn
-
-let insn_map_to_string insn_map =
-  Sexp.to_string @@ Addr.Map.sexp_of_t 
-    (fun (mem, _) -> sexp_of_mem mem) insn_map
-
-let insn_map_of_string map_str = 
-  let map_sexp = Sexp.of_string map_str in
-  Addr.Map.t_of_sexp (fun m -> mem_of_sexp m, None) map_sexp
-
 let meta_of_string meta_str = 
   let sexp_meta = Sexp.of_string meta_str in
   Arch.t_of_sexp sexp_meta
 
 let meta_to_string superset = 
   Sexp.to_string (Arch.sexp_of_t superset.arch)
-
-let import bin =
-  let insn_risg = Gml.parse (bin ^ ".graph") in
-  let map_str   = In_channel.read_all (bin ^ ".map") in
-  let insn_map  = insn_map_of_string map_str in
-  let meta_str  = In_channel.read_all (bin ^ ".meta") in
-  let arch      = meta_of_string meta_str in
-  let superset  = of_components ~insn_risg ~insn_map arch in
-  superset
-
-let export bin superset = 
-  let graph_f   = Out_channel.create (bin ^ ".graph") in
-  let formatter = Format.formatter_of_out_channel graph_f in
-  let () = Gml.print formatter superset.insn_risg in
-  let () = Out_channel.close graph_f in
-  let insn_map = get_map superset in
-  let map_str  = insn_map_to_string insn_map in
-  Out_channel.write_all (bin ^ ".map") ~data:map_str;
-  let meta_str  = meta_to_string superset in
-  Out_channel.write_all (bin ^ ".meta") ~data:meta_str
 
 let export_addrs bin superset =
   let insn_map = get_map superset in
@@ -597,6 +596,15 @@ let export_addrs bin superset =
   let addrs_file = Out_channel.create ("./" ^ base ^ "_addrs.txt") in
   Out_channel.output_lines addrs_file addrs
 
+let export bin superset = 
+  let graph_f   = Out_channel.create (bin ^ ".graph") in
+  let formatter = Format.formatter_of_out_channel graph_f in
+  let () = ISG.format_isg ~format:formatter superset in
+  let () = Out_channel.close graph_f in
+  export_addrs bin superset;
+  let meta_str  = meta_to_string superset in
+  Out_channel.write_all (bin ^ ".meta") ~data:meta_str
+  
 let with_img ~accu img ~f =
   let segments = Table.to_sequence @@ Image.segments img in
   Seq.fold segments ~init:accu ~f:(fun accu (mem, segment) ->
@@ -604,17 +612,21 @@ let with_img ~accu img ~f =
         f ~accu mem
       else accu 
     )
-
+  
 let superset_of_img ?f ~backend img =
   let arch = Image.arch img in
   let segments =   Image.memory img in
   let main_entry = Image.entry_point img in
   let filename = Image.filename img in
+  let update = Option.value f ~default:(fun (m, i) a -> a) in
+  let f (mem, insn) superset =
+    let superset = Core.add superset mem insn in
+    update (mem, insn) superset in
   let superset =
     of_components ~main_entry ?filename ~segments arch in
   with_img ~accu:superset img
     ~f:(fun ~accu mem -> 
-        Core.update_with_mem ~backend accu mem ?f
+        Core.update_with_mem ~backend accu mem ~f
       )
 
 let superset_disasm_of_file ?(backend="llvm") ?f binary =
@@ -624,3 +636,23 @@ let superset_disasm_of_file ?(backend="llvm") ?f binary =
         binary Error.pp err;
     );*)
   superset_of_img ~backend img ?f
+
+let import backend bin graph =
+  let img, errs = Image.create ~backend bin |> ok_exn in
+  let insn_risg = ISG.parse_isg graph in
+  let arch = Image.arch img in
+  let segments =   Image.memory img in
+  let main_entry = Image.entry_point img in  
+  let insn_map  = Addr.Map.empty in
+  let f (mem, insn) superset =
+    add_to_map superset mem insn in
+  let addrs = Seq.of_list (OG.fold_vertex List.cons insn_risg []) in
+  let superset  =
+    of_components ~main_entry ~insn_risg ~insn_map ~segments arch in
+  with_img ~accu:superset img
+    ~f:(fun ~accu mem -> 
+        Core.update_with_mem ~backend ~addrs accu mem ~f
+      )
+
+
+    

@@ -13,10 +13,10 @@ module Cmdline = struct
   open Cmdliner
 
   let create 
-      checkpoint disassembler ground_truth_bin ground_truth_file target
+      import export disassembler ground_truth_bin ground_truth_file target
       metrics_format phases analyses trim_method cut setops save_dot save_gt
       save_addrs collect_report dforest tp_threshold rounds featureset = 
-    Fields.create ~checkpoint ~disassembler ~ground_truth_bin
+    Fields.create ~import ~export ~disassembler ~ground_truth_bin
       ~ground_truth_file ~target ~metrics_format ~phases ~analyses ~trim_method
       ~setops ~cut ~save_dot ~save_gt ~save_addrs ~collect_report
       ~dforest ~tp_threshold ~rounds ~featureset
@@ -47,7 +47,7 @@ module Cmdline = struct
       `S "OPTIONS";
     ] in
     Term.(const create 
-          $ckpt $(disassembler ()) $ground_truth_bin
+          $import_superset $export_superset $(disassembler ()) $ground_truth_bin
           $ground_truth_file $target $Opts.metrics_fmt $invariants
           $analyses_opt $trimmer $cut_opt $setops_opt $save_dot $save_gt
           $save_addrs $collect_reports $decision_trees_opt

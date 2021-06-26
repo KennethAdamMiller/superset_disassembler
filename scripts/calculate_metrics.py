@@ -44,7 +44,7 @@ def avg(l):
         return s / n
 
 raw_superset = [superset + removed for superset, removed in zip(raw_superset, total_removed)]
-assert len(raw_superset)==len(possible_fp), ("expected %d, got %d" % (len(raw_superset), len(possible_fp)))
+#assert len(raw_superset)==len(possible_fp), ("expected %d, got %d" % (len(raw_superset), len(possible_fp)))
 #assert len(raw_superset)==len(loop_reduction)
 print("Total binaries: ", len(mem_size))
 print("Total false negatives: ", sum(false_negatives))

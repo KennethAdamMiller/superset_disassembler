@@ -61,7 +61,7 @@ let superset_to_length_list superset =
    will be interpreted appropriately by the superset conservative disassembler *)
 let test_hits_every_byte test_ctxt =
   let memory, arch = make_params "\x2d\xdd\xc3\x54\x55" in
-  let raw_superset = Superset.Core.disasm
+  let raw_superset = Superset.Core.disasm_all
       ~accu:[] ~f:List.cons arch memory |> ok_exn in
   let sizes = superset_to_length_list raw_superset in
   let expected_results = List.rev [ 5; 2; 1; 1; 1; ] in
@@ -74,7 +74,7 @@ let of_mem arch mem =
 let get_bads superset mem =
   let maddr  = Memory.min_addr mem in
   let l = Memory.length mem in
-  let bds = Superset.Occlusion.seq_of_addr_range maddr l in
+  let bds = Superset.Core.seq_of_addr_range maddr l in
   Seq.filter bds
     ~f:(Superset.Inspection.is_bad_at superset)
 

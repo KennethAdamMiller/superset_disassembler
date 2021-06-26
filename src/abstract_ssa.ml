@@ -10,6 +10,20 @@ let stmt_def_vars =
       else accu
   end
 
+let stmt_def_mem =
+  object(self)
+    inherit [Exp.Set.t] Stmt.visitor
+    method enter_load ~mem ~addr e s accu =
+      Set.add accu addr
+  end
+
+let stmt_use_mem =
+  object(self)
+    inherit [Exp.Set.t] Stmt.visitor
+    method enter_store ~mem ~addr ~exp e s accu =
+      Set.add accu addr
+  end
+  
 let stmt_use_vars =
   object(self)
     inherit [Exp.Set.t] Stmt.visitor
@@ -36,6 +50,12 @@ let stmt_use_freevars =
       in Set.union accu free_vars
   end
 
+let def_mem_ssa bil = 
+  stmt_def_mem#run bil Exp.Set.empty
+
+let use_mem_ssa bil =
+  stmt_use_mem#run bil Exp.Set.empty
+  
 let def_ssa bil =
   stmt_def_vars#run bil Exp.Set.empty
 

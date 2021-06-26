@@ -80,21 +80,17 @@ let setops_opt =
     value & opt_all ((pair ~sep:'=' string & pair (enum (list_setops)) & pair string string)) []
     & info ["setop"] ~docv:setops_doc ~doc
   ) 
-  
-type checkpoint = 
-  | Import
-  | Export
-  | Update
-[@@deriving sexp]
-let list_checkpoints = [
-  "Import", Import;
-  "Export", Export;
-  "Update", Update;
-]
-let ckpt = 
-  let doc = "Import or Export the disassembly graph and map." in
+
+
+let import_superset = 
+  let doc = "Import the disassembly graph and map." in
   Cmdliner.Arg.(
-    value & opt (some (enum list_checkpoints)) None & info ["checkpoint"] ~doc
+    value & opt (some string) None & info ["import"] ~doc
+  )
+let export_superset = 
+  let doc = "Export the disassembly graph and map." in
+  Cmdliner.Arg.(
+    value & opt (some string) None & info ["export"] ~doc
   )
 
 type trimmer = Superset.t -> Superset.t [@@deriving sexp]
@@ -130,7 +126,8 @@ let cut_opt =
 
   
 type t = {
-  checkpoint         : checkpoint option;
+  import             : string option;
+  export             : string option;
   disassembler       : string;
   ground_truth_bin   : string option;
   ground_truth_file  : string option;
@@ -275,7 +272,7 @@ let build_metrics trim phases =
       | Some (name,p) ->
          let accu = (Addr.Hash_set.create ()) in
          let instance_trim = Metrics.make_gatherer accu in
-         (fun x -> instance_trim @@ trim x), Map.set metrics name accu
+         (fun x -> trim @@ instance_trim x), Map.set metrics name accu
       | None -> trim,metrics
     )
 
@@ -420,7 +417,7 @@ let collect_results superset options pmap results metrics setops
     ) in
   let _ =
     if options.collect_report then (
-      print_endline "Report:";
+      print_endline @@ sprintf "Report with %d tps:" @@ Hash_set.length tps;
       let threshold = (pnts_of_percent options.tp_threshold) in
       let init = String.Map.empty in
       let pmap =
@@ -484,8 +481,7 @@ let collect_results superset options pmap results metrics setops
                   key Map.(length d) in
         print_endline s;
         Map.iteri !data ~f:(fun ~key ~data ->
-            if (not Superset.Core.(mem superset key))
-               && Hash_set.(mem tps key) then (
+            if Hash_set.(mem tps key) then (
               let memstr =
                 match Superset.Core.lookup superset key with
                 | Some (mem, _ ) -> Memory.str () mem
@@ -573,9 +569,10 @@ module With_options(Conf : Provider)  = struct
   open Format
 
   let with_analyses superset analyses =
-    List.fold analyses ~init:superset ~f:(fun superset analyze ->
-        analyze superset
-      )
+    Trim.Default.trim @@
+      List.fold analyses ~init:superset ~f:(fun superset analyze ->
+          analyze superset
+        )
  
   let process_cut superset options results =
     match options.cut with 
@@ -664,31 +661,18 @@ module With_options(Conf : Provider)  = struct
       | None -> ()
     )
 
+  (* TODO rename checkpoint *)
   let checkpoint bin invariants =
     let backend = options.disassembler in
-    let dis_method x =
-      let f x =
-        Superset.superset_disasm_of_file ~backend x
-          ~f:(Invariants.tag ~invariants:(Invariants.tag_success::invariants))
-      in time ~name:"disasm binary" f x in
-    match options.checkpoint with
-    | Some Import -> 
-       time ~name:"import" Superset.import bin
-    (*with_invariants superset invariants*)
-    | Some Export ->
-       let superset = dis_method bin in
-       (*let superset = with_invariants superset invariants in*)
-       Superset.export bin superset;
-       superset
-    | Some Update ->
-       let superset = Superset.import bin in
-       (*let superset = with_invariants superset invariants in*)
-       Superset.export bin superset;
-       superset
-    | None ->
-       let superset = dis_method bin in
-       (*with_invariants superset invariants*)
-       superset
+    match options.import with
+    | Some suffix ->
+      let graph = bin ^ "_" ^ suffix ^ ".graph" in
+      time ~name:"import" Superset.import options.disassembler bin
+        graph
+    | None -> 
+      let invariants = (Invariants.tag_success::invariants) in
+      Superset.superset_disasm_of_file ~backend bin
+        ~f:(Invariants.tag ~invariants)
 
   let with_options superset =
     let phases = options.phases in
@@ -698,29 +682,19 @@ module With_options(Conf : Provider)  = struct
     let (trim,metrics) = build_metrics trim phases in
     let (trim,tracker) = build_tracker trim phases in
     let (trim,setops) = build_setops trim options.setops in
-    print_endline @@
-      sprintf "\t num branches: %d"
-        Hash_set.(length @@ Superset.get_branches superset);
     let superset = trim superset in
     let after = Superset.Inspection.count superset in
     print_endline @@
       sprintf "invariants: before %d, after %d, removed %d"
         before after (before - after);
-    print_endline @@
-      sprintf "\t num branches: %d"
-        Hash_set.(length @@ Superset.get_branches superset);
     let before = after in
     let superset = with_analyses superset analyses in
     let superset = trim superset in
     let after = Superset.Inspection.count superset in
     print_endline @@
-      sprintf "analyses: before %d, after %d, removed %d"
-        before after (before - after);
+      sprintf "%d analyses: before %d, after %d, removed %d"
+        List.(length analyses) before after (before - after);
     let superset,pmap = converge options superset in
-    let _ =
-      if options.save_addrs then
-        Superset.export_addrs options.target superset
-      else () in
     let results = apply_setops setops options.setops in
     let results =
       collect_results superset
@@ -734,17 +708,31 @@ module With_options(Conf : Provider)  = struct
       | Standard -> Metrics.format_standard in
     let superset = checkpoint options.target options.phases in
     let superset = with_options superset in
+    print_endline "with_options finished";
+    let () =
+      match options.export with
+      | None -> ()
+      | Some suffix -> (
+        (*with_invariants superset invariants*)
+        let f =
+          if String.equal suffix "" then options.target else
+            (options.target ^ "_" ^ suffix) in
+        Superset.export f superset;
+      ) in
     (* TODO duplicate of collect_results *)
     match options.ground_truth_bin with
     | Some bin ->
-       let _ = 
-         if options.save_gt then
-           let gt = Metrics.ground_truth_of_unstripped_bin
-                      bin |> ok_exn in
-           let gt = Seq.map gt ~f:Addr.to_string in
-           Seq.iter gt ~f:print_endline;
-           exit 0
-         else () in
+       if options.save_gt then (
+         let gt = Metrics.ground_truth_of_unstripped_bin
+                    bin |> ok_exn in
+         let gt = Seq.map gt ~f:Addr.to_string in
+         let base = Filename.basename bin in
+         let addrs_file = Out_channel.create ("./" ^ base ^ "_gt.txt")
+         in
+         Out_channel.output_lines addrs_file @@ Seq.to_list gt;
+         Out_channel.flush addrs_file;
+         Out_channel.close addrs_file;
+       ) else ();
        (* TODO replace gather_metrics with report *)
       Metrics.gather_metrics ~bin superset |> format |> print_endline
     | None -> ()

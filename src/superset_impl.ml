@@ -9,7 +9,6 @@ module Dis = Disasm_expert.Basic
 type elem = mem * (Dis.full_insn option)
 
 module G = Graphlib.Make(Addr)(Unit)
-module I = Graph.Imperative.Digraph.ConcreteBidirectional(Addr)
 
 type t = {
   arch        : arch;
@@ -28,7 +27,6 @@ type t = {
   (* visited *)
   (* union_find *)
 }
-
 
 let of_components
     ?main_entry ?insn_map ?insn_risg ?segments ?endianness ?filename arch =
@@ -108,30 +106,7 @@ module StrongComponents = Graph.Components.Make(M)
 module P = Graph.Builder.P(Graphlib.To_ocamlgraph(G))
 module Oper = Graph.Oper.Make(P)
 module Dfs        = Graph.Traverse.Dfs(M)
-module GmlOut     = Graph.Gml.Print(M)(struct 
-    let node (label : M.V.label) = 
-      [ "addr", Graph.Gml.String (Addr.to_string label) ]
-    let edge _ = []
-  end)
-module GmlIn = Graph.Gml.Parse(P)(struct
-    let node (labels : Graph.Gml.value_list) = 
-      match labels with
-      | [] -> assert false
-      | fail :: [] -> assert false
-      | (id, idval) :: (s, gmlval) :: _ -> 
-        match idval, gmlval with
-        | Graph.Gml.Int(idval), Graph.Gml.String(addr) -> 
-          M.V.label Addr.(of_string addr)
-        | _ -> assert false
 
-    let edge (labels : Graph.Gml.value_list) = ()
-  end)
-
-module Gml = struct
-  include GmlIn
-  include GmlOut
-end
-  
 type colored_superset = G.t * Addr.Hash_set.t String.Map.t
                         * elem Addr.Map.t
                       
