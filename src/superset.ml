@@ -581,13 +581,6 @@ let get_callers superset addr =
         not (is_fall_through superset caller addr))
   else []
 
-let meta_of_string meta_str = 
-  let sexp_meta = Sexp.of_string meta_str in
-  Arch.t_of_sexp sexp_meta
-
-let meta_to_string superset = 
-  Sexp.to_string (Arch.sexp_of_t superset.arch)
-
 let export_addrs bin superset =
   let insn_map = get_map superset in
   let addrs = Map.keys insn_map in
@@ -601,9 +594,7 @@ let export bin superset =
   let formatter = Format.formatter_of_out_channel graph_f in
   let () = ISG.format_isg ~format:formatter superset in
   let () = Out_channel.close graph_f in
-  export_addrs bin superset;
-  let meta_str  = meta_to_string superset in
-  Out_channel.write_all (bin ^ ".meta") ~data:meta_str
+  export_addrs bin superset
   
 let with_img ~accu img ~f =
   let segments = Table.to_sequence @@ Image.segments img in

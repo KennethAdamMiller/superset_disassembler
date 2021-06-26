@@ -1,24 +1,12 @@
 ARG TAG=master
-FROM superset_disasm:$TAG
+FROM superset_disasm_flambda:${TAG}
 ARG testsize=99999
 ARG features=TrimFixpointGrammar
-
-##### SPEC CPU 2006 performance
-WORKDIR $HOME/workspace/cpu2006-103
-#RUN unzip -q cpu2006-103.zip && cd cpu2006-103/ && . ./shrc && $(printf "yes\n") | ./install.sh
-#COPY Example-linux64-amd64-gcc41.cfg ./cpu2006-103/config/
-RUN . ./shrc && ./bin/runspec --noreport --config=Example-linux64-amd64-gcc41.cfg --action=build gcc perlbench bzip2 gcc mcf gobmk hmmer sjeng libquantum h264ref omnetpp astar xalancbmk
 
 
 ##### superset_disasm performance
 WORKDIR $HOME/workspace/superset_disasm
 RUN make clean && make && chmod u+x scripts/*
-RUN sudo apt-get update && sudo apt-get install parallel time -y
-#RUN echo "testsize=${testsize}" && scripts/get_binaries.sh && tail -n $testsize binaries.txt > tmp && mv tmp binaries.txt && scripts/strip_binaries.sh && scripts/run_metrics.sh #&& scripts/run_analyses.sh
 RUN echo "testsize=${testsize}, features=${features}" && scripts/run_metrics.sh ${features} ${testsize} # scripts/strip_binaries.sh && scripts/run_analyses.sh
 RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/opam/workspace/rq3_binaries
 RUN scripts/rq3.sh > rq3.txt
-
-##### multiverse performance
-WORKDIR $HOME/workspace/multiverse
-RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh

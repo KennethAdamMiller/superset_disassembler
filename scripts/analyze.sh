@@ -1,8 +1,8 @@
 #!/bin/bash
 
-echo "Usage: $0 <features>"
 export binary=${1}
 export features=${2}
+echo "Usage: $0 <features>=${features}"
 cachedir=${HOME}/workspace/cache
 mkdir -p ${cachedir}
 
@@ -29,15 +29,15 @@ analyze() {
 		echo "Computing ground truth"
 		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --ground_truth_bin="${1}" --save_gt --phases="" --analyses="" --enable_feature="" --rounds=1 > /dev/null;
 	    fi
-	    if [[ (! -f "${cachedir}/$(basename ${1})_superset.graph") ]]; then
+	    if [[ (! -f "${cachedir}/$(basename ${1})_superset.graph.gz") ]]; then
 		echo "Computing raw superset"
 		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --export=superset --phases="" --analyses="" --enable_feature="" --rounds=1 > /dev/null;
 	    fi
-	    if [[ (! -f "${cachedir}/$(basename ${1})_invariants.graph") ]]; then
+	    if [[ (! -f "${cachedir}/$(basename ${1})_invariants.graph.gz") ]]; then
 		echo "Computing superset - invariants"
 		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=superset --export=invariants --analyses="" --enable_feature="" --rounds=1 > /dev/null;
 	    fi
-	    if [[ (! -f "${cachedir}/$(basename ${1})_analyses.graph") ]]; then
+	    if [[ (! -f "${cachedir}/$(basename ${1})_analyses.graph.gz") ]]; then
 		echo "Computing superset - invariants - analyses"
 		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=invariants --export=analyses --phases="" --enable_feature="" --rounds=1 > /dev/null;
 	    fi
@@ -48,13 +48,15 @@ analyze() {
 		printf "\t... error on file ${f}, will need to reprocess\n"
 		has_error=true
 	    fi
-	    gzip "./$(basename ${1})*.graph"
-	    gzip "./$(basename ${1})*.map"
-	    gzip "./$(basename ${1})*_addrs.txt"
+	    gzip "./$(basename ${1})_superset.graph"
+	    gzip "./$(basename ${1})_invariants.graph"
+	    gzip "./$(basename ${1})_analyses.graph"
+	    gzip "./$(basename ${1})_features.graph"
 	fi
 	printf "Finished with ${name}\n"
     done
     cd "${workdir}"
     ${disasm_dir}/scripts/collect_results.sh
+    cd ..
 }
 export -f analyze

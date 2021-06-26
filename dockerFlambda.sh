@@ -1,5 +1,5 @@
 echo "Usage: $0 <features>"
-TAG=$(git branch --show-current)-$(git rev-parse --short HEAD)
+TAG=$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)
 echo "TAG=${TAG}"
 
 sudo docker build . -f Dockerfile.flambda \
