@@ -1,3 +1,4 @@
+#!/bin/bash
 export TODO=?
 
 eval $(opam config env)

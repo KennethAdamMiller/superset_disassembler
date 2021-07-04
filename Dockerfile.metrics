@@ -7,6 +7,6 @@ ARG features=TrimFixpointGrammar
 ##### superset_disasm performance
 WORKDIR $HOME/workspace/superset_disasm
 RUN make clean && make && chmod u+x scripts/*
-RUN echo "testsize=${testsize}, features=${features}" && scripts/run_metrics.sh ${features} ${testsize} # scripts/strip_binaries.sh && scripts/run_analyses.sh
+RUN echo "testsize=${testsize}, features=${features}" && scripts/run_metrics.sh ${features} ${testsize} 
 RUN git clone https://github.com/KennethAdamMiller/RQ3_binaries.git /home/opam/workspace/rq3_binaries
 RUN scripts/rq3.sh > rq3.txt

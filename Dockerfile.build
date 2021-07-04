@@ -1,5 +1,5 @@
 ARG BAPVERSION=2.1.0
-FROM binaryanalysisplatform/bap:${BAPVERSION}
+FROM bap:${BAPVERSION}
 
 RUN mkdir -p /home/opam/workspace/superset_disasm
 ENV PATH="/home/opam/.opam/4.09/bin:"$PATH
@@ -14,4 +14,4 @@ USER opam
 
 WORKDIR /home/opam/workspace/superset_disasm
 ARG CACHEBUST
-RUN rm setup.data ; eval `opam config env` ; opam depext --install bap-byteweight-frontend landmarks ; make clean ; make ; opam pin add superset_disasm ./ -y --use-internal-solver ; pushd plugin ; ./build.sh ; popd
+RUN rm setup.data && eval `opam config env` && opam depext --install bap-byteweight-frontend landmarks && opam pin add superset_disasm ./ -y --use-internal-solver -n && opam depext --install superset_disasm && cd plugin && ./build.sh && cd ..

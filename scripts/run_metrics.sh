@@ -13,10 +13,9 @@ rm -f false_negatives.txt
 rm -f reduced_occlusion.txt
 find results -size 0 -exec rm {} \;
 
-source analyze.sh
+source ./scripts/analyze.sh "" ${features}
 
 bindir=${HOME}/workspace/
-export jobs=$(( $(nproc --all) + 1 )) 
 #command=' [[ -f results/$(basename {.}).metrics ]] || ~/workspace/superset_disassembler/superset_disasm.native --checkpoint=Export --ground_truth {.} --target {.} --enable_feature="${1}" --rounds=2 --collect_reports >> results/$(basename {.})_metrics.txt '
 #TrimLimitedClamped,TrimFixpointSSA,TrimFixpointGrammar
 command=' analyze {.} ${features} '
@@ -28,6 +27,7 @@ run() {
     find ${bindir}/${subdir} -type f -print | grep -v "*.graph" | grep -v "*.map" | head -n ${testsize} | parallel -u -j${jobs} ${command}
 }
 
+export jobs=$(( $(nproc --a) + 1 ))
 run ${jobs} x86_64-binaries/elf/coreutils
 
 run ${jobs} x86_64-binaries/elf/findutils

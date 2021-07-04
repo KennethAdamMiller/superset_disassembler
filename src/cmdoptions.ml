@@ -365,13 +365,10 @@ let converge options superset =
         List.iter Map.(keys feature_pmap) ~f:(fun addr -> 
             Traverse.mark_descendent_bodies_at superset ~visited:cache addr
           );
-        Hash_set.iter visited ~f:(fun v ->
-            Superset.Core.clear_bad superset v;
-          );
         (* A visited address is expected to be a true positive, but under
          * some unexpectedly complicated possibilities at edge corner
          * cases, they could get marked bad by belonging on the edge. *)
-        (*Features.clear_each superset visited;*)
+        Features.clear_each superset visited;
         print_endline
         @@ sprintf "superset marked bad after callsite descendant removal: %d"
              (Hash_set.length @@ Superset.Core.copy_bad superset);
@@ -399,22 +396,47 @@ let converge options superset =
 let collect_results superset options pmap results metrics setops
       tracker =
   let ground_truth_file = options.ground_truth_file in
-  let tps = 
+  let funcs,tps = 
     match ground_truth_file with
     | Some (gt) -> (
       let min_addr = Superset.Inspection.get_base superset in
       let tp = read_addrs Addr.(bitwidth min_addr) gt in
       let tps = Addr.Hash_set.create () in
       List.iter tp ~f:(Hash_set.add tps);
-      tps
+      tps,Hash_set.copy tps
     )
     | None -> (
       match options.ground_truth_bin with
       | Some (gt) ->
          print_endline "Using gt bin";
+         let funcs = Addr.Hash_set.create () in
+         Seq.iter (ground_truth_of_unstripped_bin gt |> ok_exn)
+           ~f:(Hash_set.add funcs);
+         funcs,
          Metrics.true_positives superset gt
-      | None -> Addr.Hash_set.create () 
+      | None -> Addr.Hash_set.create (),Addr.Hash_set.create ()
     ) in
+  let conflicts = Superset.Occlusion.find_all_conflicts superset in
+  let conflicted_starts = Hash_set.fold funcs ~init:0 ~f:(fun count start ->
+                  if Set.mem conflicts start then count + 1 else count
+                ) in
+  print_endline @@ sprintf "There are %d starts that are in conflict"
+                     conflicted_starts;
+  let occluded_starts =
+    Hash_set.fold funcs ~init:0 ~f:(fun occluded start ->
+        let behind = Addr.(start -- 20) in
+        let range = Superset.Core.seq_of_addr_range behind 21 in
+        let range = Seq.filter range ~f:(fun v -> not Addr.(v = start)) in
+        if Seq.exists range 
+          ~f:(fun current ->
+            Seq.exists
+              (Superset.Occlusion.conflict_seq_at superset current)
+              ~f:(fun conflict -> Addr.((not (conflict = current))
+                                        && conflict = start)
+              )) then occluded + 1 else occluded
+      ) in
+  print_endline @@ sprintf "There are %d starts that are occlusive"
+                     occluded_starts;
   let _ =
     if options.collect_report then (
       print_endline @@ sprintf "Report with %d tps:" @@ Hash_set.length tps;

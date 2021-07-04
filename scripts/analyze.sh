@@ -1,12 +1,11 @@
 #!/bin/bash
 
-export binary=${1}
-export features=${2}
-echo "Usage: $0 <features>=${features}"
-cachedir=${HOME}/workspace/cache
-mkdir -p ${cachedir}
-
 analyze() {
+    export binary=${1}
+    export features=${2}
+    echo "Usage: $0 <bin>=${binary} <features>=${features}"
+    cachedir=${HOME}/workspace/cache
+    mkdir -p ${cachedir}
     src=$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)
     disasm_dir=${HOME}/workspace/superset_disasm/
     workdir="${disasm_dir}/${src}_results"
@@ -20,8 +19,8 @@ analyze() {
 	has_error=false
         name="${workdir}/$(basename ${1}).metrics"
 	if [[ (! -f "${workdir}/${name}") || (-z $(cat "${workdir}/${name}" | grep "True positives")) ]]; then
-	    echo "Processing ${1} for ${2}"
 	    echo "name=${name}"
+	    echo "Processing ${name} for ${features}"
 	    rm -f "${name}"
 	    cp "${1}" ./
 	    strip "./$(basename ${1})"
