@@ -10,20 +10,15 @@ exception Bad_user_input
 exception Unknown_arch
 exception No_input
 
-type invariant =
-  Superset.t -> mem -> Dis.full_insn option -> Brancher.dests
-  -> Superset.t [@@deriving sexp]
 let invariants_doc = List.(to_string ~f:fst Invariants.default_tags)
 let invariants =
   let doc = "Specify the desired trim phases to run." in
   Cmdliner.Arg.(
-    value & opt ((list (enum Invariants.default_tags)))
-              ((Invariants.default_funcs))
+    value & opt (list string)
+              (List.map Invariants.default_tags ~f:fst)
     & info ["phases"] ~docv:invariants_doc ~doc
   )
 
-type analysis =
-  Superset.t -> Superset.t [@@deriving sexp]
 let tag_loop_contradictions =
   Sheathed.tag_loop_contradictions ?min_size:None
 let tag_grammar  = 
@@ -39,8 +34,8 @@ let analyses_doc = List.(to_string ~f:fst (list_analyses))
 let analyses_opt =
   let doc = "Select macro level analyses to run" in
   Cmdliner.Arg.(
-    value & opt ((list (enum list_analyses)))
-              (([Sheathed.tag_loop_contradictions]))
+    value & opt ((list string))
+              (["Strongly Connected Component Data"])
     & info ["analyses"] ~docv:analyses_doc ~doc
   )
 
@@ -93,12 +88,14 @@ let export_superset =
     value & opt (some string) None & info ["export"] ~doc
   )
 
-type trimmer = Superset.t -> Superset.t [@@deriving sexp]
+type trimmer = | Simple
+               | DeadBlockResistant
+               | Disabled [@@deriving sexp]
 let list_trimmers = [
-  "Simple", Trim.Default.trim;
+  "Simple", Simple;
   (*"Memoried", Memoried;*)
-  "DeadBlockResistant", Trim.DeadblockTolerant.trim;
-  "Disabled", Trim.Disabled.trim;
+  "DeadBlockResistant", DeadBlockResistant;
+  "Disabled", Disabled;
 ]
 let trimmer_doc =
   sprintf
@@ -107,7 +104,7 @@ let trimmer_doc =
 let trimmer =
   let doc = "Specify the desired trim reduction implementation to run." in
   Cmdliner.Arg.(
-    value & opt (enum list_trimmers) (Trim.Disabled.trim)
+    value & opt (enum list_trimmers) (Simple)
     & info ["trimmer"] ~docv:trimmer_doc ~doc
   )
   
@@ -133,8 +130,8 @@ type t = {
   ground_truth_file  : string option;
   target             : string;
   metrics_format     : format_as;
-  phases             : invariant list;
-  analyses           : analysis list;
+  phases             : string list;
+  analyses           : string list;
   trim_method        : trimmer;
   cut                : (cut * string * int) option;
   setops             : (string * (setop * (string * string))) list;
@@ -696,10 +693,26 @@ module With_options(Conf : Provider)  = struct
       Superset.superset_disasm_of_file ~backend bin
         ~f:(Invariants.tag ~invariants)
 
+  let args_to_funcs args funcs =
+    let l = List.filter_map args
+      ~f:(fun arg ->
+        List.find funcs ~f:(fun (name,f) ->
+            String.equal arg name
+          )
+      ) in
+    List.map l ~f:snd    
+      
+  let phases =
+    args_to_funcs options.phases Invariants.default_tags
+
+  let analyses = args_to_funcs options.analyses list_analyses
+
   let with_options superset =
-    let phases = options.phases in
-    let analyses = options.analyses in
-    let trim = options.trim_method in
+    let trim =
+      match options.trim_method with
+      | Simple -> Trim.Default.trim
+      | DeadBlockResistant -> Trim.DeadblockTolerant.trim
+      | Disabled -> Trim.Disabled.trim in
     let before = Superset.Inspection.count superset in
     let (trim,metrics) = build_metrics trim phases in
     let (trim,tracker) = build_tracker trim phases in
@@ -728,7 +741,7 @@ module With_options(Conf : Provider)  = struct
     let format = match options.metrics_format with
       | Latex -> Metrics.format_latex
       | Standard -> Metrics.format_standard in
-    let superset = checkpoint options.target options.phases in
+    let superset = checkpoint options.target phases in
     let superset = with_options superset in
     print_endline "with_options finished";
     let () =
