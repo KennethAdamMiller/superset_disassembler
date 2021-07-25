@@ -21,8 +21,7 @@ Library superset_disassemblers
   Path:                 src/
   Install:		true
   CompiledObject:	best
-  BuildDepends:		bap, core_kernel, cmdliner, graphlib, ppx_inline_test, bap-future, landmarks.ppx
-  XMetaExtraLines:      ppxopt = "landmarks.ppx"
+  BuildDepends:		bap, core_kernel, cmdliner, graphlib, ppx_inline_test, bap-future #, landmarks.ppx
   Modules:		
                         Superset,
                         Metrics,
@@ -53,17 +52,17 @@ Executable superset_disasm
   Install:        	true
   MainIs:	  	superset_disasm.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx, bap-future
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, bap-future #,landmarks.ppx
 
-Executable with_report
+Executable with_distribution
   Path:			src/
   Install:        	true
-  MainIs:	  	with_report.ml
+  MainIs:	  	with_distribution.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, landmarks.ppx, bap-future
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, bap-future #,landmarks.ppx
 
 
-Executable test_superset
+Executable test_superset_disasm
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
   Install:		false

@@ -3,6 +3,7 @@
 analyze() {
     export binary=${1}
     export features=${2}
+    export from=${3}
     echo "Usage: $0 <bin>=${binary} <features>=${features}"
     cachedir=${HOME}/workspace/cache
     mkdir -p ${cachedir}
@@ -17,10 +18,10 @@ analyze() {
     has_error=true
     while ${has_error}; do
 	has_error=false
-        name="${workdir}/$(basename ${1}).metrics"
+        name="${workdir}/$(basename ${1})_${features}.metrics"
 	if [[ (! -f "${workdir}/${name}") || (-z $(cat "${workdir}/${name}" | grep "True positives")) ]]; then
 	    echo "name=${name}"
-	    echo "Processing ${name} for ${features}"
+	    echo "Processing ${workdir}/$(basename ${1}) for ${features}"
 	    rm -f "${name}"
 	    cp "${1}" ./
 	    strip "./$(basename ${1})"
@@ -40,17 +41,28 @@ analyze() {
 		echo "Computing superset - invariants - analyses"
 		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=invariants --export=analyses --phases="" --enable_feature="" --rounds=1 > /dev/null;
 	    fi
+	    if [[ (! -f "./$(basename ${1})_${from}.graph") && (-f "./$(basename ${1})_${from}.graph.gz") ]];
+	       gzip -d "./$(basename ${1})_${from}.graph.gz"
+	    fi
 	    echo "Computing convergence"
-	    time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=analyses --export=features --ground_truth_bin="${1}" --enable_feature="${features}" --rounds=6 --collect_reports >> "${name}";
+	    time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=${from} --export=${features} --ground_truth_bin="${1}" --enable_feature="${features}" --rounds=6 --collect_reports >> "${name}";
 	    rm -f "./$(basename ${1})"
 	    if [ $? -ne 0 ]; then
 		printf "\t... error on file ${f}, will need to reprocess\n"
 		has_error=true
 	    fi
-	    gzip "./$(basename ${1})_superset.graph"
-	    gzip "./$(basename ${1})_invariants.graph"
-	    gzip "./$(basename ${1})_analyses.graph"
-	    gzip "./$(basename ${1})_features.graph"
+	    if [[ -f "./$(basename ${1})_superset.graph" ]]; then
+		gzip  "./$(basename ${1})_superset.graph"
+	    fi
+	    if [[ -f "./$(basename ${1})_invariants.graph" ]]; then
+		gzip "./$(basename ${1})_invariants.graph"
+	    fi
+	    if [[ -f "./$(basename ${1})_${from}.graph" ]]; then
+		gzip "./$(basename ${1})_${from}.graph"
+	    fi
+	    if [[ -f "./$(basename ${1})_${features}.graph" ]]; then
+		gzip "./$(basename ${1})_${features}.graph"
+	    fi
 	fi
 	printf "Finished with ${name}\n"
     done

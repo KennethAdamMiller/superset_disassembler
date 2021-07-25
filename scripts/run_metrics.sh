@@ -1,7 +1,8 @@
 #!/bin/bash
-echo "Usage: $0 <features> <numbinaries>"
+echo "Usage: $0 <features> <numbinaries> <optional starting point>"
 export features=${1}
 export testsize=${2}
+export from=${3}
 if [ -z ${testsize} ]; then testsize=9999; fi
 rm -f metrics.txt
 rm -f final_total.txt
@@ -13,12 +14,12 @@ rm -f false_negatives.txt
 rm -f reduced_occlusion.txt
 find results -size 0 -exec rm {} \;
 
-source ./scripts/analyze.sh "" ${features}
+source ./scripts/analyze.sh "" ${features} ${from}
 
 bindir=${HOME}/workspace/
 #command=' [[ -f results/$(basename {.}).metrics ]] || ~/workspace/superset_disassembler/superset_disasm.native --checkpoint=Export --ground_truth {.} --target {.} --enable_feature="${1}" --rounds=2 --collect_reports >> results/$(basename {.})_metrics.txt '
 #TrimLimitedClamped,TrimFixpointSSA,TrimFixpointGrammar
-command=' analyze {.} ${features} '
+command=' analyze {.} ${features} ${from}'
 echo "command=${command}"
 run() {
     jobs=$1
