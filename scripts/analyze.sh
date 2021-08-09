@@ -41,7 +41,7 @@ analyze() {
 		echo "Computing superset - invariants - analyses"
 		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=invariants --export=analyses --phases="" --enable_feature="" --rounds=1 > /dev/null;
 	    fi
-	    if [[ (! -f "./$(basename ${1})_${from}.graph") && (-f "./$(basename ${1})_${from}.graph.gz") ]];
+	    if [[ (! -f "./$(basename ${1})_${from}.graph") && (-f "./$(basename ${1})_${from}.graph.gz") ]]; then
 	       gzip -d "./$(basename ${1})_${from}.graph.gz"
 	    fi
 	    echo "Computing convergence"
