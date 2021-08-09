@@ -635,14 +635,12 @@ let import backend bin graph =
   let segments =   Image.memory img in
   let main_entry = Image.entry_point img in  
   let insn_map  = Addr.Map.empty in
-  let f (mem, insn) superset =
-    add_to_map superset mem insn in
   let addrs = Seq.of_list (OG.fold_vertex List.cons insn_risg []) in
   let superset  =
     of_components ~main_entry ~insn_risg ~insn_map ~segments arch in
   with_img ~accu:superset img
     ~f:(fun ~accu mem -> 
-        Core.update_with_mem ~backend ~addrs accu mem ~f
+        Core.update_with_mem ~backend ~addrs accu mem
       )
 
 

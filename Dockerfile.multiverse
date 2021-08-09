@@ -1,5 +1,5 @@
 ARG IMG=superset_disasm
-ARG TAG=$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)
+ARG TAG="$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)"
 FROM ${IMG}:${TAG}
 
 WORKDIR /home/opam/workspace
