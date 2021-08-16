@@ -16,6 +16,7 @@ install: [
   ["ocamlfind" "remove" "superset_disasm"]
   ["ocamlfind" "remove" "superset_disassemblers"]
   ["make" "install"]
+  ["make" "install-plugin"]
 ]
 
 remove: [

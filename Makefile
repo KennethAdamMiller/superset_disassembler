@@ -15,6 +15,9 @@ test: setup.data build
 all:
 	$(SETUP) -all $(ALLFLAGS)
 
+install-plugin:
+	cd plugin ; ./build.sh && ./install.sh
+
 install: setup.data
 	$(SETUP) -install $(INSTALLFLAGS)
 
