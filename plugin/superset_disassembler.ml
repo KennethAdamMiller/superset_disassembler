@@ -407,17 +407,22 @@ let tp_threshold =
   Extension.Command.parameter ~doc Extension.Type.float
     "threshold"
 
+(* TODO rename featureset to heuristics *)
 let featureset =
   let doc =
     "Specify the features used to converge upon the true positive set" in
   Extension.Command.parameter ~doc
-    Extension.Type.(list string =? Features.default_features) "features"
+    ~aliases:["enable_feature"] (* TODO remove alias enable_feature *)
+    Extension.Type.(list string =? Features.default_features)
+    "features"
 
 let invariants =
   let doc = "Specify the desired invariants to apply to the superset" in
   let deflt = List.map Invariants.default_tags ~f:fst in
   Extension.Command.parameter ~doc
+    ~aliases:["phases"] (* TODO remove phases alians *)
     Extension.Type.(list string =? deflt) "invariants"
+
   
 let trim_method =
   let doc =
