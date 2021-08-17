@@ -1,37 +1,46 @@
 open Core_kernel
 open Bap.Std
 
-type metrics
-type format_as = | Latex
-                 | Standard
-[@@deriving sexp]
-val format_standard : metrics option -> string
-val format_latex : metrics option -> string
+(* TODO remove in favor of knowledge base *)
+val ground_truth_of_unstripped_bin : string -> addr seq Or_error.t
 
-val make_mark_tracker :
-  Addr.Set.t Addr.Map.t ref -> Superset.t -> Superset.t
-val make_gatherer :
-  Addr.Hash_set.t -> Superset.t -> Superset.t
+(* TODO remove in favor of knowledge base *)
+val true_positives_of_ground_truth : Superset.t -> Addr.Set.t -> Addr.Hash_set.t
 
-(** Given a file with debug information, use the byteweight
-    symbolizer to retrieve the set of declared entrances. *)
-val ground_truth_of_unstripped_bin :
-  string -> addr seq Or_error.t
+(* TODO remove in favor of knowledge base *)
+val true_positives : Superset.t -> string -> Addr.Hash_set.t
+  
+module Cache : sig
+  open Bap_knowledge
+  open Bap_core_theory
+  open Theory
 
-(** Given a superset, and a string to a file with debug information,
-    expand the set of addresses to include all reachable instances *)
-val true_positives :
-  Superset.t -> string -> Addr.Hash_set.t
+  val occlusive_space : (program, int option) Knowledge.slot
+
+  val reduced_occlusion : (program, int option) Knowledge.slot
+
+  val false_negatives : (program, int option) Knowledge.slot
+
+  val false_positives : (program, int option) Knowledge.slot
+
+  val true_positives : (program, int option) Knowledge.slot
+
+  val function_entrances : (program, Addr.Set.t option) Knowledge.slot
+
+  val ground_truth : (program, Addr.Set.t option) Knowledge.slot
+
+  val clean_functions : (program, Addr.Set.t option) Knowledge.slot
+    
+end
 
 (** Given a file location to a debug binary and a superset, collect
     metrics on the disassembly. *)
-val gather_metrics :
-  bin:string -> Superset.t -> metrics option
-  
+val compute_metrics :
+  bin:string -> Superset.t -> unit
+     
 module Opts : sig
   (** Allow to specify a symbol file or binary *)
   val content_type : string option Cmdliner.Term.t
   (** Output the metrics either in human readable form or to a latex
       table *)
-  val metrics_fmt : format_as Cmdliner.Term.t
 end

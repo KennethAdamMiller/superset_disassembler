@@ -5,129 +5,6 @@ open Or_error
 module Linear = Disasm_expert.Linear
 exception Inconsistent_img of string
 
-type format_as = | Latex
-                 | Standard
-[@@deriving sexp]
-
-type metrics = {
-  name                : string;
-  detected_insn_count : int;
-  false_negatives     : int;
-  false_positives     : int;
-  detected_entries    : int;
-  actual_entries      : int;
-  trimmed             : int list;
-} [@@deriving sexp, bin_io]
-
-module InvariantTrackingApplicator = struct
-end
-
-module type MetricsGathererInstance = sig
-  type acc = (Addr.Hash_set.t)
-  val accu : acc
-end
-
-module MetricsGatheringReducer(M : MetricsGathererInstance) : Trim.Reducer = struct
-  type acc = M.acc
-  let accu = M.accu
-  let check_pre _ accu _ = accu
-  let check_post _ accu _ = accu
-  let check_elim _ _ _ = true
-  let mark superset s addr =
-    Hash_set.add s addr
-
-end
-
-module type PerMarkTracker = sig
-  type acc = (Addr.Set.t Addr.Map.t) ref
-  val accu : acc
-end
-
-module PerMarkTrackingReducer(M : PerMarkTracker) : Trim.Reducer =
-struct
-  type acc = M.acc
-  let accu = M.accu
-  let cur_root = ref None
-  let check_pre superset accu addr =
-    (match !cur_root with
-     | Some x ->
-       accu :=
-         Map.update !accu x ~f:(fun s ->
-             match s with
-             | None -> Addr.Set.empty
-             | Some s -> Set.add s addr
-           );
-     | None -> cur_root:=Some(addr));
-    accu
-  let check_post superset (accu : acc) addr =
-    (match !cur_root with
-     | None -> ()
-     | Some x -> if Addr.(x = addr) then cur_root := None);
-    accu
-  let check_elim _ _ _ = true
-  let mark superset accu addr =
-    let cur_root = Option.value_exn !cur_root in
-    accu :=
-      Map.update !accu cur_root ~f:(fun s ->
-          match s with
-          | None -> Addr.Set.empty
-          | Some s -> Set.add s addr
-        );
-end
-
-let make_gatherer accu = 
-  let module Instance = MetricsGatheringReducer(struct
-      type acc = (Addr.Hash_set.t )
-      let accu = accu
-    end) in
-  let module Instance = Trim.Reduction(Instance) in
-  Instance.trim 
-
-let make_mark_tracker accu =
-  let module Instance =
-    PerMarkTrackingReducer(
-    struct
-      type acc = (Addr.Set.t Addr.Map.t) ref
-      let accu = accu
-    end) in
-  let module Instance = Trim.Reduction(Instance) in
-  Instance.trim
-  
-let format_standard metrics =
-  match metrics with 
-  | Some metrics -> 
-    sprintf "%s%d\n%s%d\n%s%d\n%s%d\n%s%d" 
-      "Total instructions recovered: " metrics.detected_insn_count
-      "False negatives: " metrics.false_negatives
-      "False positives: " metrics.false_positives
-      "Detected function entrances: " metrics.detected_entries
-      "Actual function entrances: " metrics.actual_entries
-  | None -> "No metrics gathered!"
-
-let format_latex metrics = 
-  match metrics with
-  | Some metrics ->
-    (match metrics.trimmed with
-     | (phase1 :: phase2 :: _) ->
-       sprintf "%s & %d & %d & %d & %d \\\\\n"
-         metrics.name
-         metrics.false_negatives
-         phase1
-         phase2
-         metrics.detected_insn_count;
-     | _ -> "Missing trim phases")
-  | None -> "No metrics gathered!"
-
-let true_positives_of_ground_truth superset ground_truth = 
-  let true_positives = Addr.Hash_set.create () in
-  Set.iter ground_truth ~f:(fun addr -> 
-      if Superset.ISG.mem_vertex superset addr then
-        Traverse.with_descendents_at
-          ~visited:true_positives
-          superset addr;
-    );
-  true_positives
-
 let read arch ic : (string * addr * addr) list =
   let sym_of_sexp x = [%of_sexp:string * int64 * int64] x in
   let addr_of_int64 x =
@@ -149,6 +26,16 @@ let ground_truth_of_unstripped_bin bin : addr seq Or_error.t =
   else errorf
       "failed to fetch symbols from unstripped binary, command `%s'
   failed" cmd
+
+let true_positives_of_ground_truth superset ground_truth = 
+  let true_positives = Addr.Hash_set.create () in
+  Set.iter ground_truth ~f:(fun addr -> 
+      if Superset.ISG.mem_vertex superset addr then
+        Traverse.with_descendents_at
+          ~visited:true_positives
+          superset addr;
+    );
+  true_positives
   
 let true_positives superset f = 
   let function_starts = ground_truth_of_unstripped_bin f |> ok_exn
@@ -156,7 +43,7 @@ let true_positives superset f =
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
   true_positives_of_ground_truth superset ground_truth
-
+  
 let reduced_occlusion superset tp =
   let fps = Addr.Hash_set.create () in
   Hash_set.iter tp ~f:(fun addr ->
@@ -164,9 +51,9 @@ let reduced_occlusion superset tp =
         ~f:(fun x -> Hash_set.add fps x);
       Hash_set.remove fps addr;
     );
-  fps
+  fps  
 
-let false_positives superset ro = 
+let calc_false_positive_set superset ro = 
   let fps = Addr.Hash_set.create () in
   Hash_set.iter ro ~f:(fun v ->
       if Superset.ISG.mem_vertex superset v then
@@ -196,40 +83,199 @@ let check_fn_entries superset ground_truth =
           Set.add detected_insns key) in
   Set.diff ground_truth detected_insns
 
-let gather_metrics ~bin superset =
-  let function_starts = ground_truth_of_unstripped_bin bin |> ok_exn in
+module Cache = struct
+  open Bap_knowledge
+  open Bap_core_theory
+
+  let package = "superset-disasm-metrics"
+  let bool_t = Knowledge.Domain.optional
+                 ~inspect:sexp_of_bool ~equal:Bool.equal "bool"
+  let bool_persistent =
+    Knowledge.Persistent.of_binable
+      (module struct type t = bool option [@@deriving bin_io] end)
+
+  let int_t = Knowledge.Domain.optional
+                ~inspect:sexp_of_int ~equal:Int.equal "int"
+
+  let int_persistent =
+    Knowledge.Persistent.of_binable
+      (module struct type t = int option [@@deriving bin_io] end)
+
+  let addrs_t =
+    Knowledge.Domain.optional
+                  ~inspect:Addr.Set.sexp_of_t ~equal:Addr.Set.equal "addr.set"
+
+  let addrs_persistent =
+    Knowledge.Persistent.of_binable
+      (module struct type t = Addr.Set.t option [@@deriving bin_io] end)
+    
+  let attr ty persistent name desc =
+    let open Theory.Program in
+    Knowledge.Class.property ~package cls name ty
+      ~persistent
+      ~public:true
+      ~desc
+
+  let occlusive_space =
+    attr int_t int_persistent "occlusive_space"
+      "Number of addresses are in the bodies (addrs) of compiler intended
+       instructions"
+
+  let reduced_occlusion =
+    attr int_t int_persistent "reduced_occlusion"
+      "Of the bodies (addrs) of compiler intended instructions, how many
+       are occupied"
+
+  let false_negatives =
+    attr int_t int_persistent "false_negatives"
+      "Number of compiler intended instructions missing"
+
+  let false_positives =
+    attr int_t int_persistent "false_negatives"
+      "Number of compiler intended instructions missing"
+
+  let true_positives =
+    attr int_t int_persistent "true_positives"
+      "Number of retained compiler intended instructions"
+    
+  let function_entrances =
+    attr addrs_t addrs_persistent "function_entrances"
+      "List of compiler intended function entrances"
+
   let ground_truth =
-    Addr.Set.of_list @@ Seq.to_list function_starts in
-  let ground_truth = 
-    Set.(filter ground_truth ~f:(fun e ->
-        Superset.Inspection.contains_addr superset e
-      )) in
-  let true_positives = true_positives_of_ground_truth superset ground_truth in
-  let datas = ref 0 in
-  let ro = ref 0 in
-  let detected_insns = Addr.Hash_set.create () in
-  let dfs_find_conflicts addr =
-    Traverse.with_descendents_at ~visited:detected_insns superset addr
-      ~pre:(fun v ->
-        Superset.Occlusion.with_data_of_insn superset v
-          ~f:(fun x ->
-            if Superset.Core.(mem superset x)
-            then ro := !ro+1; 
-            datas := !datas +1)) in
-  let num_bytes = Superset.Inspection.total_bytes superset in
-  let entries = Superset.entries_of_isg superset in
-  let branches = Grammar.linear_branch_sweep superset entries in
-  let fp_branches, tp_branches = check_tp_set true_positives branches in
-  printf "Num f.p. branches: %d, num tp branches: %d\n" fp_branches tp_branches;
-  printf "superset_isg_of_mem length %d\n" num_bytes;
-  let total_clean,_ =
-    Set.fold ground_truth ~init:(0,0) ~f:(fun (n,prev) x ->
-        dfs_find_conflicts x;
-        if !ro > prev then
-          ((n),!ro)
-        else ((n+1),prev)
-      ) in
-  printf "Number of functions precisely trimmed: %d of %d\n"
+    attr addrs_t addrs_persistent "ground_truth"
+      "Set of addresses statically reachable from function entrances"
+
+  let clean_functions =
+    attr addrs_t addrs_persistent "clean_functions"
+      "Functions that were perfectly disassembled, with no false positives"
+
+end
+
+let compute_metrics ~bin superset =
+  let open Bap_knowledge in
+  let open Bap_core_theory in
+  let open KB.Syntax in
+  (* TODO collect the debug information for the particular superset
+     name, and use it to calculate the cache digest in order to have
+     separate digest for debug information and each feature *)
+  KB.promise Cache.function_entrances (fun label ->
+      (* list of compiler intended entrances *)
+      let function_addrs = ground_truth_of_unstripped_bin bin
+                            |> ok_exn in
+      let function_addrs =
+        Addr.Set.of_list @@ Seq.to_list function_addrs in
+      KB.return (Some function_addrs)
+    );
+  
+  KB.promise Cache.ground_truth (fun label ->
+      (* List of compiler intended addresses *)
+      KB.collect Cache.function_entrances label >>=
+        fun function_addrs ->
+        match function_addrs with
+        | None -> KB.return None
+        | Some function_addrs ->
+           let visited = Addr.Hash_set.create () in
+           Set.iter function_addrs ~f:(fun x ->
+               Traverse.with_descendents_at ~visited superset x
+             );
+           let ground_truth = Hash_set.fold visited ~init:
+                                Addr.Set.empty ~f:Set.add in
+           KB.return (Some ground_truth)
+    );
+
+  KB.promise Cache.occlusive_space (fun label ->
+      KB.collect Cache.ground_truth label >>= fun ground_truth ->
+      match ground_truth with
+      | None -> KB.return None
+      | Some ground_truth ->
+         KB.return @@
+           Some (Set.fold ground_truth ~init:0
+                   ~f:(fun occ addr ->
+                     occ + (Superset.Inspection.len_at superset addr)
+             ))
+    );
+
+  (* per feature metrics *)
+  KB.promise Cache.reduced_occlusion (fun label ->
+      KB.collect Cache.ground_truth label >>= fun ground_truth ->
+      match ground_truth with
+      | None -> KB.return None
+      | Some ground_truth ->
+         KB.return @@
+           Some (Set.fold ground_truth ~init:0
+                   ~f:(fun ro addr ->
+                     let conflicts = 
+                       Superset.Occlusion.conflict_seq_at
+                         superset addr in
+                     ro + (Seq.length conflicts)
+             ))
+
+    );
+
+  KB.promise Cache.clean_functions (fun label ->
+      KB.collect Cache.function_entrances label >>=
+        fun function_entrances ->
+        match function_entrances with
+        | None -> KB.return None
+        | Some (function_entrances) ->
+           let ro_at x =
+             let ro = ref false in
+             let pre x =
+               let c = Superset.Occlusion.conflict_seq_at superset x in
+               ro := Seq.exists c ~f:(fun _ -> true); in
+             Traverse.with_descendents_at superset ~pre x; !ro in
+           let init = Addr.Set.empty in
+           KB.return @@
+             (Some
+                (Set.fold function_entrances ~init ~f:(fun clean x ->
+                  if ro_at x then Set.add clean x else clean
+                ))
+             )
+    );
+
+  KB.promise Cache.true_positives (fun label ->
+      KB.collect Cache.ground_truth label >>= fun ground_truth ->
+      match ground_truth with
+      | None -> KB.return None
+      | Some ground_truth ->
+         KB.return
+           (Some (Set.fold ground_truth ~init:0 ~f:(fun tp_cnt x ->
+                      if Superset.Core.mem superset x then
+                        tp_cnt + 1
+                      else tp_cnt
+              ))
+           )
+    );
+  
+  KB.promise Cache.false_negatives (fun label ->
+      KB.collect Cache.ground_truth label >>= fun ground_truth ->
+      match ground_truth with
+      | Some ground_truth ->
+         let fn_cnt =
+           Set.fold ground_truth ~init:0 ~f:(fun cnt x ->
+               if not (Superset.Core.mem superset x) then
+                 cnt + 1
+               else cnt
+             ) in
+         KB.return @@ Some fn_cnt
+      | None -> KB.return None          
+    );
+  
+  KB.promise Cache.false_positives (fun label ->
+      KB.collect Cache.ground_truth label >>= fun ground_truth ->
+      match ground_truth with
+      | Some ground_truth ->
+         let false_positives =
+           Superset.Core.fold superset ~init:0
+             ~f:(fun ~key ~data c ->
+               if not Set.(mem ground_truth key) then c+1
+               else c) in
+         KB.return (Some false_positives)
+      | None -> KB.return None
+    );
+
+(*  printf "Number of functions precisely trimmed: %d of %d\n"
     total_clean Set.(length ground_truth);
   printf "Number of possible reduced false positives: %d\n" 
     !datas;
@@ -243,23 +289,8 @@ let gather_metrics ~bin superset =
     (Set.length @@ Superset.Occlusion.find_all_conflicts superset);
   printf "Instruction fns: %d\n"
     (fn_insn_cnt superset true_positives);
-  let detected_insn_count = Superset.Inspection.count superset in
-  printf "superset_map length %d graph size: %d\n" 
-    Superset.Inspection.(count_unbalanced superset)
-    detected_insn_count;
   let false_negatives = Set.(length fn_entries) in
-  let detected_entries = Set.(length ground_truth) - false_negatives in
-  let false_positives = Hash_set.fold detected_insns ~init:0
-      ~f:(fun c v -> if not Set.(mem ground_truth v) then c+1 else c) in
-  Some ({
-      name                = bin;
-      detected_insn_count = detected_insn_count;
-      false_positives     = false_positives;
-      false_negatives     = false_negatives;
-      detected_entries    = detected_entries;
-      actual_entries      = (Set.length ground_truth);
-      trimmed             = [];
-    })
+  ()*)
 
 module Opts = struct 
   open Cmdliner
@@ -270,16 +301,5 @@ module Opts = struct
     Arg.(value &
          opt (some string) (None)
          & info ["metrics_data"] ~doc:list_content_doc)
-
-  let list_formats_types = [
-    "standard", Standard;
-    "latex", Latex;
-  ]
-  let list_formats_doc = sprintf
-      "Available output metrics formats: %s" @@ 
-    Arg.doc_alts_enum list_formats_types
-  let metrics_fmt = 
-    Arg.(value & opt (enum list_formats_types) Standard
-         & info ["metrics_format"] ~doc:list_formats_doc)
 
 end

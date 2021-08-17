@@ -14,10 +14,10 @@ module Cmdline = struct
 
   let create 
       import export disassembler ground_truth_bin ground_truth_file target
-      metrics_format phases analyses trim_method cut setops save_dot save_gt
+      phases analyses trim_method cut setops save_dot save_gt
       save_addrs collect_report dforest tp_threshold rounds featureset = 
     Fields.create ~import ~export ~disassembler ~ground_truth_bin
-      ~ground_truth_file ~target ~metrics_format ~phases ~analyses ~trim_method
+      ~ground_truth_file ~target ~phases ~analyses ~trim_method
       ~setops ~cut ~save_dot ~save_gt ~save_addrs ~collect_report
       ~dforest ~tp_threshold ~rounds ~featureset
     
@@ -48,7 +48,7 @@ module Cmdline = struct
     ] in
     Term.(const create 
           $import_superset $export_superset $(disassembler ()) $ground_truth_bin
-          $ground_truth_file $target $Opts.metrics_fmt $invariants
+          $ground_truth_file $target $invariants
           $analyses_opt $trimmer $cut_opt $setops_opt $save_dot $save_gt
           $save_addrs $collect_reports $decision_trees_opt
           $tp_threshold $rounds $featureset_opt),

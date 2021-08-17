@@ -129,7 +129,6 @@ type t = {
   ground_truth_bin   : string option;
   ground_truth_file  : string option;
   target             : string;
-  metrics_format     : format_as;
   phases             : string list;
   analyses           : string list;
   trim_method        : trimmer;
@@ -247,32 +246,6 @@ let add_tag_loop analyses =
     (None, Some("Tag loop contradictions",
                 Sheathed.tag_loop_contradictions), None)
 
-let build_tracker trim phases = 
-  List.fold phases ~init:(trim,String.Map.empty)
-    ~f:(fun (trim,trackers) phase ->
-      match List.find Invariants.default_tags ~f:(fun (name,p) ->
-                phys_equal phase p
-              ) with
-      | Some (name,p) ->
-         let accu = ref Addr.Map.empty in
-         let instance_trim = Metrics.make_mark_tracker accu in
-         (fun x -> instance_trim @@ trim x), Map.set trackers name accu
-      | None -> trim,trackers
-    )
-
-let build_metrics trim phases =
-  List.fold phases ~init:(trim,String.Map.empty)
-    ~f:(fun (trim,metrics) phase ->
-      match List.find Invariants.default_tags ~f:(fun (name,p) ->
-                phys_equal phase p
-              ) with
-      | Some (name,p) ->
-         let accu = (Addr.Hash_set.create ()) in
-         let instance_trim = Metrics.make_gatherer accu in
-         (fun x -> trim @@ instance_trim x), Map.set metrics name accu
-      | None -> trim,metrics
-    )
-
 let build_setops trim setops =
   List.fold setops ~init:(trim,String.Map.empty)
     ~f:(fun (trim,metrics) (colr, (sop, (f1, f2))) ->
@@ -281,9 +254,8 @@ let build_setops trim setops =
           trim, metrics
         else
           let accu = (Addr.Hash_set.create ()) in
-          let instance_trim = Metrics.make_gatherer accu in
           let metrics = Map.set metrics f accu in
-          ((fun x -> instance_trim @@ trim x), metrics) in
+          ((fun x -> trim x), metrics) in
       add (add (trim,metrics) f1) f2
     )
 
@@ -390,8 +362,7 @@ let converge options superset =
 (* TODO needs comments for the role of results metrics setops
  * tracker *)
 (* TODO split into smaller functions *)
-let collect_results superset options pmap results metrics setops
-      tracker =
+let collect_results superset options pmap results setops =
   let ground_truth_file = options.ground_truth_file in
   let funcs,tps = 
     match ground_truth_file with
@@ -409,8 +380,7 @@ let collect_results superset options pmap results metrics setops
          let funcs = Addr.Hash_set.create () in
          Seq.iter (ground_truth_of_unstripped_bin gt |> ok_exn)
            ~f:(Hash_set.add funcs);
-         funcs,
-         Metrics.true_positives superset gt
+         funcs, Metrics.true_positives superset gt
       | None -> Addr.Hash_set.create (),Addr.Hash_set.create ()
     ) in
   let conflicts = Superset.Occlusion.find_all_conflicts superset in
@@ -491,34 +461,6 @@ let collect_results superset options pmap results metrics setops
     Hash_set.iter tps ~f:(fun v -> 
         if not (Hash_set.mem remaining v) then
           Hash_set.add fns v;
-      );
-    let s = sprintf "tracker size: %d" Map.(length tracker) in
-    print_endline s;
-    Map.iteri tracker ~f:(fun ~key ~data ->
-        let d = !data in
-        let s = sprintf "tracker %s size: %d"
-                  key Map.(length d) in
-        print_endline s;
-        Map.iteri !data ~f:(fun ~key ~data ->
-            if Hash_set.(mem tps key) then (
-              let memstr =
-                match Superset.Core.lookup superset key with
-                | Some (mem, _ ) -> Memory.str () mem
-                | None -> "" in
-              let s =
-                sprintf
-                  "marked fn bad with mem %s of removal size %d"
-                  memstr Set.(length data) in
-              print_endline s;
-            );
-            Set.iter data ~f:(fun x ->
-                let s = sprintf "marked fn bad at %s"
-                          Addr.(to_string key) in
-                let s = sprintf "%s, ancestor fn at %s"
-                          s Addr.(to_string x) in
-                print_endline s;
-              ) ; 
-          )
       );
     let results = String.Map.set results "True Positives" tps in
     let results = String.Map.set results "False Positives" fps in
@@ -714,8 +656,6 @@ module With_options(Conf : Provider)  = struct
       | DeadBlockResistant -> Trim.DeadblockTolerant.trim
       | Disabled -> Trim.Disabled.trim in
     let before = Superset.Inspection.count superset in
-    let (trim,metrics) = build_metrics trim phases in
-    let (trim,tracker) = build_tracker trim phases in
     let (trim,setops) = build_setops trim options.setops in
     let superset = trim superset in
     let after = Superset.Inspection.count superset in
@@ -733,14 +673,11 @@ module With_options(Conf : Provider)  = struct
     let results = apply_setops setops options.setops in
     let results =
       collect_results superset
-        options pmap results metrics setops tracker in
+        options pmap results setops in
     process_cut superset options results;
     superset
        
   let main () =
-    let format = match options.metrics_format with
-      | Latex -> Metrics.format_latex
-      | Standard -> Metrics.format_standard in
     let superset = checkpoint options.target phases in
     let superset = with_options superset in
     print_endline "with_options finished";
@@ -769,7 +706,7 @@ module With_options(Conf : Provider)  = struct
          Out_channel.close addrs_file;
        ) else ();
        (* TODO replace gather_metrics with report *)
-      Metrics.gather_metrics ~bin superset |> format |> print_endline
+       Metrics.compute_metrics ~bin superset
     | None -> ()
 
 end

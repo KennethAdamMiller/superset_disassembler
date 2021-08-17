@@ -7,6 +7,7 @@ open Monads.Std
 open Cmdoptions
 open Bap_main
 open Bap_plugins.Std
+open Bap_knowledge
 
 include Self()
 module Dis = Disasm_expert.Basic
@@ -50,34 +51,26 @@ let man = {|
 
   # PASSES
    
-  The passes are specified by the $(b,--pass) option and are run in the
-  order in which they specified. In addition, all passes that are
-  flagged with `autorun' are run before the explicitly specified
-  passes. Finally, if a pass specifies other passes as its
-  dependencies, then they are run before it, in the order in which
-  they were specified (modulo their own dependencies).
-
-  It's also possible to specify the passes using the old style syntax,
-  e.g., `$(b,--<PASS>)`, which is discouraged and later could be disabled.
-  Additionaly, it is not allowed to mix passes the old and the new
-  style.
+  Passes are not run by the superset disassembler, but the output can
+  be fed into the regular disassembly pipeline by making use of the
+  cache. At that point, an analysis pass can be run, and it isn't
+  meaningful to try to run an analysis pass on the raw superset alone
+  because it does not reconstruct the full project type.
 
   # OUTPUT
 
-  After all passes are run on the input, the resulting project data
-  structure could be dumped using the $(b,--dump) (or $(b,-d) for short)
-  option, whichaccepts the desired format and, optionally, the output
-  file name.
+  The resulting project data structure could be dumped using the
+  $(b,--dump) (or $(b,-d) for short) option, which accepts the desired
+  format and, optionally, the output file name.
 
   It is possible to specify the $(b,--dump) option multiple times, in
   which case the project will be dumped in several formats.
 
   ```
-  bap superset_disasm /bin/echo -dbir:out.bir -dasm:out.asm
-  
+  bap superset_disasm /bin/echo -dasm:out.asm
   ```
   |}
-           
+
 let superset_disasm options =
   print_endline "superset_disasm running";
   let open Bap_future.Std in
@@ -86,63 +79,40 @@ let superset_disasm options =
     With_options(struct
         let options = options
       end) in
-  (*let req = Stream.zip Project.Info.arch Project.Info.code in
-  Stream.observe req (fun (arch,cd) ->
-      let code = (Memmap.to_sequence cd) in
-      print_endline @@ sprintf "Have %d mem segments"
-                         Memmap.(length cd);*)
-      let invariants =
-        With_options.args_to_funcs options.phases
-          Invariants.default_tags in
-      let invariants = Invariants.tag_success :: invariants in
-      let backend = options.disassembler in
-      let superset = Superset.superset_disasm_of_file ~backend options.target
-                       ~f:(Invariants.tag ~invariants) in
-      let superset = Trim.Default.trim superset in
-      (* TODO use the knowledge base to import the superset *)
-      (*let superset =
-        Sequence.fold ~init:superset code
-          ~f:(fun superset (mem,v) ->
-            print_endline @@ sprintf "disassembling with mem %s %d"
-                               Addr.(to_string @@ Memory.min_addr mem)
-                               Memory.(length mem);
-            let f (mem, insn) superset =
-              let superset = Superset.Core.add superset mem insn in
-              Invariants.tag ~invariants:[Invariants.tag_success]
-                 (mem,insn) superset in
-            Superset.Core.update_with_mem superset mem ~f
-          ) in*)
-      (*let superset = Invariants.tag_superset ~invariants superset in*)
-      let superset = With_options.with_options superset in
-      (match options.ground_truth_bin with
-       | Some bin ->
-          let format = match options.metrics_format with
-            | Latex -> Metrics.format_latex
-            | Standard -> Metrics.format_standard in
-         Metrics.gather_metrics ~bin superset |> format
-         |> print_endline
-      | None -> ());
-      print_endline "disassembly finished! working with knowledge base";
-      (* Provide the is_valid label as a check on whether a given
+  let invariants =
+    With_options.args_to_funcs options.phases
+      Invariants.default_tags in
+  let invariants = Invariants.tag_success :: invariants in
+  let backend = options.disassembler in
+  let superset = Superset.superset_disasm_of_file ~backend options.target
+                   ~f:(Invariants.tag ~invariants) in
+  (* TODO use the knowledge base to import the superset *)
+  let superset = With_options.with_options superset in
+  (* TODO belongs in with_options *)
+  (match options.ground_truth_bin with
+   | Some bin ->
+      Metrics.compute_metrics ~bin superset;
+   | None -> ());
+  print_endline "disassembly finished! working with knowledge base";
+  (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
-      KB.promise Theory.Label.is_valid
-      @@ (fun label ->
-         let open KB.Syntax in
-         (* (target is just the machine target) *)
-         Theory.Label.target label >>= fun tgt ->
-         (* For each address the in the knowledge base *)
-         (* Collect the is_valid's label address *)
-         KB.collect Theory.Label.addr label >>= fun addr ->
-         match addr with
-         | Some addr ->
-            let addr = (Word.code_addr tgt addr) in
-            (* And return whether it should be kept or not *)
-            KB.return @@ Some (Superset.Core.mem superset addr)
-         | None -> KB.return None
-      );
-      print_endline "disassembly returning"
-      (* ) *)
-
+  KB.promise Theory.Label.is_valid
+  @@ (fun label ->
+    let open KB.Syntax in
+    (* (target is just the machine target) *)
+    Theory.Label.target label >>= fun tgt ->
+    (* For each address the in the knowledge base *)
+    (* Collect the is_valid's label address *)
+    KB.collect Theory.Label.addr label >>= fun addr ->
+    match addr with
+    | Some addr ->
+       let addr = (Word.code_addr tgt addr) in
+       (* And return whether it should be kept or not *)
+       KB.return @@ Some (Superset.Core.mem superset addr)
+    | None -> KB.return None
+  );
+  print_endline "disassembly returning"
+      
 let features_used = [
   "disassembler";
   "lifter";
@@ -154,11 +124,8 @@ let features_used = [
 
 type failure =
   | Expects_a_regular_file of string
-  | Old_and_new_style_passes
-  | Unknown_pass of string
   | Incompatible_options of string * string
   | Project of Error.t
-  | Pass of Project.Pass.error
   | Unknown_format of string
   | Unavailable_format_version of string
   | Unknown_collator of string
@@ -170,16 +137,7 @@ type Extension.Error.t += Fail of failure
 module Err = Monad.Result.Make(Extension.Error)(Monad.Ident)
 open Err.Syntax
 
-let pass_error = Result.map_error ~f:(fun err -> Fail (Pass err))
 let proj_error = Result.map_error ~f:(fun err -> Fail (Project err))
-
-let run_passes base proj =
-  Err.List.fold ~init:(0,proj) ~f:(fun (step,proj) pass ->
-      report_progress
-        ~stage:(step+base)
-        ~note:(Project.Pass.name pass) ();
-      Project.Pass.run pass proj |> pass_error >>= fun proj ->
-      Ok (step+1,proj))
 
 let knowledge_reader = Data.Read.create
     ~of_bigstring:Knowledge.of_bigstring ()
@@ -222,34 +180,6 @@ let store_knowledge_in_cache digest =
   Toplevel.current () |>
   Data.Cache.save cache digest
 
-let process passes outputs project =
-  let autoruns = Project.passes () |>
-                 List.filter ~f:Project.Pass.autorun in
-  let autos = List.length autoruns in
-  let total = List.length passes + autos in
-  report_progress ~note:"analyzing" ~total ();
-  run_passes 0 project autoruns >>= fun (step,proj) ->
-  run_passes step proj passes >>| fun (_,proj) ->
-  List.iter outputs ~f:(function
-      | `file dst,fmt,ver ->
-        Out_channel.with_file dst ~f:(fun ch ->
-            Project.Io.save ~fmt ?ver ch proj)
-      | `stdout,fmt,ver ->
-        Project.Io.show ~fmt ?ver proj);
-  proj
-
-let old_style_passes =
-  Extension.Command.switches
-    ~doc:(sprintf "Enables the pass %s in the old style (DEPRECATED)")
-    (Plugins.list () |> List.map ~f:Plugin.name)
-    ident
-
-let passes =
-  Extension.Command.parameters
-    ~doc:"Run the selected passes (in the specified order)"
-    ~aliases:["p"]
-    Extension.Type.("PASSES" %: list string) "passes"
-
 let outputs =
   Extension.Command.parameters
     ~doc:"Dumps the program to <FILE> (defaults to stdout) \
@@ -274,9 +204,9 @@ let update =
 let knowledge =
   Extension.Command.parameter
     ~doc:"Import the knowledge to the provided knowledge base. \
-          If the $(b,--update) flag is set the the knowledge base \
+          If the $(b,--update) flag is set the knowledge base \
           will be also updated with the new information. If \
-          $(b,--update) is set, the the knowledge base might not \
+          $(b,--update) is set, the knowledge base might not \
           exist and it will be created"
     ~aliases:["k"; "knowledge-base";]
     (Extension.Type.some rw_file) "project"
@@ -318,20 +248,6 @@ let validate_knowledge update kb = match kb with
   | Some path ->
     Result.ok_if_true (Sys.file_exists path || update)
       ~error:(Fail No_knowledge)
-
-let validate_passes_style old_style_passes new_style_passes =
-  match old_style_passes, new_style_passes with
-  | xs,[] | [],xs -> Ok xs
-  | _ -> Error (Fail Old_and_new_style_passes)
-
-let validate_passes passes =
-  let known = Project.passes () |>
-              List.map ~f:(fun p -> Project.Pass.name p, p) |>
-              Map.of_alist_exn (module String) in
-  Result.all @@
-  List.map passes ~f:(fun p -> match Map.find known p with
-      | Some p -> Ok p
-      | None -> Error (Fail (Unknown_pass p)))
 
 let option_digest f = function
   | None -> "none"
@@ -386,7 +302,7 @@ let save_knowledge ~had_knowledge ~update digest = function
   | Some _ -> ()
 
 
-let create_and_process input outputs passes loader target update kb
+let create_and_process input outputs loader target update kb
       ctxt options =
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
@@ -488,7 +404,7 @@ let cut =
 let _superset_disassemble_command : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $old_style_passes $passes $loader $target
+    args $input $outputs $loader $target
     $update $knowledge $ground_truth_bin $ground_truth_file
     $metrics_format $invariants $analyses $trim_method $tp_threshold
     $featureset $save_addrs $save_gt $save_dot $rounds $collect_report
@@ -496,7 +412,7 @@ let _superset_disassemble_command : unit =
   in
   Extension.Command.declare ~doc:man "superset_disasm"
     ~requires:features_used args @@
-    fun input outputs old_style_passes passes loader target update kb
+    fun input outputs loader target update kb
         ground_truth_bin ground_truth_file metrics_format invariants
         analyses trim_method tp_threshold featureset save_addrs
         save_gt save_dot rounds collect_report dforest cut 
@@ -509,99 +425,60 @@ let _superset_disassemble_command : unit =
         ~analyses ~collect_report ~phases:invariants ~dforest in
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
-    validate_passes_style old_style_passes (List.concat passes) >>=
-      validate_passes >>= fun passes ->
     Dump_formats.parse outputs >>= fun outputs ->
-    create_and_process input outputs passes loader target update kb
+    create_and_process input outputs loader target update kb
       ctxt options;
     Ok ()
-  
-(*let () =
-  let () = Config.manpage [
-      `S "DESCRIPTION";
-      `P
-        "Runs the superset disassembler along with any
-                  optional trimming components to reduce false
-                  positives to an ideal minimum. ";
-    ] in
-  let tp_threshold = Config.(param (float) ~default:0.99 "threshold" ~doc) in
-  let doc = "The file that houses the points-to ground truth" in
-  let featureset =
-    Config.(param (list string)
-              ~default:Features.default_features "features" ~doc) in
-  (*let doc = "Save target, one of truth, or some superset" in
-  let savetgt = Config.(param (list string) "savetgt" ~default:[] ~doc) in*)
-  (*let doc = "Load from a previous disassembly" in
-  let load = Config.(param (some string) "load" ~default:None ~doc) in*)
 
-  let import_superset =
-    Config.(param (some (string)) "import"
-              ~default:None
-              ~doc:"Import the disassembly graph.") in
-  let export_superset =
-    Config.(param (some (string)) "export"
-              ~default:None
-              ~doc:"Export the disassembly graph.") in
-  let disassembler =
-    Config.(param string "backend" ~default:"llvm"
-              ~doc:"Backend disassembler") in
-  let ground_truth_bin =
-    Config.(param (some string) ~default:None "ground_truth_bin"
-              ~doc:("Compare results against a ground truth if desired," ^
-                      " of either debug symbols or an unstripped binary")) in
-  let ground_truth_file =
-    Config.(param (some string) ~default:None "ground_truth_file"
-              ~doc:("Compare results against a file that contains the " ^
-                      "addresses of true positives")) in
-  let target =
-    Config.(param string "target" ~doc:"Specify target binary") in
-  let metrics_format =
-    let open Metrics in
-    let list_formats_types = [
-        "standard", Standard;
-        "latex", Latex;
-      ] in
-    let list_formats_doc = sprintf
-                             "Available output metrics formats: %s" @@ 
-                             Cmdliner.Arg.doc_alts_enum list_formats_types in
-    Config.(param ((enum list_formats_types)) ~default:(Standard)
-              "metrics_format" ~doc:list_formats_doc) in
-  let analyses =
-    let default = ["Strongly Connected Component Data"] in
-    Config.(param (list string) ~default "analyses") in
-  let save_addrs = Config.(flag "save_addrs") in
-  let save_gt = Config.(flag "save_gt") in
-  let save_dot = Config.(flag "save_dot") in
-  let cut = Config.(param (some (t3 (enum list_cuts) string int))
-                      ~default:None "cut") in
-  let collect_report = Config.(flag "collect_reports") in
-  let dforest = Config.(param (some (enum list_decision_trees))
-                  ~default:None "decision_tree") in
-  Config.when_ready (fun {Config.get=(!)} ->
-      let import = !import_superset in
-      let export = !export_superset in
-      let disassembler = !disassembler in
-      let ground_truth_bin = !ground_truth_bin in
-      let ground_truth_file = !ground_truth_file in
-      let target = !target in
-      let metrics_format = !metrics_format in
-      let phases = !invariants in
-      let analyses = !analyses in
-      let trim_method = !trim_method in
-      let tp_threshold = !tp_threshold in
-      let featureset = !featureset in
-      let save_addrs = !save_addrs in
-      let save_gt = !save_gt in
-      let save_dot = !save_dot in
-      let rounds = !rounds in
-      let cut = !cut in
-      let collect_report = !collect_report in
-      let dforest = !dforest in
-      let options =
-        Fields.create ~import ~export ~disassembler ~ground_truth_bin
-          ~ground_truth_file ~target ~metrics_format ~phases ~trim_method
-          ~setops:[] ~cut ~save_dot ~save_gt ~save_addrs ~tp_threshold
-          ~rounds ~featureset ~analyses ~collect_report ~dforest in
-      superset_disasm options;
-      print_endline "superset-disassembler plugin finished";
-    )*)
+
+let heuristics =
+  Extension.Command.parameter Extension.Type.(list string) "heuristics"
+
+let converge =
+  Extension.Command.flag "converge"
+
+let metrics =
+  Extension.Command.flag "metrics"
+
+(* TODO review features_used *)
+let _distribution_command : unit =
+  let args =
+    let open Extension.Command in
+    args $input $outputs $loader $target $update $knowledge
+    $heuristics $converge $collect_report $metrics $metrics_format
+  in
+  Extension.Command.declare ~doc:man "superset_distribution"
+    ~requires:features_used args @@
+    fun input outputs loader target update kb
+        feature converge collect_report metrics metrics_format ctxt ->
+    validate_knowledge update kb >>= fun () ->
+    validate_input input >>= fun () ->
+    Dump_formats.parse outputs >>= fun outputs ->
+    let digest = make_digest [
+                     Extension.Configuration.digest ctxt;
+                     Caml.Digest.file input;
+                     loader;
+                   ] in
+    let had_knowledge = load_knowledge digest kb in
+    let _ = Project.Input.load ~target ~loader input in
+    if metrics then (
+      let bin = input in 
+      let format = match metrics_format with
+        | Latex -> Metrics.format_latex
+        | Standard -> Metrics.format_standard in
+      Metrics.gather_metrics ~bin superset |> format
+      |> print_endline
+    );
+    save_knowledge ~had_knowledge ~update digest kb;
+    Ok ()
+
+let _cache_command : unit =
+  let args =
+    let open Extension.Command in
+    args $input $outputs $loader $target $update $knowledge
+  in
+  Extension.Command.declare ~doc:man "superset_cache"
+    ~requires:features_used args @@
+    fun input outputs loader target update kb
+        ctxt ->
+    Ok ()

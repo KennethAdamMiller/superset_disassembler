@@ -2,7 +2,9 @@ open Bap.Std
 open Regular.Std
 open Core_kernel
 open Or_error
-open Graphlib.Std   
+open Graphlib.Std
+open Bap_knowledge
+open Bap_core_theory
 
 module Dis = Disasm_expert.Basic
 open Superset_impl
@@ -27,6 +29,32 @@ let add_to_graph superset mem insn =
   let insn_risg = G.Node.insert addr superset.insn_risg in
   { superset with insn_risg }
 
+module Cache = struct
+  let package = "superset-disasm"
+
+  let superset_graph_t =
+    let sexp_of_edge (s,d) =
+      Tuple2.sexp_of_t Addr.sexp_of_t Addr.sexp_of_t (s,d) in
+    let equal (s1,d1) (s2,d2) = Addr.equal s1 s2 && Addr.equal d1 d2 in
+    let inspect = List.sexp_of_t sexp_of_edge in
+    Knowledge.Domain.optional
+      ~inspect ~equal:(List.equal equal) "edges"
+    
+  let superset_graph_persistent =
+    Knowledge.Persistent.of_binable
+      (module struct type t = (addr * addr) list option [@@deriving bin_io] end)
+
+  let superset_graph =
+    let attr ty persistent name desc =
+      let open Theory.Program in
+      Knowledge.Class.property ~package cls name ty
+        ~persistent
+        ~public:true
+        ~desc in
+    attr superset_graph_t superset_graph_persistent "superset_graph"
+      "Graph, including all edges and single nodes."
+end
+  
 module Core = struct
   let add superset mem insn =
     let superset = add_to_graph superset mem insn in

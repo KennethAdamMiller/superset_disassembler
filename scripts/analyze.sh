@@ -1,5 +1,49 @@
 #!/bin/bash
 
+compute_disasm() {
+    import_name=$1
+    export_name=$2
+    gt_bin=$3
+    phases=$4
+    analyses=$5
+    features=$6
+    rounds=$7
+    args=""
+    if [[ $SUPERSET_FRONTEND ]]; then
+	args=" --target=./$(basename ${gt_bin}) --ground_truth_bin=${gt_bin} --save_gt --rounds=${rounds}"
+	if [[ ! (-z $import_name) ]]; then
+	    args+=" --import=${import_name}"
+	fi
+	if [[ ! (-z $export_name) ]]; then
+	    args+=" --export=${export_name}"
+	fi
+	if [[ ! (-z ${phases}) ]]; then
+	    args+=" --phases=${phases}"
+	fi
+	if [[ ! (-z ${analyses}) ]]; then
+	    args+=" --analyses=${analyses}"
+	fi
+	if [[ ! (-z ${features}) ]]; then
+	    args+=" --enable_feature=${features}"
+	fi
+	echo "time superset_disasm ${args}"
+	time superset_disasm ${args}
+    else
+	args="./$(basename ${gt_bin}) --ground_truth_bin=${gt_bin} --rounds=${rounds} "
+	if [[ ! (-z ${phases}) ]]; then
+	    args+=" --invariants=${phases}"
+	fi
+	if [[ ! (-z ${analyses}) ]]; then
+	    args+=" --analyses=${analyses}"
+	fi
+	if [[ ! (-z ${features}) ]]; then
+	    args+=" --features=${features}"
+	fi
+	echo "time bap superset_disasm ${args}"
+	time bap superset_disasm ${args}
+    fi
+}
+
 analyze() {
     export binary=${1}
     export features=${2}
@@ -26,26 +70,34 @@ analyze() {
 	    cp "${1}" ./
 	    strip "./$(basename ${1})"
 	    if [[ (! -f "${cachedir}/$(basename ${1})_gt.txt") ]]; then
-		echo "Computing ground truth"
-		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --ground_truth_bin="${1}" --save_gt --phases="" --analyses="" --enable_feature="" --rounds=1 > /dev/null;
+		if [[ $SUPERSET_FRONTEND ]]; then
+		    echo "Computing ground truth"
+		    compute_disasm "" "" "${1}" "" "" "" 1
+		fi
 	    fi
 	    if [[ (! -f "${cachedir}/$(basename ${1})_superset.graph.gz") ]]; then
-		echo "Computing raw superset"
-		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --export=superset --phases="" --analyses="" --enable_feature="" --rounds=1 > /dev/null;
+		if [[ $SUPERSET_FRONTEND ]]; then
+		    echo "Computing raw superset"
+		    compute_disasm "" "superset" "${1}" "" "" "" 1
+		fi
 	    fi
 	    if [[ (! -f "${cachedir}/$(basename ${1})_invariants.graph.gz") ]]; then
-		echo "Computing superset - invariants"
-		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=superset --export=invariants --analyses="" --enable_feature="" --rounds=1 > /dev/null;
+		if [[ $SUPERSET_FRONTEND ]]; then
+		    echo "Computing superset - invariants"
+		    compute_disasm "superset" "invariants" "${1}" 1 "" "" 1
+		fi
 	    fi
 	    if [[ (! -f "${cachedir}/$(basename ${1})_analyses.graph.gz") ]]; then
-		echo "Computing superset - invariants - analyses"
-		time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=invariants --export=analyses --phases="" --enable_feature="" --rounds=1 > /dev/null;
+		if [[ $SUPERSET_FRONTEND ]]; then
+		    echo "Computing superset - invariants - analyses"
+		    compute_disasm "invariants" "analyses" "${1}" "" 1 "" 1
+		fi
 	    fi
 	    if [[ (! -f "./$(basename ${1})_${from}.graph") && (-f "./$(basename ${1})_${from}.graph.gz") ]]; then
 	       gzip -d "./$(basename ${1})_${from}.graph.gz"
 	    fi
 	    echo "Computing convergence"
-	    time ${disasm_dir}/superset_disasm.native --target="./$(basename ${1})" --import=${from} --export=${features} --ground_truth_bin="${1}" --enable_feature="${features}" --rounds=6 --collect_reports >> "${name}";
+	    compute_disasm "${from}" "${features}" "${1}" "" "" "${features}" 6
 	    rm -f "./$(basename ${1})"
 	    if [ $? -ne 0 ]; then
 		printf "\t... error on file ${f}, will need to reprocess\n"

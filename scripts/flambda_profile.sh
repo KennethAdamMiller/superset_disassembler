@@ -1,13 +1,11 @@
 #!/bin/bash
-export TODO=?
-
 eval $(opam config env)
-#TODO want to reuse run_analysis script
 source scripts/analyze.sh
-analyze "TrimLimitedClamped,FixpointFreevarSSA,FixpointGrammar" ${HOME}/workspace/x86-binaries/elf/binutils/gcc_binutils_32_O3_readelf
+#export SUPERSET_FRONTEND=1
+analyze ${HOME}/workspace/x86-binaries/elf/binutils/gcc_binutils_32_O3_readelf "TrimLimitedClamped,FixpointFreevarSSA,FixpointGrammar" 
 
-analyze "TrimFixpointTails" ${HOME}/workspace/x86-binaries/elf/binutils/icc_binutils_32_O2_elfedit
+analyze ${HOME}/workspace/x86-binaries/elf/binutils/icc_binutils_32_O2_elfedit "TrimFixpointTails" 
 
-analyze "TrimLimitedClamped,FixpointGrammar,FixpointFreevarSSA" ${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram
+analyze ${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram "TrimLimitedClamped,FixpointGrammar,FixpointFreevarSSA" 
 
-analyze "TrimLimitedClamped,FixpointGrammar,FixpointFreevarSSA" ${HOME}/workspace/x86-binaries/elf/binutils/icc_binutils_32_O3_cxxfilt
+analyze ${HOME}/workspace/x86-binaries/elf/binutils/icc_binutils_32_O3_cxxfilt "TrimLimitedClamped,FixpointGrammar,FixpointFreevarSSA" 
