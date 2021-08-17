@@ -369,18 +369,6 @@ let ground_truth_file =
   Extension.Command.parameter ~doc
     Extension.Type.("<FILE>" %: some string) "ground_truth_file"
 
-let metrics_format =
-  let open Metrics in
-  let list_formats_types = [
-      "standard", Standard;
-      "latex", Latex;
-    ] in
-  let list_formats_doc =
-    sprintf "Available output metrics formats: %s" @@ 
-      List.to_string ~f:ident (List.map ~f:fst list_formats_types) in
-  Extension.Command.parameter ~doc:list_formats_doc
-    Extension.Type.(enum list_formats_types =? Standard)  "metrics_format"
-
 let analyses =
   let deflt = ["Strongly Connected Component Data"] in
   Extension.Command.parameter
@@ -406,21 +394,21 @@ let _superset_disassemble_command : unit =
     let open Extension.Command in
     args $input $outputs $loader $target
     $update $knowledge $ground_truth_bin $ground_truth_file
-    $metrics_format $invariants $analyses $trim_method $tp_threshold
+    $invariants $analyses $trim_method $tp_threshold
     $featureset $save_addrs $save_gt $save_dot $rounds $collect_report
     $dforest $cut
   in
   Extension.Command.declare ~doc:man "superset_disasm"
     ~requires:features_used args @@
     fun input outputs loader target update kb
-        ground_truth_bin ground_truth_file metrics_format invariants
+        ground_truth_bin ground_truth_file invariants
         analyses trim_method tp_threshold featureset save_addrs
         save_gt save_dot rounds collect_report dforest cut 
         ctxt  ->
     let options =
       Fields.create ~import:None ~export:None ~disassembler:loader
         ~ground_truth_bin ~ground_truth_file ~target:input
-        ~metrics_format ~trim_method ~setops:[] ~cut ~save_dot
+        ~trim_method ~setops:[] ~cut ~save_dot
         ~save_gt ~save_addrs ~tp_threshold ~rounds ~featureset
         ~analyses ~collect_report ~phases:invariants ~dforest in
     validate_knowledge update kb >>= fun () ->
@@ -445,12 +433,12 @@ let _distribution_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
-    $heuristics $converge $collect_report $metrics $metrics_format
+    $heuristics $converge $collect_report $metrics
   in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
     fun input outputs loader target update kb
-        feature converge collect_report metrics metrics_format ctxt ->
+        feature converge collect_report metrics ctxt ->
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
@@ -461,14 +449,10 @@ let _distribution_command : unit =
                    ] in
     let had_knowledge = load_knowledge digest kb in
     let _ = Project.Input.load ~target ~loader input in
-    if metrics then (
+    (*if metrics then (
       let bin = input in 
-      let format = match metrics_format with
-        | Latex -> Metrics.format_latex
-        | Standard -> Metrics.format_standard in
-      Metrics.gather_metrics ~bin superset |> format
-      |> print_endline
-    );
+      Metrics.compute_metrics ~bin superset
+    );*)
     save_knowledge ~had_knowledge ~update digest kb;
     Ok ()
 
