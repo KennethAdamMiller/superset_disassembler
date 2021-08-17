@@ -404,7 +404,7 @@ let rounds =
 
 let tp_threshold =
   let doc = "The threshold at which convergence occurs" in
-  Extension.Command.parameter ~doc Extension.Type.float
+  Extension.Command.parameter ~doc Extension.Type.(float =? 0.99)
     "threshold"
 
 (* TODO rename featureset to heuristics *)
