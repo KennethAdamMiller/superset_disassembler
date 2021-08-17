@@ -131,7 +131,7 @@ module Cache = struct
       "Number of compiler intended instructions missing"
 
   let false_positives =
-    attr int_t int_persistent "false_negatives"
+    attr int_t int_persistent "false_positives"
       "Number of compiler intended instructions missing"
 
   let true_positives =
