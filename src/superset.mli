@@ -202,10 +202,23 @@ module Inspection : sig
   val filename : t -> string option
 end
 
-module Metrics : sig
-  val record : t -> unit
+module Cache : sig
+  val package : string
+  val superset_graph_t :
+    (Bap.Std.Addr.t * Bap.Std.Addr.t) list option
+    Bap_knowledge.Knowledge.domain
+  val superset_graph_persistent :
+    (Bap.Std.addr * Bap.Std.addr) list option
+    Bap_knowledge.Knowledge.persistent
+  val superset_graph :
+    (Bap_core_theory.Theory.program,
+     (Bap.Std.Addr.t * Bap.Std.Addr.t) list option)
+    Bap_knowledge.Knowledge.slot
+  val superset_t :
+    (Bap_core_theory.Theory.Unit.cls, Bap.Std.Addr.Set.t option)
+    Bap_knowledge.Knowledge.slot
 end
-
+     
 module Occlusion : sig
   (** For each address within the set, search within the body of the
       corresponding disassembled instruction, looking for conflicts

@@ -50,7 +50,7 @@ let man = {|
   save_gt, save_dot, collect_report
 
   # PASSES
-   
+
   Passes are not run by the superset disassembler, but the output can
   be fed into the regular disassembly pipeline by making use of the
   cache. At that point, an analysis pass can be run, and it isn't
@@ -72,28 +72,13 @@ let man = {|
   |}
 
 let superset_disasm options =
-  print_endline "superset_disasm running";
   let open Bap_future.Std in
   let open Format in
   let module With_options =
     With_options(struct
         let options = options
       end) in
-  let invariants =
-    With_options.args_to_funcs options.phases
-      Invariants.default_tags in
-  let invariants = Invariants.tag_success :: invariants in
-  let backend = options.disassembler in
-  let superset = Superset.superset_disasm_of_file ~backend options.target
-                   ~f:(Invariants.tag ~invariants) in
-  (* TODO use the knowledge base to import the superset *)
-  let superset = With_options.with_options superset in
-  (* TODO belongs in with_options *)
-  (match options.ground_truth_bin with
-   | Some bin ->
-      Metrics.compute_metrics ~bin superset;
-   | None -> ());
-  print_endline "disassembly finished! working with knowledge base";
+  let superset = With_options.with_options () in
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
   KB.promise Theory.Label.is_valid
@@ -111,7 +96,7 @@ let superset_disasm options =
        KB.return @@ Some (Superset.Core.mem superset addr)
     | None -> KB.return None
   );
-  print_endline "disassembly returning"
+  superset
       
 let features_used = [
   "disassembler";
@@ -130,7 +115,7 @@ type failure =
   | Unavailable_format_version of string
   | Unknown_collator of string
   | Unknown_analysis of string
-  | No_knowledge
+  | No_knowledge of string
 
 type Extension.Error.t += Fail of failure
 
@@ -171,7 +156,7 @@ let import_knowledge_from_cache digest =
     info "importing knowledge from cache";
     Toplevel.set state;
     true
-
+    
 let store_knowledge_in_cache digest =
   let digest = digest ~namespace:"knowledge" in
   info "caching knowledge with digest %a"
@@ -243,11 +228,12 @@ let validate_input file =
     ~error:(Fail (Expects_a_regular_file file))
 
 let validate_knowledge update kb = match kb with
-  | None -> Result.ok_if_true (not update)
-              ~error:(Fail No_knowledge)
+  | None ->
+     Ok ()
   | Some path ->
-    Result.ok_if_true (Sys.file_exists path || update)
-      ~error:(Fail No_knowledge)
+     let error =
+       Fail (No_knowledge "No initial knowledge to update") in
+    Result.ok_if_true (Sys.file_exists path || update) ~error
 
 let option_digest f = function
   | None -> "none"
@@ -295,20 +281,33 @@ let load_knowledge digest = function
 
 let save_knowledge ~had_knowledge ~update digest = function
   | None ->
-    if not had_knowledge then store_knowledge_in_cache digest
+    store_knowledge_in_cache digest
   | Some path when update ->
     info "storing knowledge base to %S" path;
     Knowledge.save (Toplevel.current ()) path
   | Some _ -> ()
 
 
-let create_and_process input outputs loader target update kb
-      ctxt options =
-  let digest = make_digest [
-      Extension.Configuration.digest ctxt;
-      Caml.Digest.file input;
-      loader;
-    ] in
+let superset_digest options =
+  let open Cmdoptions in
+  let invariants = options.phases in
+  let analyses = options.analyses in
+  let featureset = options.featureset in
+  make_digest @@ List.append invariants @@
+    List.append analyses @@ List.append featureset @@
+      [
+        Caml.Digest.file options.target;
+        options.disassembler;
+      ]
+
+let gtruth_digest gt_bin =
+  make_digest [
+      Caml.Digest.file gt_bin;
+    ]
+
+let create_and_process
+      input outputs loader target update kb options =
+  let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
   let _ = Project.Input.load ~target ~loader input in
   superset_disasm options;
@@ -338,7 +337,6 @@ let invariants =
   Extension.Command.parameter ~doc
     ~aliases:["phases"] (* TODO remove phases alians *)
     Extension.Type.(list string =? deflt) "invariants"
-
   
 let trim_method =
   let doc =
@@ -392,10 +390,10 @@ let cut =
 let _superset_disassemble_command : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $target
-    $update $knowledge $ground_truth_bin $ground_truth_file
-    $invariants $analyses $trim_method $tp_threshold
-    $featureset $save_addrs $save_gt $save_dot $rounds $collect_report
+    args $input $outputs $loader $target $update $knowledge
+    $ground_truth_bin $ground_truth_file $invariants $analyses
+    $trim_method $tp_threshold $featureset $save_addrs
+    $save_gt $save_dot $rounds $collect_report
     $dforest $cut
   in
   Extension.Command.declare ~doc:man "superset_disasm"
@@ -419,40 +417,54 @@ let _superset_disassemble_command : unit =
     Ok ()
 
 
-let heuristics =
-  Extension.Command.parameter Extension.Type.(list string) "heuristics"
-
 let converge =
   Extension.Command.flag "converge"
 
 let metrics =
   Extension.Command.flag "metrics"
 
-(* TODO review features_used *)
+(* TODO review features_used to possibly remove some *)
 let _distribution_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
-    $heuristics $converge $collect_report $metrics
+    $ground_truth_bin $invariants $analyses
+    $tp_threshold $featureset $rounds $collect_report
+    $converge $metrics
   in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
     fun input outputs loader target update kb
-        feature converge collect_report metrics ctxt ->
+        ground_truth_bin invariants
+        analyses tp_threshold featureset rounds collect_report
+        converge metrics
+        ctxt ->
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
-    let digest = make_digest [
-                     Extension.Configuration.digest ctxt;
-                     Caml.Digest.file input;
-                     loader;
-                   ] in
+    let options =
+      Fields.create ~import:None ~export:None ~disassembler:loader
+        ~ground_truth_bin ~ground_truth_file:None ~target:input
+        ~trim_method:Cmdoptions.Simple ~setops:[] ~cut:None
+        ~save_dot:false
+        ~save_gt:false ~save_addrs:false ~tp_threshold ~rounds ~featureset
+        ~analyses ~collect_report ~phases:invariants ~dforest:None in
+    let digest = superset_digest options in
     let had_knowledge = load_knowledge digest kb in
-    let _ = Project.Input.load ~target ~loader input in
-    (*if metrics then (
-      let bin = input in 
-      Metrics.compute_metrics ~bin superset
-    );*)
+    (*let _ = Project.Input.load ~target ~loader input in*)
+    let open KB.Syntax in
+    Toplevel.exec @@ if metrics then (
+      let open KB.Syntax in
+      KB.Object.create Theory.Program.cls >>= (fun label ->
+      KB.collect Metrics.Cache.reduced_occlusion label >>= function
+      | None ->
+         KB.return @@
+           print_endline "reduced occlusion unknown";
+      | Some ro ->
+         KB.return @@
+           print_endline @@ sprintf "reduced occlusion: %d" ro
+      )
+    ) else KB.return ();
     save_knowledge ~had_knowledge ~update digest kb;
     Ok ()
 

@@ -39,7 +39,7 @@ let analyses_opt =
     & info ["analyses"] ~docv:analyses_doc ~doc
   )
 
-type forester = | Tails [@@deriving sexp]
+type forester = | Tails [@@deriving sexp, bin_io]
 let list_decision_trees = [
     "decision_tree:tails",
     Tails;
@@ -56,8 +56,7 @@ let decision_trees_opt =
 type setop =
   | Intersection
   | Difference
-  | Union
-[@@deriving sexp]
+  | Union [@@deriving sexp, bin_io]
 let list_setops = [
   "Intersection", Intersection;
   "Difference", Difference;
@@ -90,7 +89,7 @@ let export_superset =
 
 type trimmer = | Simple
                | DeadBlockResistant
-               | Disabled [@@deriving sexp]
+               | Disabled [@@deriving sexp, bin_io]
 let list_trimmers = [
   "Simple", Simple;
   (*"Memoried", Memoried;*)
@@ -110,8 +109,7 @@ let trimmer =
   
 type cut =
   | DFS
-  | Interval
-[@@deriving sexp]
+  | Interval [@@deriving sexp, bin_io]
 let list_cuts = [
   "DFS", DFS;
   "Interval", Interval; 
@@ -142,8 +140,27 @@ type t = {
   tp_threshold       : float;
   rounds             : int;
   featureset         : string list;
-} [@@deriving sexp, fields]       
+} [@@deriving sexp, fields, bin_io]
 
+let disasm_opts =
+  let package = "superset-disasm-cmdoptions" in
+  let open Bap_knowledge in
+  let open Bap_core_theory in
+  let string_persistent =
+    Knowledge.Persistent.of_binable
+      (module struct type t = string [@@deriving bin_io] end) in
+  let attr ty persistent name desc =
+    let open Theory.Program in
+    Knowledge.Class.property ~package cls name ty
+      ~persistent
+      ~public:true
+      ~desc in
+  let open Knowledge.Domain in
+  attr string string_persistent "disasm_opts"
+    "All command options given"
+
+
+       
 let save_gt =
   let doc =
     "Save nothing but the symbols reported by " in
@@ -278,6 +295,7 @@ let trim_with rounds f superset =
       do_analysis (round+1) superset in
   do_analysis 1 superset
 
+(* TODO belongs in fixpoint*)
 let converge options superset =
   let threshold = options.tp_threshold in
   let featureset = options.featureset in
@@ -622,15 +640,16 @@ module With_options(Conf : Provider)  = struct
       | None -> ()
     )
 
-  (* TODO rename checkpoint *)
   let checkpoint bin invariants =
+    (* TODO use the knowledge base to import the superset *)
     let backend = options.disassembler in
     match options.import with
     | Some suffix ->
       let graph = bin ^ "_" ^ suffix ^ ".graph" in
       time ~name:"import" Superset.import options.disassembler bin
         graph
-    | None -> 
+    | None ->
+       (* TODO use Project.Input.load and cycle through the code *)
       let invariants = (Invariants.tag_success::invariants) in
       Superset.superset_disasm_of_file ~backend bin
         ~f:(Invariants.tag ~invariants)
@@ -649,12 +668,9 @@ module With_options(Conf : Provider)  = struct
 
   let analyses = args_to_funcs options.analyses list_analyses
 
-  let with_options superset =
-    let trim =
-      match options.trim_method with
-      | Simple -> Trim.Default.trim
-      | DeadBlockResistant -> Trim.DeadblockTolerant.trim
-      | Disabled -> Trim.Disabled.trim in
+  let with_options () =
+    let superset = checkpoint options.target phases in
+    let trim = Trim.Default.trim in
     let before = Superset.Inspection.count superset in
     let (trim,setops) = build_setops trim options.setops in
     let superset = trim superset in
@@ -678,35 +694,7 @@ module With_options(Conf : Provider)  = struct
     superset
        
   let main () =
-    let superset = checkpoint options.target phases in
-    let superset = with_options superset in
-    print_endline "with_options finished";
-    let () =
-      match options.export with
-      | None -> ()
-      | Some suffix -> (
-        (*with_invariants superset invariants*)
-        let f =
-          if String.equal suffix "" then options.target else
-            (options.target ^ "_" ^ suffix) in
-        Superset.export f superset;
-      ) in
-    (* TODO duplicate of collect_results *)
-    match options.ground_truth_bin with
-    | Some bin ->
-       if options.save_gt then (
-         let gt = Metrics.ground_truth_of_unstripped_bin
-                    bin |> ok_exn in
-         let gt = Seq.map gt ~f:Addr.to_string in
-         let base = Filename.basename bin in
-         let addrs_file = Out_channel.create ("./" ^ base ^ "_gt.txt")
-         in
-         Out_channel.output_lines addrs_file @@ Seq.to_list gt;
-         Out_channel.flush addrs_file;
-         Out_channel.close addrs_file;
-       ) else ();
-       (* TODO replace gather_metrics with report *)
-       Metrics.compute_metrics ~bin superset
-    | None -> ()
+    let superset = with_options () in
+    ()
 
 end

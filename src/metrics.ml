@@ -103,7 +103,7 @@ module Cache = struct
 
   let addrs_t =
     Knowledge.Domain.optional
-                  ~inspect:Addr.Set.sexp_of_t ~equal:Addr.Set.equal "addr.set"
+      ~inspect:Addr.Set.sexp_of_t ~equal:Addr.Set.equal "addr.set"
 
   let addrs_persistent =
     Knowledge.Persistent.of_binable
@@ -112,10 +112,26 @@ module Cache = struct
   let attr ty persistent name desc =
     let open Theory.Program in
     Knowledge.Class.property ~package cls name ty
-      ~persistent
-      ~public:true
-      ~desc
+      ~persistent ~public:true ~desc
+    
+  let string_persistent =
+    Knowledge.Persistent.of_binable
+      (module struct type t = string [@@deriving bin_io] end)
+    
+  let ground_truth_source =
+    let open Knowledge.Domain in
+    attr string string_persistent "ground_truth_source"
+      "Binary containing debug information in the form of function
+    entrances"
 
+  let function_entrances =
+    attr addrs_t addrs_persistent "function_entrances"
+      "List of compiler intended function entrances"
+
+  let ground_truth =
+    attr addrs_t addrs_persistent "ground_truth"
+      "Set of addresses statically reachable from function entrances"
+    
   let occlusive_space =
     attr int_t int_persistent "occlusive_space"
       "Number of addresses are in the bodies (addrs) of compiler intended
@@ -138,38 +154,39 @@ module Cache = struct
     attr int_t int_persistent "true_positives"
       "Number of retained compiler intended instructions"
     
-  let function_entrances =
-    attr addrs_t addrs_persistent "function_entrances"
-      "List of compiler intended function entrances"
-
-  let ground_truth =
-    attr addrs_t addrs_persistent "ground_truth"
-      "Set of addresses statically reachable from function entrances"
-
   let clean_functions =
     attr addrs_t addrs_persistent "clean_functions"
       "Functions that were perfectly disassembled, with no false positives"
 
 end
 
-let compute_metrics ~bin superset =
+let compute_metrics superset =
   let open Bap_knowledge in
   let open Bap_core_theory in
   let open KB.Syntax in
   (* TODO collect the debug information for the particular superset
      name, and use it to calculate the cache digest in order to have
      separate digest for debug information and each feature *)
+  (*KB.Object.create Theory.Program.cls >>= fun obj ->*)
+  KB.promise Superset.Cache.superset_t (fun o ->
+      KB.return @@ Some Addr.Set.empty
+    );
   KB.promise Cache.function_entrances (fun label ->
+      KB.collect Cache.ground_truth_source label >>= fun bin ->
+  (*KB.provide Cache.function_entrances obj*)
       (* list of compiler intended entrances *)
       let function_addrs = ground_truth_of_unstripped_bin bin
                             |> ok_exn in
       let function_addrs =
         Addr.Set.of_list @@ Seq.to_list function_addrs in
+      print_endline "providing function_addrs";
       KB.return (Some function_addrs)
     );
   
   KB.promise Cache.ground_truth (fun label ->
       (* List of compiler intended addresses *)
+      let sg = Superset.Cache.superset_graph in
+      KB.collect sg label >>= fun superset_graph ->
       KB.collect Cache.function_entrances label >>=
         fun function_addrs ->
         match function_addrs with

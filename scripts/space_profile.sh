@@ -1,4 +1,4 @@
-export TODO=?
+export OCAML_SPACETIME_INTERVAL=1000
 
 
 make clean && make

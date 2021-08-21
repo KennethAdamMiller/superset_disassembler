@@ -39,7 +39,7 @@ module Cache = struct
     let inspect = List.sexp_of_t sexp_of_edge in
     Knowledge.Domain.optional
       ~inspect ~equal:(List.equal equal) "edges"
-    
+
   let superset_graph_persistent =
     Knowledge.Persistent.of_binable
       (module struct type t = (addr * addr) list option [@@deriving bin_io] end)
@@ -53,6 +53,18 @@ module Cache = struct
         ~desc in
     attr superset_graph_t superset_graph_persistent "superset_graph"
       "Graph, including all edges and single nodes."
+
+  let superset_t =
+    let persistent =
+      Knowledge.Persistent.of_binable
+        (module struct type t = Addr.Set.t option [@@deriving bin_io]
+                end) in
+    let superset_domain =
+      Knowledge.Domain.optional
+        ~inspect:Addr.Set.sexp_of_t ~equal:Addr.Set.equal "superset" in
+    let desc = "The representative slot for the superset" in
+    Knowledge.Class.property ~package ~persistent Theory.Unit.cls "superset"
+      superset_domain ~public:true ~desc
 end
   
 module Core = struct
@@ -174,7 +186,8 @@ module Core = struct
         let bil =
           Option.value_map insn ~default:[] ~f:(fun insn ->
               match (superset.lifter mem insn) with
-              | Ok bil -> 
+              | Ok bil ->
+                 (*let bil = Three_address_code.tac#*)
                  Addr.Table.set superset.lifted ~key:addr ~data:bil;
                  bil
               | _ -> []
@@ -259,6 +272,7 @@ module ISG = struct
     let insn_risg = OG.remove_edge superset.insn_risg v1 v2 in
     { superset with insn_risg }
 
+  (* TODO belongs in core *)
   let remove superset addr =
     let insn_risg = OG.remove_vertex superset.insn_risg addr in
     let insn_map = Map.remove superset.insn_map addr in
@@ -517,10 +531,6 @@ module Occlusion = struct
           )
       )
     
-end
-
-module Metrics = struct
-  let record superset = ()
 end
 
 (** An address is an entry for an isg if it could be the return

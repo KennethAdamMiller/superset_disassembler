@@ -15,6 +15,12 @@ module Cache : sig
   open Bap_core_theory
   open Theory
 
+  val ground_truth_source : (program, string) Knowledge.slot
+
+  val function_entrances : (program, Addr.Set.t option) Knowledge.slot
+
+  val ground_truth : (program, Addr.Set.t option) Knowledge.slot
+
   val occlusive_space : (program, int option) Knowledge.slot
 
   val reduced_occlusion : (program, int option) Knowledge.slot
@@ -25,18 +31,13 @@ module Cache : sig
 
   val true_positives : (program, int option) Knowledge.slot
 
-  val function_entrances : (program, Addr.Set.t option) Knowledge.slot
-
-  val ground_truth : (program, Addr.Set.t option) Knowledge.slot
-
   val clean_functions : (program, Addr.Set.t option) Knowledge.slot
     
 end
 
 (** Given a file location to a debug binary and a superset, collect
     metrics on the disassembly. *)
-val compute_metrics :
-  bin:string -> Superset.t -> unit
+val compute_metrics : Superset.t -> unit
      
 module Opts : sig
   (** Allow to specify a symbol file or binary *)

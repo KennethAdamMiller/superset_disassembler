@@ -1,0 +1,16 @@
+PKG cmdliner
+PKG bap
+PKG ounit2
+PKG bap-plugins
+PKG graphlib
+PKG monads
+PKG landmarks
+PKG bap-future
+PKG bap-knowledge
+PKG uuidm
+
+
+S ../src/
+
+B ../_build/
+B ../_build/src
