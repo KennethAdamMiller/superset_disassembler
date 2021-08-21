@@ -456,8 +456,8 @@ let _superset_disassemble_command : unit =
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
-    Ok (Toplevel.exec @@ create_and_process input outputs loader
-                           target update kb options)
+    Ok (create_and_process input outputs loader
+          target update kb options)
 
 let converge =
   Extension.Command.flag "converge"
