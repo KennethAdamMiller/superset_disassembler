@@ -342,10 +342,7 @@ let create_and_process
       Toplevel.exec @@ (Knowledge.collect ro obj >>= fun ro ->
       match ro with
       | Some ro -> KB.return @@ print_endline @@ sprintf "have ro: %d" ro
-      | None -> (
-        superset_disasm options;
-        KB.return @@ save_knowledge ~had_knowledge ~update digest kb
-      ))
+      | None -> KB.return ())
     ) 
           ) in
   print_endline "here";
