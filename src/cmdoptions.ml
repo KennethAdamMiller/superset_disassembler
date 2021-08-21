@@ -686,6 +686,7 @@ module With_options(Conf : Provider)  = struct
       sprintf "%d analyses: before %d, after %d, removed %d"
         List.(length analyses) before after (before - after);
     let superset,pmap = converge options superset in
+    Metrics.compute_metrics superset;
     let results = apply_setops setops options.setops in
     let results =
       collect_results superset
