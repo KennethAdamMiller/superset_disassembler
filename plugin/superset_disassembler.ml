@@ -494,6 +494,10 @@ let _distribution_command : unit =
     let digest = superset_digest options in
     let had_knowledge = load_knowledge digest kb in
     (*let _ = Project.Input.load ~target ~loader input in*)
+    let () = 
+    if had_knowledge then
+      print_endline "superset_distribution: had knowledge" 
+    else print_endline "superset_distribution: no knowledge" in
     let open KB.Syntax in
     Toplevel.exec @@ if metrics then (
       let open KB.Syntax in
