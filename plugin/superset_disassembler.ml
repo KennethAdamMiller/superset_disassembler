@@ -309,10 +309,51 @@ let create_and_process
       input outputs loader target update kb options =
   let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
-  let _ = Project.Input.load ~target ~loader input in
-  superset_disasm options;
-  save_knowledge ~had_knowledge ~update digest kb
-
+  print_endline @@ sprintf "had_knowledge: %b" had_knowledge;
+  let () = if not had_knowledge then
+             let _ = superset_disasm options in () else () in
+  (*let _ = Project.Input.load ~target ~loader input in*)
+  let open KB.Syntax in
+  let ro = Metrics.Cache.reduced_occlusion in
+  let lbl = KB.Object.create Theory.Program.cls in
+  let _ro = Toplevel.eval ro lbl in
+  print_endline @@ sprintf "some? %b, ro: %d"
+    (Option.is_some _ro)
+    (Option.value _ro ~default:0);
+  let _fns = Toplevel.eval Metrics.Cache.false_negatives lbl in
+  print_endline @@ sprintf "some? %b, fns: %d"
+    (Option.is_some _fns)
+    (Option.value _fns ~default:0);
+  save_knowledge ~had_knowledge ~update digest kb;
+  let k = (Knowledge.objects Theory.Program.cls >>= fun objs ->
+  let len = Seq.length objs in
+  print_endline @@ sprintf "objs: %d" len;
+  KB.return @@ Seq.map objs ~f:(fun obj ->
+                   let _ro = Toplevel.eval ro @@ Knowledge.return obj
+                   in
+                   print_endline @@ sprintf "have ro: %d" @@
+                     Option.value _ro ~default:0;
+      Toplevel.exec @@ (Knowledge.collect ro obj >>= fun ro ->
+      match ro with
+      | Some ro -> KB.return @@ print_endline @@ sprintf "have ro: %d" ro
+      | None -> (
+        superset_disasm options;
+        KB.return @@ save_knowledge ~had_knowledge ~update digest kb
+      ))
+    ) 
+          ) in
+  print_endline "here";
+  KB.Object.create Theory.Program.cls >>= fun lbl ->
+  print_endline "here";
+  Knowledge.collect ro lbl >>= fun ro ->
+  match ro with
+  | Some ro -> KB.return @@ print_endline @@ sprintf "have ro: %d" ro
+  | None -> (
+    KB.return @@ print_endline @@ sprintf "no ro";
+    (*superset_disasm options;
+    KB.return @@ save_knowledge ~had_knowledge ~update digest kb*)
+  )
+  
 let rounds =
   let doc = "Number of analysis cycles" in
   Extension.Command.parameter ~doc Extension.Type.(int =? 2) "rounds" 
@@ -412,10 +453,8 @@ let _superset_disassemble_command : unit =
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
-    create_and_process input outputs loader target update kb
-      ctxt options;
-    Ok ()
-
+    Ok (Toplevel.exec @@ create_and_process input outputs loader
+                           target update kb options)
 
 let converge =
   Extension.Command.flag "converge"
