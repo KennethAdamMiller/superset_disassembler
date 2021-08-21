@@ -185,8 +185,6 @@ let compute_metrics superset =
   
   KB.promise Cache.ground_truth (fun label ->
       (* List of compiler intended addresses *)
-      let sg = Superset.Cache.superset_graph in
-      KB.collect sg label >>= fun superset_graph ->
       KB.collect Cache.function_entrances label >>=
         fun function_addrs ->
         match function_addrs with
