@@ -320,6 +320,12 @@ let create_and_process
   print_endline @@ sprintf "some? %b, ro: %d"
     (Option.is_some _ro)
     (Option.value _ro ~default:0);
+  match options.ground_truth_bin with
+  | Some bin ->
+     Toplevel.exec @@  (lbl >>= fun lbl -> 
+     (KB.provide Metrics.Cache.ground_truth_source
+                         lbl bin));
+  | None -> ();
   let _fns = Toplevel.eval Metrics.Cache.false_negatives lbl in
   print_endline @@ sprintf "some? %b, fns: %d"
     (Option.is_some _fns)
@@ -343,7 +349,7 @@ let create_and_process
     ) 
           ) in
   print_endline "here";
-  KB.Object.create Theory.Program.cls >>= fun lbl ->
+  Toplevel.exec @@ (KB.Object.create Theory.Program.cls >>= fun lbl ->
   print_endline "here";
   Knowledge.collect ro lbl >>= fun ro ->
   match ro with
@@ -352,7 +358,7 @@ let create_and_process
     KB.return @@ print_endline @@ sprintf "no ro";
     (*superset_disasm options;
     KB.return @@ save_knowledge ~had_knowledge ~update digest kb*)
-  )
+  ))
   
 let rounds =
   let doc = "Number of analysis cycles" in
