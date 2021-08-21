@@ -322,9 +322,9 @@ let create_and_process
     (Option.value _ro ~default:0);
   match options.ground_truth_bin with
   | Some bin ->
-     Toplevel.exec @@  (lbl >>= fun lbl -> 
-     (KB.provide Metrics.Cache.ground_truth_source
-                         lbl bin));
+     (KB.promise Metrics.Cache.ground_truth_source (fun _ ->
+          KB.return bin)
+     );
   | None -> ();
   let _fns = Toplevel.eval Metrics.Cache.false_negatives lbl in
   print_endline @@ sprintf "some? %b, fns: %d"
