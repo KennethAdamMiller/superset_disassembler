@@ -348,6 +348,8 @@ let create_and_process
           ) in
   print_endline "here";
   Toplevel.exec @@ (KB.Object.create Theory.Program.cls >>= fun lbl ->
+                    print_endline @@ sprintf "program id: %s"
+                    @@ Int63.to_string @@ KB.Object.id lbl;
   print_endline "here";
   Knowledge.collect ro lbl >>= fun ro ->
   match ro with
@@ -522,8 +524,13 @@ let _distribution_command : unit =
         KB.return @@ print_endline @@ sprintf "found gt file: %s" s;
       );
     )
-                     ) else KB.return ();
+    ) else KB.return ();
     Toplevel.exec (KB.objects Theory.Program.cls >>= fun objs ->
+                   print_endline "Object ids:";
+                   Seq.iter objs ~f:(fun o ->
+                       print_endline @@ sprintf "%s"
+                       @@ Int63.to_string @@ KB.Object.id o
+                     );
     KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
     Ok ()
 
