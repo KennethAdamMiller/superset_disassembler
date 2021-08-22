@@ -312,17 +312,18 @@ let create_and_process
   print_endline @@ sprintf "had_knowledge: %b" had_knowledge;
   let () = if not had_knowledge then
              let _ = superset_disasm options in () else () in
+  save_knowledge ~had_knowledge ~update digest kb;
   (*let _ = Project.Input.load ~target ~loader input in*)
   let open KB.Syntax in
   let ro = Metrics.Cache.reduced_occlusion in
   let lbl = KB.Object.create Theory.Program.cls in
-  match options.ground_truth_bin with
+  (match options.ground_truth_bin with
   | Some bin ->
      print_endline @@ sprintf "Providing ground_truth_source: %s" bin;
      (KB.promise Metrics.Cache.ground_truth_source (fun _ ->
           KB.return bin)
      );
-  | None -> ();
+  | None -> ());
   let _ro = Toplevel.eval ro lbl in
   print_endline @@ sprintf "some? %b, ro: %d"
     (Option.is_some _ro)
@@ -331,7 +332,6 @@ let create_and_process
   print_endline @@ sprintf "some? %b, fns: %d"
     (Option.is_some _fns)
     (Option.value _fns ~default:0);
-  save_knowledge ~had_knowledge ~update digest kb;
   let k = (Knowledge.objects Theory.Program.cls >>= fun objs ->
   let len = Seq.length objs in
   print_endline @@ sprintf "objs: %d" len;
