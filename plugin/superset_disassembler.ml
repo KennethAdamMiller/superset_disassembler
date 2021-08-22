@@ -293,8 +293,8 @@ let superset_digest options =
   let invariants = options.phases in
   let analyses = options.analyses in
   let featureset = options.featureset in
-  make_digest @@ List.append invariants @@
-    List.append analyses @@ List.append featureset @@
+  make_digest (*@@ List.append invariants @@
+    List.append analyses @@ List.append featureset @@*)
       [
         Caml.Digest.file options.target;
         options.disassembler;
