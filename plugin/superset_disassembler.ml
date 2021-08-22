@@ -330,6 +330,9 @@ let create_and_process
      KB.promise Metrics.Cache.ground_truth_source
        (fun _ -> KB.return bin);
   | None -> ());
+  let lbl = get_lowest_prog_obj () in
+  let ro = Metrics.Cache.reduced_occlusion in
+  let _ = Toplevel.eval ro lbl in
   save_knowledge ~had_knowledge ~update digest kb
   
 let rounds =
