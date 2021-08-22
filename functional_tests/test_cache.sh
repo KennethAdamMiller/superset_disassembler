@@ -1,6 +1,5 @@
 #!/bin/bash
 eval $(opam config env)
-source scripts/analyze.sh
 source scripts/read_cache.sh
 #export SUPERSET_FRONTEND=1
 export features="TrimLimitedClamped,FixpointGrammar,FixpointFreevarSSA"

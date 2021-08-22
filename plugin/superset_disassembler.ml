@@ -494,56 +494,39 @@ let _distribution_command : unit =
         ~save_gt:false ~save_addrs:false ~tp_threshold ~rounds ~featureset
         ~analyses ~collect_report ~phases:invariants ~dforest:None in
     let digest = superset_digest options in
-    let had_knowledge = load_knowledge digest kb in
+    let _ = load_knowledge digest kb in
     (*let _ = Project.Input.load ~target ~loader input in*)
-    let () = 
-    if had_knowledge then
-      print_endline "superset_distribution: had knowledge" 
-    else print_endline "superset_distribution: no knowledge" in
-    (*(match options.ground_truth_bin with
-     | Some bin ->
-        print_endline @@ sprintf "Providing ground_truth_source: %s" bin;
-        (KB.promise Metrics.Cache.ground_truth_source (fun _ ->
-             KB.return bin)
-        );
-     | None -> ());*)
     let open KB.Syntax in
-    Toplevel.exec (KB.objects Theory.Program.cls >>= fun objs ->
-                   print_endline "Object ids:";
-                   Seq.iter objs ~f:(fun o ->
-                       Toplevel.exec (KB.collect Metrics.Cache.reduced_occlusion
-                         o >>=
-                         (function
-                          | None ->
-                             KB.return @@
-                               print_endline "reduced occlusion unknown";
-                          | Some ro ->
-                             KB.return @@
-                               print_endline @@ sprintf "reduced occlusion: %d" ro
-                         ));
-                       print_endline @@ sprintf "%s"
-                       @@ Int63.to_string @@ KB.Object.id o;
-                       Toplevel.exec (
-                       KB.collect Metrics.Cache.ground_truth_source o >>= fun s ->
-                       KB.return @@ print_endline @@ sprintf "found gt file: %s" s;)
-                     );
-                   KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
-    Toplevel.exec @@ if metrics then (
-    get_lowest_prog_obj () >>= (fun label ->
-      KB.collect Metrics.Cache.reduced_occlusion label >>= (function
-      | None ->
-         KB.return @@
-           print_endline "lowest obj reduced occlusion unknown";
-      | Some ro ->
-         KB.return @@
-           print_endline @@ sprintf "lowest obj reduced occlusion: %d" ro
-      ) >>= fun () ->
-      (
-        KB.collect Metrics.Cache.ground_truth_source label >>= fun s ->
-        KB.return @@ print_endline @@ sprintf "found gt file: %s" s;
-      );
-    )
-    ) else KB.return ();
+    Toplevel.exec @@
+      if metrics then (
+        get_lowest_prog_obj () >>= (fun label ->
+          KB.collect Metrics.Cache.occlusive_space label >>=
+            fun occ_space -> 
+            KB.collect Metrics.Cache.reduced_occlusion label >>=
+            fun ro ->
+            (match ro, occ_space with
+             | Some ro, Some occ_space ->
+                KB.return @@
+                  print_endline
+                  @@ sprintf "reduced occlusion: %d of %d space" ro occ_space
+             | _ ->
+                KB.return @@
+                  print_endline "reduced occlusion or occlusive space unknown";
+            ) >>= fun () ->
+          (
+            KB.collect Metrics.Cache.function_entrances label >>=
+              fun fe ->
+            KB.collect Metrics.Cache.clean_functions label >>=
+              fun clean ->
+              KB.return @@ (match clean, fe with
+              | Some clean, Some fe ->
+                 print_endline
+                 @@ sprintf "%d perfectly clean functions of %d total"
+                      Set.(length clean) Set.(length fe);
+              | _, _ -> print_endline "Function entrances or # clean unknown")
+          );
+        )
+      ) else KB.return ();
     Ok ()
 
 let _cache_command : unit =
