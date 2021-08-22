@@ -522,7 +522,9 @@ let _distribution_command : unit =
         KB.return @@ print_endline @@ sprintf "found gt file: %s" s;
       );
     )
-    ) else KB.return ();
+                     ) else KB.return ();
+    Toplevel.exec (KB.objects Theory.Program.cls >>= fun objs ->
+    KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
     Ok ()
 
 let _cache_command : unit =
