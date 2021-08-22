@@ -347,7 +347,7 @@ let create_and_process
     ) 
           ) in
   print_endline "here";
-  Toplevel.exec @@ (KB.Object.create Theory.Program.cls >>= fun lbl ->
+  Toplevel.exec @@ (lbl >>= fun lbl ->
                     print_endline @@ sprintf "program id: %s"
                     @@ Int63.to_string @@ KB.Object.id lbl;
   print_endline "here";
@@ -509,22 +509,6 @@ let _distribution_command : unit =
         );
      | None -> ());*)
     let open KB.Syntax in
-    Toplevel.exec @@ if metrics then (
-    KB.Object.create Theory.Program.cls >>= (fun label ->
-      KB.collect Metrics.Cache.reduced_occlusion label >>= (function
-      | None ->
-         KB.return @@
-           print_endline "reduced occlusion unknown";
-      | Some ro ->
-         KB.return @@
-           print_endline @@ sprintf "reduced occlusion: %d" ro
-      ) >>= fun () ->
-      (
-        KB.collect Metrics.Cache.ground_truth_source label >>= fun s ->
-        KB.return @@ print_endline @@ sprintf "found gt file: %s" s;
-      );
-    )
-    ) else KB.return ();
     Toplevel.exec (KB.objects Theory.Program.cls >>= fun objs ->
                    print_endline "Object ids:";
                    Seq.iter objs ~f:(fun o ->
@@ -545,6 +529,22 @@ let _distribution_command : unit =
                        KB.return @@ print_endline @@ sprintf "found gt file: %s" s;)
                      );
     KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
+    Toplevel.exec @@ if metrics then (
+    KB.Object.create Theory.Program.cls >>= (fun label ->
+      KB.collect Metrics.Cache.reduced_occlusion label >>= (function
+      | None ->
+         KB.return @@
+           print_endline "reduced occlusion unknown";
+      | Some ro ->
+         KB.return @@
+           print_endline @@ sprintf "reduced occlusion: %d" ro
+      ) >>= fun () ->
+      (
+        KB.collect Metrics.Cache.ground_truth_source label >>= fun s ->
+        KB.return @@ print_endline @@ sprintf "found gt file: %s" s;
+      );
+    )
+    ) else KB.return ();
     Ok ()
 
 let _cache_command : unit =
