@@ -529,7 +529,10 @@ let _distribution_command : unit =
                    print_endline "Object ids:";
                    Seq.iter objs ~f:(fun o ->
                        print_endline @@ sprintf "%s"
-                       @@ Int63.to_string @@ KB.Object.id o
+                       @@ Int63.to_string @@ KB.Object.id o;
+                       Toplevel.exec (
+                       KB.collect Metrics.Cache.ground_truth_source o >>= fun s ->
+                       KB.return @@ print_endline @@ sprintf "found gt file: %s" s;)
                      );
     KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
     Ok ()
