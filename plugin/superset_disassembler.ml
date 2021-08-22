@@ -305,6 +305,20 @@ let gtruth_digest gt_bin =
       Caml.Digest.file gt_bin;
     ]
 
+let get_lowest_prog_obj () =
+  let open KB.Syntax in
+  KB.objects Theory.Program.cls >>= fun objs ->
+  match Seq.fold objs ~init:None ~f:(fun accu o ->
+      match accu with
+      | None -> Some o
+      | Some accu ->
+         if Int63.(KB.Object.id accu > KB.Object.id o) then
+           Some o
+         else Some accu
+    ) with
+  | Some o -> KB.return o
+  | None -> KB.Object.create Theory.Program.cls 
+  
 let create_and_process
       input outputs loader target update kb options =
   let digest = superset_digest options in
@@ -315,7 +329,7 @@ let create_and_process
   (*let _ = Project.Input.load ~target ~loader input in*)
   let open KB.Syntax in
   let ro = Metrics.Cache.reduced_occlusion in
-  let lbl = KB.Object.create Theory.Program.cls in
+  let lbl = get_lowest_prog_obj () in
   (match options.ground_truth_bin with
   | Some bin ->
      print_endline @@ sprintf "Providing ground_truth_source: %s" bin;
@@ -332,21 +346,6 @@ let create_and_process
     (Option.is_some _fns)
     (Option.value _fns ~default:0);
   save_knowledge ~had_knowledge ~update digest kb;
-  let k = (Knowledge.objects Theory.Program.cls >>= fun objs ->
-  let len = Seq.length objs in
-  print_endline @@ sprintf "objs: %d" len;
-  KB.return @@ Seq.map objs ~f:(fun obj ->
-                   let _ro = Toplevel.eval ro @@ Knowledge.return obj
-                   in
-                   print_endline @@ sprintf "have ro: %d" @@
-                     Option.value _ro ~default:0;
-      Toplevel.exec @@ (Knowledge.collect ro obj >>= fun ro ->
-      match ro with
-      | Some ro -> KB.return @@ print_endline @@ sprintf "have ro: %d" ro
-      | None -> KB.return ())
-    ) 
-          ) in
-  print_endline "here";
   Toplevel.exec @@ (lbl >>= fun lbl ->
                     print_endline @@ sprintf "program id: %s"
                     @@ Int63.to_string @@ KB.Object.id lbl;
@@ -528,16 +527,16 @@ let _distribution_command : unit =
                        KB.collect Metrics.Cache.ground_truth_source o >>= fun s ->
                        KB.return @@ print_endline @@ sprintf "found gt file: %s" s;)
                      );
-    KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
+                   KB.return @@ print_endline @@ sprintf "have %d objs" @@ Seq.length objs);
     Toplevel.exec @@ if metrics then (
-    KB.Object.create Theory.Program.cls >>= (fun label ->
+    get_lowest_prog_obj () >>= (fun label ->
       KB.collect Metrics.Cache.reduced_occlusion label >>= (function
       | None ->
          KB.return @@
-           print_endline "reduced occlusion unknown";
+           print_endline "lowest obj reduced occlusion unknown";
       | Some ro ->
          KB.return @@
-           print_endline @@ sprintf "reduced occlusion: %d" ro
+           print_endline @@ sprintf "lowest obj reduced occlusion: %d" ro
       ) >>= fun () ->
       (
         KB.collect Metrics.Cache.ground_truth_source label >>= fun s ->
