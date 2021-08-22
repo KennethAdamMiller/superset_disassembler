@@ -323,41 +323,14 @@ let create_and_process
       input outputs loader target update kb options =
   let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
-  print_endline @@ sprintf "had_knowledge: %b" had_knowledge;
   let () = if not had_knowledge then
              let _ = superset_disasm options in () else () in
-  (*let _ = Project.Input.load ~target ~loader input in*)
-  let open KB.Syntax in
-  let ro = Metrics.Cache.reduced_occlusion in
-  let lbl = get_lowest_prog_obj () in
   (match options.ground_truth_bin with
   | Some bin ->
-     print_endline @@ sprintf "Providing ground_truth_source: %s" bin;
-     (KB.promise Metrics.Cache.ground_truth_source (fun _ ->
-          KB.return bin)
-     );
+     KB.promise Metrics.Cache.ground_truth_source
+       (fun _ -> KB.return bin);
   | None -> ());
-  let _ro = Toplevel.eval ro lbl in
-  print_endline @@ sprintf "some? %b, ro: %d"
-    (Option.is_some _ro)
-    (Option.value _ro ~default:0);
-  let _fns = Toplevel.eval Metrics.Cache.false_negatives lbl in
-  print_endline @@ sprintf "some? %b, fns: %d"
-    (Option.is_some _fns)
-    (Option.value _fns ~default:0);
-  save_knowledge ~had_knowledge ~update digest kb;
-  Toplevel.exec @@ (lbl >>= fun lbl ->
-                    print_endline @@ sprintf "program id: %s"
-                    @@ Int63.to_string @@ KB.Object.id lbl;
-  print_endline "here";
-  Knowledge.collect ro lbl >>= fun ro ->
-  match ro with
-  | Some ro -> KB.return @@ print_endline @@ sprintf "have ro: %d" ro
-  | None -> (
-    KB.return @@ print_endline @@ sprintf "no ro";
-    (*superset_disasm options;
-    KB.return @@ save_knowledge ~had_knowledge ~update digest kb*)
-  ))
+  save_knowledge ~had_knowledge ~update digest kb
   
 let rounds =
   let doc = "Number of analysis cycles" in
@@ -524,6 +497,24 @@ let _distribution_command : unit =
                  @@ sprintf "%d perfectly clean functions of %d total"
                       Set.(length clean) Set.(length fe);
               | _, _ -> print_endline "Function entrances or # clean unknown")
+          ) >>= fun () ->
+          (
+            let fns = Metrics.Cache.false_negatives in
+            let fps = Metrics.Cache.false_positives in
+            let tps = Metrics.Cache.true_positives in
+            KB.collect fns label >>= fun fns ->
+            KB.collect fps label >>= fun fps ->
+            KB.collect tps label >>= fun tps ->
+            match fps, fns, tps with
+            | Some fps, Some fns, Some tps ->
+               let s =
+                 sprintf
+                   "false negatives %d, false positives %d, true positives %d"
+                   fns fps tps in
+               KB.return @@ print_endline s;
+            | _ ->
+               KB.return @@ print_endline
+                 "One of true or false postivies, false negatives is unknown";
           );
         )
       ) else KB.return ();

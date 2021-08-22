@@ -53,18 +53,6 @@ module Cache = struct
         ~desc in
     attr superset_graph_t superset_graph_persistent "superset_graph"
       "Graph, including all edges and single nodes."
-
-  let superset_t =
-    let persistent =
-      Knowledge.Persistent.of_binable
-        (module struct type t = Addr.Set.t option [@@deriving bin_io]
-                end) in
-    let superset_domain =
-      Knowledge.Domain.optional
-        ~inspect:Addr.Set.sexp_of_t ~equal:Addr.Set.equal "superset" in
-    let desc = "The representative slot for the superset" in
-    Knowledge.Class.property ~package ~persistent Theory.Unit.cls "superset"
-      superset_domain ~public:true ~desc
 end
   
 module Core = struct

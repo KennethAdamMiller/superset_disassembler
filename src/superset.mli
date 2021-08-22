@@ -214,9 +214,6 @@ module Cache : sig
     (Bap_core_theory.Theory.program,
      (Bap.Std.Addr.t * Bap.Std.Addr.t) list option)
     Bap_knowledge.Knowledge.slot
-  val superset_t :
-    (Bap_core_theory.Theory.Unit.cls, Bap.Std.Addr.Set.t option)
-    Bap_knowledge.Knowledge.slot
 end
      
 module Occlusion : sig

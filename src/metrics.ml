@@ -168,9 +168,6 @@ let compute_metrics superset =
      name, and use it to calculate the cache digest in order to have
      separate digest for debug information and each feature *)
   (*KB.Object.create Theory.Program.cls >>= fun obj ->*)
-  KB.promise Superset.Cache.superset_t (fun o ->
-      KB.return @@ Some Addr.Set.empty
-    );
   KB.promise Cache.function_entrances (fun label ->
       KB.collect Cache.ground_truth_source label >>= fun bin ->
   (*KB.provide Cache.function_entrances obj*)
@@ -179,7 +176,6 @@ let compute_metrics superset =
                             |> ok_exn in
       let function_addrs =
         Addr.Set.of_list @@ Seq.to_list function_addrs in
-      print_endline "providing function_addrs";
       KB.return (Some function_addrs)
     );
   
@@ -244,7 +240,7 @@ let compute_metrics superset =
            KB.return @@
              (Some
                 (Set.fold function_entrances ~init ~f:(fun clean x ->
-                  if ro_at x then Set.add clean x else clean
+                  if ro_at x then clean else Set.add clean x
                 ))
              )
     );

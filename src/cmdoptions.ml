@@ -649,6 +649,7 @@ module With_options(Conf : Provider)  = struct
       time ~name:"import" Superset.import options.disassembler bin
         graph
     | None ->
+       (*let _ = Project.Input.load ~target ~loader input in*)
        (* TODO use Project.Input.load and cycle through the code *)
       let invariants = (Invariants.tag_success::invariants) in
       Superset.superset_disasm_of_file ~backend bin
