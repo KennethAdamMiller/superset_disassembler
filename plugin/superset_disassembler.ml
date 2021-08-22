@@ -509,7 +509,7 @@ let _distribution_command : unit =
       | Some ro ->
          KB.return @@
            print_endline @@ sprintf "reduced occlusion: %d" ro
-      );
+      ) >>= fun () ->
       (
         KB.collect Metrics.Cache.ground_truth_source label >>= fun s ->
         KB.return @@ print_endline @@ sprintf "found gt file: %s" s;
