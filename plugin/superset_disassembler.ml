@@ -316,16 +316,17 @@ let create_and_process
   let open KB.Syntax in
   let ro = Metrics.Cache.reduced_occlusion in
   let lbl = KB.Object.create Theory.Program.cls in
-  let _ro = Toplevel.eval ro lbl in
-  print_endline @@ sprintf "some? %b, ro: %d"
-    (Option.is_some _ro)
-    (Option.value _ro ~default:0);
   match options.ground_truth_bin with
   | Some bin ->
+     print_endline @@ sprintf "Providing ground_truth_source: %s" bin;
      (KB.promise Metrics.Cache.ground_truth_source (fun _ ->
           KB.return bin)
      );
   | None -> ();
+  let _ro = Toplevel.eval ro lbl in
+  print_endline @@ sprintf "some? %b, ro: %d"
+    (Option.is_some _ro)
+    (Option.value _ro ~default:0);
   let _fns = Toplevel.eval Metrics.Cache.false_negatives lbl in
   print_endline @@ sprintf "some? %b, fns: %d"
     (Option.is_some _fns)
