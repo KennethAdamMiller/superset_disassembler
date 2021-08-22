@@ -501,13 +501,13 @@ let _distribution_command : unit =
     if had_knowledge then
       print_endline "superset_distribution: had knowledge" 
     else print_endline "superset_distribution: no knowledge" in
-    (match options.ground_truth_bin with
+    (*(match options.ground_truth_bin with
      | Some bin ->
         print_endline @@ sprintf "Providing ground_truth_source: %s" bin;
         (KB.promise Metrics.Cache.ground_truth_source (fun _ ->
              KB.return bin)
         );
-     | None -> ());
+     | None -> ());*)
     let open KB.Syntax in
     Toplevel.exec @@ if metrics then (
     KB.Object.create Theory.Program.cls >>= (fun label ->
@@ -528,6 +528,16 @@ let _distribution_command : unit =
     Toplevel.exec (KB.objects Theory.Program.cls >>= fun objs ->
                    print_endline "Object ids:";
                    Seq.iter objs ~f:(fun o ->
+                       Toplevel.exec (KB.collect Metrics.Cache.reduced_occlusion
+                         o >>=
+                         (function
+                          | None ->
+                             KB.return @@
+                               print_endline "reduced occlusion unknown";
+                          | Some ro ->
+                             KB.return @@
+                               print_endline @@ sprintf "reduced occlusion: %d" ro
+                         ));
                        print_endline @@ sprintf "%s"
                        @@ Int63.to_string @@ KB.Object.id o;
                        Toplevel.exec (
