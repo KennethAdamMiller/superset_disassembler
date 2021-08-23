@@ -149,9 +149,8 @@ let bil_tac =
   end   
 
 let map_bil bil =
-  let l =
-    List.map bil ~f:(fun e ->
-        let (e,_,_) = bil_tac#visit_stmt e ([], Exp.Map.empty, None) in
-        e
+  let (l,_,_) =
+    List.fold bil ~init:([], Exp.Map.empty, None) ~f:(fun accu e ->
+        bil_tac#visit_stmt e accu
       ) in
-  List.rev @@ List.concat l
+  List.rev l
