@@ -175,7 +175,7 @@ module Core = struct
           Option.value_map insn ~default:[] ~f:(fun insn ->
               match (superset.lifter mem insn) with
               | Ok bil ->
-                 (*let bil = Three_address_code.tac#*)
+                 let bil = Three_address_code.map_bil bil in
                  Addr.Table.set superset.lifted ~key:addr ~data:bil;
                  bil
               | _ -> []
