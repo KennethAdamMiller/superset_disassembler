@@ -1,4 +1,5 @@
 #!/bin/bash
+echo "====$0===="
 eval $(opam config env)
 source scripts/read_cache.sh
 #export SUPERSET_FRONTEND=1

@@ -1,4 +1,5 @@
-echo "====test_run.sh===="
+#!/bin/bash
+echo "====$0===="
 echo "int main(void){return 0;}" > "empty.c"
 gcc empty.c -o empty
 cp ./empty ./empty_stripped

@@ -1,4 +1,4 @@
-echo "====test_cmdline.sh===="
+echo "====$0===="
 #test help
 #test minimum required arguments
 #      ~checkpoint ~disassembler ~ground_truth_bin
