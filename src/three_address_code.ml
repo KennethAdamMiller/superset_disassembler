@@ -152,6 +152,6 @@ let map_bil bil =
   let l =
     List.map bil ~f:(fun e ->
         let (e,_,_) = bil_tac#visit_stmt e ([], Exp.Map.empty, None) in
-        List.rev e
+        e
       ) in
-  List.concat l
+  List.rev @@ List.concat l
