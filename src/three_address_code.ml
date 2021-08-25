@@ -153,4 +153,4 @@ let map_bil bil =
     List.fold bil ~init:([], Exp.Map.empty, None) ~f:(fun accu e ->
         bil_tac#visit_stmt e accu
       ) in
-  List.rev l
+  Stmt.normalize @@ List.rev l

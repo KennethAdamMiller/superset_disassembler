@@ -121,8 +121,7 @@ module Cache = struct
   let ground_truth_source =
     let open Knowledge.Domain in
     attr string string_persistent "ground_truth_source"
-      "Binary containing debug information in the form of function
-    entrances"
+      "Binary containing debug information"
 
   let function_entrances =
     attr addrs_t addrs_persistent "function_entrances"
@@ -130,17 +129,15 @@ module Cache = struct
 
   let ground_truth =
     attr addrs_t addrs_persistent "ground_truth"
-      "Set of addresses statically reachable from function entrances"
+      "Statically reachable descendents of function entrances"
     
   let occlusive_space =
     attr int_t int_persistent "occlusive_space"
-      "Number of addresses are in the bodies (addrs) of compiler intended
-       instructions"
+      "Number of addresses are in the bodies (addrs) of ground truth"
 
   let reduced_occlusion =
     attr int_t int_persistent "reduced_occlusion"
-      "Of the bodies (addrs) of compiler intended instructions, how many
-       are occupied"
+      "Of the occlusive space, how many are occupied"
 
   let false_negatives =
     attr int_t int_persistent "false_negatives"
@@ -156,7 +153,7 @@ module Cache = struct
     
   let clean_functions =
     attr addrs_t addrs_persistent "clean_functions"
-      "Functions that were perfectly disassembled, with no false positives"
+      "Functions with completely empty occlusive space"
 
 end
 
@@ -164,13 +161,8 @@ let compute_metrics superset =
   let open Bap_knowledge in
   let open Bap_core_theory in
   let open KB.Syntax in
-  (* TODO collect the debug information for the particular superset
-     name, and use it to calculate the cache digest in order to have
-     separate digest for debug information and each feature *)
-  (*KB.Object.create Theory.Program.cls >>= fun obj ->*)
   KB.promise Cache.function_entrances (fun label ->
       KB.collect Cache.ground_truth_source label >>= fun bin ->
-  (*KB.provide Cache.function_entrances obj*)
       (* list of compiler intended entrances *)
       let function_addrs = ground_truth_of_unstripped_bin bin
                             |> ok_exn in
@@ -285,32 +277,3 @@ let compute_metrics superset =
          KB.return (Some false_positives)
       | None -> KB.return None
     );
-
-(*  printf "Number of functions precisely trimmed: %d of %d\n"
-    total_clean Set.(length ground_truth);
-  printf "Number of possible reduced false positives: %d\n" 
-    !datas;
-  printf "Reduced occlusion: %d\n" (!ro);
-  printf "True positives: %d\n" Hash_set.(length true_positives);
-  let fn_entries = check_fn_entries superset ground_truth in
-  if not (Set.length fn_entries = 0) then
-    printf "Missed function entrances %s\n" 
-      (List.to_string ~f:Addr.to_string @@ Set.to_list fn_entries);
-  printf "Occlusion: %d\n" 
-    (Set.length @@ Superset.Occlusion.find_all_conflicts superset);
-  printf "Instruction fns: %d\n"
-    (fn_insn_cnt superset true_positives);
-  let false_negatives = Set.(length fn_entries) in
-  ()*)
-
-module Opts = struct 
-  open Cmdliner
-
-  let list_content_doc = sprintf
-      "Metrics may be collected against a symbol file"
-  let content_type = 
-    Arg.(value &
-         opt (some string) (None)
-         & info ["metrics_data"] ~doc:list_content_doc)
-
-end

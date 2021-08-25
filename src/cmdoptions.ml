@@ -543,7 +543,6 @@ end
 
 module With_options(Conf : Provider)  = struct
   open Conf
-  open Metrics.Opts
   open Or_error
   open Format
 

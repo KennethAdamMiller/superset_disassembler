@@ -1,5 +1,5 @@
 ARG IMG=superset_disasm
-ARG TAG="$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)"
+ARG TAG
 FROM ${IMG}:${TAG}
 
 WORKDIR /home/opam/workspace
@@ -10,7 +10,7 @@ RUN git clone https://github.com/schieb/ELFManip
 ##### multiverse
 #USER opam
 #python -m pip install --upgrade pyelftools==0.24 &&
-RUN sudo apt-get update && sudo apt-get install libc6-dev-i386 wget -y && cd /home/opam/workspace/ && wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && sudo python ./get-pip.py && rm ./get-pip.py && pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y && cd /home/opam/workspace/ELFManip && sudo python setup.py install 
+RUN sudo apt-get update && sudo apt-get install python-dev libc6-dev-i386 wget -y && cd /home/opam/workspace/ && wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && sudo python ./get-pip.py && rm ./get-pip.py && pip install setuptools_rust && pip install pwntools==3.12.2 && sudo pip uninstall capstone -y && cd /home/opam/workspace/ELFManip && sudo python setup.py install 
 WORKDIR /home/opam/workspace/capstone
 RUN ./make.sh && sudo ./make.sh install && cd bindings/python && sudo python setup.py install
 WORKDIR /home/opam/workspace/multiverse
@@ -19,4 +19,4 @@ RUN make && echo "import curses; curses.setupterm();" > x64_asmblr.py && cat x64
 
 ##### multiverse performance
 WORKDIR $HOME/workspace/multiverse
-RUN chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh
+RUN eval $(opam config env) && chmod u+x *.sh && ./do_disasm.sh && ./dorewrite.sh && ./copyover.sh #&& ./timerewritten.sh

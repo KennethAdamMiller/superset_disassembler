@@ -38,10 +38,3 @@ end
 (** Given a file location to a debug binary and a superset, collect
     metrics on the disassembly. *)
 val compute_metrics : Superset.t -> unit
-     
-module Opts : sig
-  (** Allow to specify a symbol file or binary *)
-  val content_type : string option Cmdliner.Term.t
-  (** Output the metrics either in human readable form or to a latex
-      table *)
-end
