@@ -304,20 +304,6 @@ let gtruth_digest gt_bin =
   make_digest [
       Caml.Digest.file gt_bin;
     ]
-
-let get_lowest_prog_obj () =
-  let open KB.Syntax in
-  KB.objects Theory.Program.cls >>= fun objs ->
-  match Seq.fold objs ~init:None ~f:(fun accu o ->
-      match accu with
-      | None -> Some o
-      | Some accu ->
-         if Int63.(KB.Object.id accu > KB.Object.id o) then
-           Some o
-         else Some accu
-    ) with
-  | Some o -> KB.return o
-  | None -> KB.Object.create Theory.Program.cls 
   
 let create_and_process
       input outputs loader target update kb options =
@@ -330,7 +316,8 @@ let create_and_process
      KB.promise Metrics.Cache.ground_truth_source
        (fun _ -> KB.return bin);
   | None -> ());
-  let lbl = get_lowest_prog_obj () in
+  let lbl = KB.Symbol.intern
+               "superset_analysis" Theory.Program.cls in
   let ro = Metrics.Cache.reduced_occlusion in
   let _ = Toplevel.eval ro lbl in
   save_knowledge ~had_knowledge ~update digest kb
@@ -436,22 +423,31 @@ let _superset_disassemble_command : unit =
     Dump_formats.parse outputs >>= fun outputs ->
     Ok (create_and_process input outputs loader
           target update kb options)
-
+    
 let converge =
   Extension.Command.flag "converge"
 
 let metrics =
-  Extension.Command.flag "metrics"
+  let doc =
+    sprintf "%s%s%s%s"
+    "The format string specifying how to print the metrics"
+    ", which include: clean_functions, true_positives, "
+    "false_positives, false_negatives, reduced_occlusion, "
+    " occlusive_space, and function_entrances " in
+  Extension.Command.parameter ~doc
+    Extension.Type.(some (list string)) "metrics"
+
 
 (* TODO review features_used to possibly remove some *)
 let _distribution_command : unit =
   let args =
+    (* TODO can remove unnecessary arguments now that digest is by file *)
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
     $ground_truth_bin $invariants $analyses
+    (* TODO use collect_report and featureset to evaluate them *)
     $tp_threshold $featureset $rounds $collect_report
-    $converge $metrics
-  in
+    $converge $metrics in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
     fun input outputs loader target update kb
@@ -472,55 +468,56 @@ let _distribution_command : unit =
     let digest = superset_digest options in
     let _ = load_knowledge digest kb in
     (*let _ = Project.Input.load ~target ~loader input in*)
+    let map_opt =
+      function | None -> "unknown" | Some v -> sprintf "%d" v in
     let open KB.Syntax in
     Toplevel.exec @@
-      if metrics then (
-        get_lowest_prog_obj () >>= (fun label ->
-          KB.collect Metrics.Cache.occlusive_space label >>=
-            fun occ_space -> 
-            KB.collect Metrics.Cache.reduced_occlusion label >>=
-            fun ro ->
-            (match ro, occ_space with
-             | Some ro, Some occ_space ->
+      (match metrics with
+       | Some metrics ->
+          KB.Symbol.intern "superset_analysis"
+            Theory.Program.cls >>= (fun label ->
+          let oc_space = Metrics.Cache.occlusive_space in
+          let ro = Metrics.Cache.reduced_occlusion in
+          let fns = Metrics.Cache.false_negatives in
+          let fps = Metrics.Cache.false_positives in
+          let tps = Metrics.Cache.true_positives in
+          let slots = [ oc_space ; ro; fns; fps; tps ] in
+          let slots =
+            List.map slots ~f:(fun slt ->
+                KB.collect slt label >>= fun d ->
                 KB.return @@
-                  print_endline
-                  @@ sprintf "reduced occlusion: %d of %d space" ro occ_space
-             | _ ->
+                  ((KB.Name.show @@ KB.Slot.name slt),(map_opt d))
+              ) in
+          let fe = Metrics.Cache.function_entrances in
+          let clean = Metrics.Cache.clean_functions in
+          KB.all @@ List.append slots @@
+            List.map [fe; clean] ~f:(fun slt ->
+                KB.collect slt label >>= fun d ->
+                let d = Option.map d ~f:Set.length in
                 KB.return @@
-                  print_endline "reduced occlusion or occlusive space unknown";
-            ) >>= fun () ->
-          (
-            KB.collect Metrics.Cache.function_entrances label >>=
-              fun fe ->
-            KB.collect Metrics.Cache.clean_functions label >>=
-              fun clean ->
-              KB.return @@ (match clean, fe with
-              | Some clean, Some fe ->
-                 print_endline
-                 @@ sprintf "%d perfectly clean functions of %d total"
-                      Set.(length clean) Set.(length fe);
-              | _, _ -> print_endline "Function entrances or # clean unknown")
-          ) >>= fun () ->
-          (
-            let fns = Metrics.Cache.false_negatives in
-            let fps = Metrics.Cache.false_positives in
-            let tps = Metrics.Cache.true_positives in
-            KB.collect fns label >>= fun fns ->
-            KB.collect fps label >>= fun fps ->
-            KB.collect tps label >>= fun tps ->
-            match fps, fns, tps with
-            | Some fps, Some fns, Some tps ->
-               let s =
-                 sprintf
-                   "false negatives %d, false positives %d, true positives %d"
-                   fns fps tps in
-               KB.return @@ print_endline s;
-            | _ ->
-               KB.return @@ print_endline
-                 "One of true or false postivies, false negatives is unknown";
-          );
-        )
-      ) else KB.return ();
+                  ((KB.Name.show @@ KB.Slot.name slt),(map_opt d))
+              ) >>= fun slots ->
+          let metric_vals =
+            List.fold ~init:String.Map.empty slots
+              ~f:(fun m (name,v) -> String.Map.set m name v) in            
+          let fmt,rem = List.hd metrics, List.tl metrics in
+          let s = 
+            match fmt, rem with
+            | Some fmt, Some rem ->
+               let init = fmt,0 in
+               let s,_=List.fold rem ~init ~f:(fun (fmt,v) s ->
+                           let r = Str.regexp @@ sprintf "%%%d" v in
+                           let default = sprintf "%s Not a metric" s in
+                           let s = Map.find metric_vals s in
+                           let s = Option.value s ~default in
+                           Str.global_replace r s fmt,v+1
+                         ) in s
+            | _ -> "inproper arguments given to metrics" in
+          info "%s" s;
+          KB.return ()
+         )
+       | None -> KB.return ()
+      );
     Ok ()
 
 let _cache_command : unit =
