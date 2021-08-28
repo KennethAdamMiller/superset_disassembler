@@ -36,9 +36,15 @@ let stmt_def_freevars =
   object(self)
     inherit [Var.Set.t] Stmt.visitor
     method enter_move def use accu =
-      (*if not Var.(is_virtual def) then*)
         Set.add accu def
-                (*else accu*)
+    method enter_load ~mem ~addr e s accu =
+      match mem with
+      | Bil.Var v -> Set.add accu v
+      | _ -> accu
+    method enter_store ~mem ~addr ~exp e s accu =
+      match addr with
+      | Bil.Var v -> Set.add accu v
+      | _ -> accu
   end
 
 let stmt_use_freevars =
@@ -48,6 +54,14 @@ let stmt_use_freevars =
       let free_vars = (Exp.free_vars use)
         (*Set.filter ~f:(fun v -> not Var.(is_virtual v)) (Exp.free_vars use)*)
       in Set.union accu free_vars
+    method enter_load ~mem ~addr e s accu =
+      match addr with
+      | Bil.Var v -> Set.add accu v
+      | _ -> accu
+    method enter_store ~mem ~addr ~exp e s accu =
+      match exp with
+      | Bil.Var v -> Set.add accu v
+      | _ -> accu
   end
 
 let def_mem_ssa bil = 
