@@ -68,6 +68,9 @@ let format_map_details md =
   | Some(md) -> sprintf "tptp %d tpfp %d fptp %d fpfp %d"
                   md.tp_to_tp md.tp_to_fp md.fp_to_tp md.fp_to_fp
 
+module Cache = struct
+end
+
 let format_report r =
   sprintf "\tReport: \n%s %d \n%s%d\n%s%d\n%s%d\n%s%d\n%s%d\n%s%d\n%s %d\n%s %s\n%s%d\n%s%d\n%s%d\n%s%s\n%s%s\n%s\n\n"
     "actual tp cases: " r.actual_tp_cases
