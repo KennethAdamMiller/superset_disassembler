@@ -148,9 +148,10 @@ let bil_tac =
 
   end   
 
-let map_bil bil =
+let map_bil ?exps bil =
+  let exps = Option.value exps ~default:Exp.Map.empty in
   let (l,_,_) =
-    List.fold bil ~init:([], Exp.Map.empty, None) ~f:(fun accu e ->
+    List.fold bil ~init:([], exps, None) ~f:(fun accu e ->
         bil_tac#visit_stmt e accu
       ) in
-  Stmt.normalize @@ List.rev l
+  List.rev l
