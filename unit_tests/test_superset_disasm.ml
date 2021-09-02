@@ -75,7 +75,8 @@ let test_hits_every_byte test_ctxt =
 
 let of_mem arch mem = 
   let superset = Superset.Core.empty arch in
-  Superset.Core.update_with_mem superset mem
+  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
+  Superset.Core.update_with_mem superset mem ~f
 
 let get_bads superset mem =
   let maddr  = Memory.min_addr mem in
@@ -150,9 +151,6 @@ let test_brancher test_ctxt =
   let bytes = "\x77\x77" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
-  let superset = Superset.Core.update_with_mem
-                   superset mem ~f in
   match Superset.Core.lookup superset Memory.(min_addr mem) with
   | Some (mem, insn) -> 
      let ss =
@@ -165,9 +163,6 @@ let test_lift test_ctxt =
   let bytes = "\x77\x77" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
-  let superset = Superset.Core.update_with_mem
-                   superset mem ~f in
   match Superset.Core.lookup superset Memory.(min_addr mem) with
   | Some (mem, insn) -> 
      let lifted =
@@ -201,9 +196,7 @@ let dis_with_invariants bytes invariants =
 let test_tag_non_mem_access test_ctxt =
   let bytes = "\xb8\xef\xbe\xad\xde" in (* int a = *( int * )0xdeadbeef *)
   let mem, arch = make_params bytes in
-  let superset = of_mem arch mem in
-  let f = (Invariants.tag ~invariants:[Invariants.tag_success]) in
-  let superset = Superset.Core.update_with_mem superset mem ~f in (
+  let superset = of_mem arch mem in (
       match Superset.Core.lookup superset Memory.(min_addr mem) with
       | Some (mem, insn) ->
          let expect = Invariants.accesses_non_mem superset mem insn () in
@@ -920,7 +913,7 @@ let test_ssa test_ctxt =
   find_ssa asm ~f:(fun ssa_rax ->
       assert_bool "Expect >= 1 ssa for push pop register"
         ((Hash_set.length ssa_rax) > 0));
-  let asm = "\x50\x58" in (* push rax, pop rax *)
+  let asm = "\x50\x58" in (* move rbx -> [rax], move rbx <- [rax] *)
   find_ssa asm ~f:(fun ssa_mem_mem ->
       assert_bool "Expect >= 1 ssa for mem mem operation"
         ((Hash_set.length ssa_mem_mem) > 0));
