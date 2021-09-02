@@ -7,8 +7,14 @@ open Bap_plugins.Std
 open Graphlib.Std
 open Bap_future.Std
 
-let () = Stdlib.ignore(Plugins.load ())
-let _ = Bap_main.init ()
+let requires = ["llvm"; "lifter"; "disassemble"; "disassembler";
+                "semantics"]
+let () = match Bap_main.init () with
+  | Ok () -> ()
+  | Error err -> 
+     let open Bap_main in
+     Bap_main.Extension.Error.pp Format.std_formatter err;
+     exit 1
 
 let create_memory arch min_addr data =
   let data = Bigstring.of_string data in
@@ -881,21 +887,48 @@ let test_graph_edge_behavior test_ctxt =
   let msg = "expect single edge between nodes" in
   assert_equal ~msg Seq.(length edges) 1
 
-let test_streams test_ctxt = ()
+let test_streams test_ctxt =
+  let strm, sgnl = Stream.create () in
+  let called = ref false in
+  Stream.watch strm (fun id _ ->
+      called := true;
+      Stream.unsubscribe strm id
+    );
+  Signal.send sgnl ();
+  assert_bool "stream did not receive signal called" !called
+
 let test_parallel test_ctxt = ()
-  
+
+let test_set_envelopment_depth test_ctxt =
+  let insn_map, insn_risg = init () in
+  let entry = Addr.(of_int ~width 50) in
+  let insn_map, insn_risg =
+    construct_entry_conflict insn_map insn_risg entry 5 in
+  let superset = Superset_impl.of_components
+                   ~insn_map ~insn_risg arch in
+  let _ = () in ()
+
 let test_ssa test_ctxt =
-  let find_ssa superset = 
+  let find_ssa asm ~f = 
+    let memory, arch = make_params asm in
+    let superset = of_mem arch memory in
     let ssa = Features.extract_freevarssa_to_map superset in
     let freevars = Addr.Hash_set.create () in
     List.iter Addr.Table.(data ssa) ~f:Hash_set.(add freevars);
-    freevars in
+    f freevars in
   let asm = "\x50\x58" in (* push rax, pop rax *)
-  let memory, arch = make_params asm in
-  let superset = of_mem arch memory in
-  let ssa_rax = find_ssa superset in
-  assert_bool "At least one ssa expected"
-    ((Hash_set.length ssa_rax) > 0)
+  find_ssa asm ~f:(fun ssa_rax ->
+      assert_bool "Expect >= 1 ssa for push pop register"
+        ((Hash_set.length ssa_rax) > 0));
+  let asm = "\x50\x58" in (* push rax, pop rax *)
+  find_ssa asm ~f:(fun ssa_mem_mem ->
+      assert_bool "Expect >= 1 ssa for mem mem operation"
+        ((Hash_set.length ssa_mem_mem) > 0));
+  let asm = "\x50\x58" in (* push rax, push rbx, pop rax, pop rbx *)
+  find_ssa asm ~f:(fun ssa_chain ->
+      assert_bool "Expect >= 2 ssa for register chain"
+        ((Hash_set.length ssa_chain) > 0));
+  ()
 
 let () =
   let suite = 
@@ -939,6 +972,7 @@ let () =
       "test_target_in_body" >:: test_target_in_body;
       "test_streams" >:: test_streams;
       "test_parallel" >:: test_parallel;
+      "test_set_envelopment_depth" >:: test_set_envelopment_depth;
       "test_ssa" >:: test_ssa;
     ] in
   run_test_tt_main suite
