@@ -884,6 +884,18 @@ let test_graph_edge_behavior test_ctxt =
 let test_streams test_ctxt = ()
 let test_parallel test_ctxt = ()
   
+let test_ssa test_ctxt =
+  let find_ssa superset = 
+    let ssa = Features.extract_freevarssa_to_map superset in
+    let freevars = Addr.Hash_set.create () in
+    List.iter Addr.Table.(data ssa) ~f:Hash_set.(add freevars);
+    freevars in
+  let asm = "\x50\x58" in (* push rax, pop rax *)
+  let memory, arch = make_params asm in
+  let superset = of_mem arch memory in
+  let ssa_rax = find_ssa superset in
+  assert_bool "At least one ssa expected"
+    ((Hash_set.length ssa_rax) > 0)
 
 let () =
   let suite = 
@@ -926,7 +938,8 @@ let () =
       "test_tag_target_is_bad" >:: test_tag_target_is_bad;
       "test_target_in_body" >:: test_target_in_body;
       "test_streams" >:: test_streams;
-      "test_parallel" >:: test_parallel
+      "test_parallel" >:: test_parallel;
+      "test_ssa" >:: test_ssa;
     ] in
   run_test_tt_main suite
 ;;
