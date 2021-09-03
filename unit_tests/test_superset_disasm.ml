@@ -111,8 +111,10 @@ let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
+  let invariants =
+    Invariants.tag_success :: Invariants.default_funcs in
   let superset =
-    Invariants.tag_superset superset in
+    Invariants.tag_superset ~invariants superset in
   let tgt = Memory.min_addr mem in
   let dbg = debug_msg superset mem in
   let bads = str_of_bads superset mem in
