@@ -277,9 +277,9 @@ let post_mem_ssa_with superset lift var_use addr f =
       Set.iter var_defs ~f:(fun var_def -> 
           match Map.find !var_use var_def with
           | Some(waddr) ->
-             if not Set.(mem use_vars var_def) then (
+             (*if not Set.(mem use_vars var_def) then ( *)
                f waddr addr
-             )
+             (* ) *)
           | None -> ()
         );
       Set.iter use_vars ~f:(fun use_var -> 
@@ -386,7 +386,6 @@ let extract_mem_ssa_to_map superset =
       (* TODO: I don't think that this is a very good implementation *)
       var_use := Exp.Map.empty
     );
-  print_endline @@ sprintf "mem_ssa size is %d" Addr.Table.(length defuse_map);
   defuse_map
   
 let extract_cross_section_jmps superset = 
