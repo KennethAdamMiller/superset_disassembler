@@ -909,7 +909,12 @@ let test_ssa test_ctxt =
   let find_ssa asm ~f = 
     let memory, arch = make_params asm in
     let superset = of_mem arch memory in
+    let entries = Superset.entries_of_isg superset in
+    assert_bool "Expect >= 1 entry in superset"
+      ((Hash_set.length entries) > 0);
     let ssa = Features.extract_freevarssa_to_map superset in
+    let _ssa = Features.extract_ssa_to_map superset in
+    assert_bool "Expect >= 1 ssa" ((Map.length _ssa) > 0);
     let freevars = Addr.Hash_set.create () in
     List.iter Addr.Table.(data ssa) ~f:Hash_set.(add freevars);
     f freevars in

@@ -6,8 +6,14 @@ open Format
 open Or_error
 open Metrics
 
-let () = Stdlib.ignore(Plugins.load ())
-let _ = Bap_main.init ()
+let requires = ["llvm"; "lifter"; "disassemble"; "disassembler";
+                "semantics"]
+let () = match Bap_main.init ~requires () with
+  | Ok () -> ()
+  | Error err -> 
+     let open Bap_main in
+     Bap_main.Extension.Error.pp Format.std_formatter err;
+     exit 1
 
 module Cmdline = struct
   open Cmdliner
