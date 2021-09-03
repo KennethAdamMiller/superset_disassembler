@@ -192,6 +192,9 @@ module Core = struct
   (** Perform superset disassembly on mem and add the results. *)
   let update_with_mem ?backend ?addrs ?f superset mem =
     let f = Option.value f ~default:(fun (m, i) a -> a) in
+    let f (mem, insn) superset =
+      let superset = add superset mem insn in
+      f (mem, insn) superset in
     let default = seq_of_addr_range
                     (Memory.min_addr mem) (Memory.length mem) in
     let addrs = Option.value addrs ~default  in
@@ -635,10 +638,7 @@ let superset_of_img ?f ~backend img =
   let segments =   Image.memory img in
   let main_entry = Image.entry_point img in
   let filename = Image.filename img in
-  let update = Option.value f ~default:(fun (m, i) a -> a) in
-  let f (mem, insn) superset =
-    let superset = Core.add superset mem insn in
-    update (mem, insn) superset in
+  let f = Option.value f ~default:(fun (m, i) a -> a) in
   let superset =
     of_components ~main_entry ?filename ~segments arch in
   with_img ~accu:superset img
