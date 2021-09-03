@@ -913,12 +913,10 @@ let test_ssa test_ctxt =
     assert_bool "Expect >= 1 entry in superset"
       ((Hash_set.length entries) > 0);
     let ssa = Features.extract_freevarssa_to_map superset in
-    let _ssa = Features.extract_ssa_to_map superset in
-    assert_bool "Expect >= 1 ssa" ((Map.length _ssa) > 0);
     let freevars = Addr.Hash_set.create () in
     List.iter Addr.Table.(data ssa) ~f:Hash_set.(add freevars);
     f freevars in
-  let asm = "\x50\x58\xc3" in (* push rax, pop rax *)
+  let asm = "\x58\x50\xc3" in (* pop rax, push rax *)
   find_ssa asm ~f:(fun ssa_rax ->
       assert_bool "Expect >= 1 ssa for push pop register"
         ((Hash_set.length ssa_rax) > 0));
