@@ -9,7 +9,7 @@ open Bap_future.Std
 
 let requires = ["llvm"; "lifter"; "disassemble"; "disassembler";
                 "semantics"]
-let () = match Bap_main.init () with
+let () = match Bap_main.init ~requires () with
   | Ok () -> ()
   | Error err -> 
      let open Bap_main in
