@@ -182,10 +182,9 @@ let dis_with_invariants bytes invariants =
   let msg = debug_msg superset mem in
   let msg = sprintf "Should be bad at %s\n%s"
               Addr.(to_string min_addr) msg in
-  let is_bad = Superset.Inspection.is_bad_at superset min_addr in
-  assert_bool msg is_bad;
   let superset = Trim.Default.trim superset in
   let superset = Superset.Core.rebalance superset in
+  assert_bool msg @@ not @@ Superset.Core.mem superset min_addr;
   let msg = debug_msg superset mem in
   let offset_one =
     Superset.Core.mem superset min_addr in
