@@ -113,9 +113,9 @@ let find_non_mem_accesses superset =
   let check_return_addr r addr = 
     match addr with
     | Bil.Int(addr) -> 
-      if (Superset.Inspection.contains_addr superset addr) then
-        r
-      else r.return(Some(false))
+      if not (Superset.Inspection.contains_addr superset addr) then
+        r.return(Some(true))
+      else r
     | _ -> r in
   (object(self) 
     inherit [bool] Stmt.finder
