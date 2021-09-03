@@ -156,7 +156,7 @@ let tag_target_not_in_mem superset mem insn targets =
         match target with 
         | Some(target) -> 
           if not (Superset.Inspection.contains_addr superset target) then
-            Superset.Core.mark_bad superset (Memory.min_addr mem)
+            Superset.Core.mark_bad superset target
         | None -> ()
       );
   superset
