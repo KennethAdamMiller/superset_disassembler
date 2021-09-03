@@ -124,6 +124,7 @@ let test_trim test_ctxt =
   let is_bad = Superset.Inspection.is_bad_at superset tgt in
   assert_bool msg is_bad;
   let superset = Trim.Default.trim superset in
+  let superset = Superset.Core.rebalance superset in
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
   (* After refactoring, it may be that some targets that fall outside
      the memory bounds are still in the graph, but this only accounts
