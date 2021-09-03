@@ -103,7 +103,7 @@ let debug_msg superset mem =
     let ms = String.sub mems start finish in*)
   let cnt = Superset.Inspection.count superset in
   let unb = Superset.Inspection.count_unbalanced superset in
-  sprintf "%s\ncount: %d, unbalanced: %d" msg cnt unb
+  sprintf "%s\ncount (graph): %d, unbalanced (map): %d" msg cnt unb
 
 (* TODO make default initialization from bytes much shorter *)
 
@@ -113,16 +113,15 @@ let test_trim test_ctxt =
   let superset = of_mem arch mem in
   let superset =
     Invariants.tag_superset superset in
-  let tgt = Memory.min_addr mem in
+  let superset = Trim.Default.trim superset in
+  let superset = Superset.Core.rebalance superset in
   let dbg = debug_msg superset mem in
   let bads = str_of_bads superset mem in
   let explanation =
-    sprintf "Expect one instruction, got %d bad: %s"
+    sprintf "Expect one instruction, got %d. bad: %s"
       (Superset.Inspection.count superset) bads in
   let msg = sprintf "%s\n%s"
-      dbg explanation in
-  let superset = Trim.Default.trim superset in
-  let superset = Superset.Core.rebalance superset in
+      dbg explanation in   
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
   (* After refactoring, it may be that some targets that fall outside
      the memory bounds are still in the graph, but this only accounts
