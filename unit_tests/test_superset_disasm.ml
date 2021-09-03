@@ -204,22 +204,27 @@ let test_tag_non_mem_access test_ctxt =
          assert_bool msg expect
       | None -> assert_bool "should be an instruction at 0" false  
     );
-  dis_with_invariants bytes [Invariants.tag_success; Invariants.tag_non_mem_access]
+  dis_with_invariants bytes
+    [Invariants.tag_success; Invariants.tag_non_mem_access]
 
 let test_tag_non_insn test_ctxt =
-  dis_with_invariants "\x0f\xff" [Invariants.tag_non_insn]
+  dis_with_invariants "\x0f\xff"
+    [Invariants.tag_success; Invariants.tag_non_insn]
 
 let test_tag_target_is_bad test_ctxt =
   let bytes = "\x77\xfe" in
-  dis_with_invariants bytes [Invariants.tag_success; Invariants.tag_target_is_bad]
+  dis_with_invariants bytes
+    [Invariants.tag_success; Invariants.tag_target_is_bad]
 
 let test_target_in_body test_ctxt =
   let bytes = "\x77\xFF" in
-  dis_with_invariants bytes [Invariants.tag_target_in_body]
+  dis_with_invariants bytes
+    [Invariants.tag_success; Invariants.tag_target_in_body]
 
 let test_target_not_in_mem test_ctxt = 
   let bytes = "\x77\x77" in
-  let invariants = [Invariants.tag_target_not_in_mem] in
+  let invariants = [Invariants.tag_success;
+                    Invariants.tag_target_not_in_mem] in
   dis_with_invariants bytes invariants
   
 let test_static_successors_includes_fall_through test_ctxt =
