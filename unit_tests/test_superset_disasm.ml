@@ -920,7 +920,7 @@ let test_ssa test_ctxt =
     List.iter Addr.Table.(data memssa) ~f:Hash_set.(add ssa);
     List.iter Map.(keys rssa) ~f:Hash_set.(add ssa);
     f ssa in
-  let asm = "\x50\x58\xc3" in (* push rax, pop rax *)
+  let asm = "\x50\x58\x50\x58\xc3" in (* push rax, pop rax *)
   find_ssa asm ~f:(fun ssa_rax ->
       assert_bool "Expect >= 1 ssa for push pop register"
         ((Hash_set.length ssa_rax) > 0));
