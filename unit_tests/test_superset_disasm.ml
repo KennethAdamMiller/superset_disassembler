@@ -912,11 +912,15 @@ let test_ssa test_ctxt =
     let entries = Superset.entries_of_isg superset in
     assert_bool "Expect >= 1 entry in superset"
       ((Hash_set.length entries) > 0);
-    let ssa = Features.extract_freevarssa_to_map superset in
-    let freevars = Addr.Hash_set.create () in
-    List.iter Addr.Table.(data ssa) ~f:Hash_set.(add freevars);
-    f freevars in
-  let asm = "\x58\x50\xc3" in (* pop rax, push rax *)
+    let fssa = Features.extract_freevarssa_to_map superset in
+    let memssa = Features.extract_mem_ssa_to_map superset in
+    let rssa = Features.extract_ssa_to_map superset in
+    let ssa = Addr.Hash_set.create () in
+    List.iter Addr.Table.(data fssa) ~f:Hash_set.(add ssa);
+    List.iter Addr.Table.(data memssa) ~f:Hash_set.(add ssa);
+    List.iter Map.(keys rssa) ~f:Hash_set.(add ssa);
+    f ssa in
+  let asm = "\x50\x58\xc3" in (* push rax, pop rax *)
   find_ssa asm ~f:(fun ssa_rax ->
       assert_bool "Expect >= 1 ssa for push pop register"
         ((Hash_set.length ssa_rax) > 0));
