@@ -111,20 +111,16 @@ let test_trim test_ctxt =
   let bytes = "\x2d\xdd\xc3\x54\x55" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in
-  let invariants =
-    Invariants.tag_success :: Invariants.default_funcs in
   let superset =
-    Invariants.tag_superset ~invariants superset in
+    Invariants.tag_superset superset in
   let tgt = Memory.min_addr mem in
   let dbg = debug_msg superset mem in
   let bads = str_of_bads superset mem in
   let explanation =
-    sprintf "trim did not mark bad at %s, bad: %s"
-      Addr.(to_string tgt) bads in
+    sprintf "Expect one instruction, got %d bad: %s"
+      (Superset.Inspection.count superset) bads in
   let msg = sprintf "%s\n%s"
       dbg explanation in
-  let is_bad = Superset.Inspection.is_bad_at superset tgt in
-  assert_bool msg is_bad;
   let superset = Trim.Default.trim superset in
   let superset = Superset.Core.rebalance superset in
   (* Only the return opcode ( 0xc3 ) can survive trimming *)
