@@ -910,7 +910,7 @@ let test_set_envelopment_depth test_ctxt =
 let test_ssa test_ctxt =
   let find_ssa asm ~f = 
     let memory, arch = make_params asm in
-    let superset = of_mem arch memory in
+    let superset = of_mem Arch.(`x86_64) memory in
     let entries = Superset.entries_of_isg superset in
     assert_bool "Expect >= 1 entry in superset"
       ((Hash_set.length entries) > 0);
