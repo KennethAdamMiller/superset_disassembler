@@ -191,7 +191,7 @@ let dis_with_invariants bytes invariants =
   assert_bool msg (not offset_one)
   
 let test_tag_non_mem_access test_ctxt =
-  let bytes = "\xb8\xef\xbe\xad\xde" in (* int a = *( int * )0xdeadbeef *)
+  let bytes = "\xa1\xef\xbe\xad\xde\x00\x00\x00\x00" in
   let mem, arch = make_params bytes in
   let superset = of_mem arch mem in (
       match Superset.Core.lookup superset Memory.(min_addr mem) with
