@@ -193,7 +193,7 @@ let dis_with_invariants bytes invariants =
 let test_tag_non_mem_access test_ctxt =
   let bytes = "\xa1\xef\xbe\xad\xde\x00\x00\x00\x00" in
   let mem, arch = make_params bytes in
-  let superset = of_mem arch mem in (
+  let superset = of_mem Arch.(`x86_64) mem in (
       match Superset.Core.lookup superset Memory.(min_addr mem) with
       | Some (mem, insn) ->
          let expect = Invariants.accesses_non_mem superset mem insn () in
