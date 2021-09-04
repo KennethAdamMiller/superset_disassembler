@@ -173,9 +173,11 @@ let test_lift test_ctxt =
   | None -> assert_bool "should be an instruction at 0" false
 
 (* TODO want a bil language oriented way to specify the construction of a superset *)
-let dis_with_invariants bytes invariants = 
+let dis_with_invariants ?superset bytes invariants =
   let mem, arch = make_params bytes in
-  let superset = of_mem arch mem in
+  let default =
+    of_mem arch mem in
+  let superset = Option.value superset ~default in
   let f = (Invariants.tag ~invariants) in
   let superset = Superset.Core.update_with_mem
                    superset mem ~f in
@@ -201,7 +203,7 @@ let test_tag_non_mem_access test_ctxt =
          assert_bool msg expect
       | None -> assert_bool "should be an instruction at 0" false  
     );
-  dis_with_invariants bytes
+  dis_with_invariants ~superset bytes
     [Invariants.tag_success; Invariants.tag_non_mem_access]
 
 let test_tag_non_insn test_ctxt =
