@@ -499,7 +499,7 @@ let _distribution_command : unit =
               ) >>= fun slots ->
           let metric_vals =
             List.fold ~init:String.Map.empty slots
-              ~f:(fun m (name,v) -> String.Map.set m name v) in            
+              ~f:(fun m (name,v) -> String.Map.set m name v) in
           let fmt,rem = List.hd metrics, List.tl metrics in
           let s = 
             match fmt, rem with
@@ -507,7 +507,12 @@ let _distribution_command : unit =
                let init = fmt,1 in
                let s,_=List.fold rem ~init ~f:(fun (fmt,v) s ->
                            let r = Str.regexp @@ sprintf "%%%d" v in
-                           let default = sprintf "%s Not a metric" s in
+                           let opts =
+                             List.to_string (Map.keys metric_vals)
+                               ~f:ident in
+                           let default =
+                             sprintf
+                               "\"%s\" is not a metric, opts: %s" s opts in
                            let s = Map.find metric_vals s in
                            let s = Option.value s ~default in
                            Str.global_replace r s fmt,v+1
