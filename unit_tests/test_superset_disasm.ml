@@ -25,6 +25,7 @@ let arch = `x86
 let segments = Table.empty
 
 let width = 8*(Arch.size_in_bytes arch);;
+let zero = Addr.(of_int ~width 0)
 
 module G = Graphlib.Make(Addr)(Unit)
 module Topological = Superset_impl.Topological
@@ -908,9 +909,21 @@ let test_set_envelopment_depth test_ctxt =
   let _ = () in ()
 
 let test_ssa test_ctxt =
-  let find_ssa asm ~f = 
-    let memory, arch = make_params asm in
-    let superset = of_mem Arch.(`x86_64) memory in
+  let arch = Arch.(`x86_64) in
+  let make_chain bils =
+    let bils = List.rev bils in
+    let insn_map, insn_risg = init () in
+    let lifted = Addr.Table.create () in
+    let init = zero,insn_risg in
+    let _,insn_risg =
+      List.fold bils ~init ~f:(fun (accu,insn_risg) bil ->
+          Addr.Table.set lifted ~key:accu ~data:bil;
+          let s = Addr.succ accu in
+          let e = G.Edge.create accu s () in
+          s,G.Edge.insert e insn_risg
+        ) in    
+    Superset_impl.of_components ~insn_map ~insn_risg ~lifted arch in
+  let find_ssa superset ~f = 
     let entries = Superset.entries_of_isg superset in
     assert_bool "Expect >= 1 entry in superset"
       ((Hash_set.length entries) > 0);
@@ -922,20 +935,36 @@ let test_ssa test_ctxt =
     List.iter Addr.Table.(data memssa) ~f:Hash_set.(add ssa);
     List.iter Map.(keys rssa) ~f:Hash_set.(add ssa);
     f ssa in
-  let asm = "\x50\x58\x50\x58\xc3" in (* push rax, pop rax *)
-  find_ssa asm ~f:(fun ssa_rax ->
+  let superset =
+    let open Bil in
+    let v = Var.create "v" @@ Bil.Types.Imm 32 in
+    let def = Bil.move v @@ Bil.Int zero in
+    let use = Bil.move v ((Bil.Var v) + (Bil.Int (Addr.succ zero))) in
+    make_chain [[def]; [use]] in
+  find_ssa superset ~f:(fun ssa_rax ->
       assert_bool "Expect >= 1 ssa for push pop register"
         ((Hash_set.length ssa_rax) > 0));
-  let asm = "\x50\x58" in (* move rbx -> [rax], move rbx <- [rax] *)
-  find_ssa asm ~f:(fun ssa_mem_mem ->
+  let superset =
+    let open Bil in
+    let load = [] in
+    let store = [] in
+    make_chain [load; store] in
+  find_ssa superset ~f:(fun ssa_mem_mem ->
       assert_bool "Expect >= 1 ssa for mem mem operation"
         ((Hash_set.length ssa_mem_mem) > 0));
-  let asm = "\x50\x58" in (* push rax, push rbx, pop rax, pop rbx *)
-  find_ssa asm ~f:(fun ssa_chain ->
+  let superset =
+    let open Bil in
+    let step1 = [] in
+    let step2 = [] in
+    let step3 = [] in
+    make_chain [step1; step2; step3;] in
+  find_ssa superset ~f:(fun ssa_chain ->
       assert_bool "Expect >= 2 ssa for register chain"
         ((Hash_set.length ssa_chain) > 0));
   ()
 
+let test_three_address_code test_ctxt = ()
+  
 let () =
   let suite = 
     "suite">:::
@@ -980,6 +1009,7 @@ let () =
       "test_parallel" >:: test_parallel;
       "test_set_envelopment_depth" >:: test_set_envelopment_depth;
       "test_ssa" >:: test_ssa;
+      "test_three_address_code" >:: test_three_address_code;
     ] in
   run_test_tt_main suite
 ;;

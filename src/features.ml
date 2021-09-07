@@ -229,19 +229,6 @@ let pre_ssa superset lift factors var_use addr =
      with _ -> ()
   )
   | None -> ()
-
-let pre_mem_ssa superset lift factors var_use addr =
-  match Superset.Core.lift_at superset addr with
-  | Some (bil) -> (
-    try 
-      let use_vars = Abstract_ssa.use_mem_ssa bil in
-      Set.iter use_vars ~f:(fun use_var -> 
-          var_use := Map.set !var_use use_var addr
-        )
-    with _ -> ()
-  )
-  | None -> ()
-
           
 let post_ssa_with superset lift var_use addr f = 
   match Superset.Core.lift_at superset addr with
@@ -266,32 +253,7 @@ let post_ssa_with superset lift var_use addr f =
      with _ -> ()
   )
   | None -> ()
-
           
-let post_mem_ssa_with superset lift var_use addr f = 
-  match Superset.Core.lift_at superset addr with
-  | Some (bil) -> (
-    try 
-      let use_vars = Abstract_ssa.use_mem_ssa bil in
-      let var_defs = Abstract_ssa.def_mem_ssa bil in
-      Set.iter var_defs ~f:(fun var_def -> 
-          match Map.find !var_use var_def with
-          | Some(waddr) ->
-             (*if not Set.(mem use_vars var_def) then ( *)
-               f waddr addr
-             (* ) *)
-          | None -> ()
-        );
-      Set.iter use_vars ~f:(fun use_var -> 
-          var_use := Map.remove !var_use use_var;
-        );
-      Set.iter var_defs ~f:(fun write_reg -> 
-          var_use := Map.remove !var_use write_reg
-        )
-     with _ -> ()
-  )
-  | None -> ()
-
 let extract_ssa_to_map superset =
   let var_use = ref Exp.Map.empty in
   let defuse_map = ref Addr.Map.empty in
@@ -367,11 +329,47 @@ let extract_freevarssa_to_map superset =
     );
   defuse_map
 
+let pre_mem_ssa superset lift factors var_use addr =
+  match Superset.Core.lift_at superset addr with
+  | Some (bil) -> (
+    try 
+      let use_vars = Abstract_ssa.use_mem_ssa bil in
+      Set.iter use_vars ~f:(fun use_var -> 
+          var_use := Map.set !var_use use_var addr
+        )
+    with _ -> ()
+  )
+  | None -> ()
+
+let post_mem_ssa_with superset lift var_use addr f = 
+  match Superset.Core.lift_at superset addr with
+  | Some (bil) -> (
+    try 
+      let use_vars = Abstract_ssa.use_mem_ssa bil in
+      let var_defs = Abstract_ssa.def_mem_ssa bil in
+      Set.iter var_defs ~f:(fun var_def -> 
+          match Map.find !var_use var_def with
+          | Some(waddr) ->
+             (*if not Set.(mem use_vars var_def) then ( *)
+               f waddr addr
+             (* ) *)
+          | None -> ()
+        );
+      Set.iter use_vars ~f:(fun use_var -> 
+          var_use := Map.remove !var_use use_var;
+        );
+      Set.iter var_defs ~f:(fun write_reg -> 
+          var_use := Map.remove !var_use write_reg
+        )
+     with _ -> ()
+  )
+  | None -> ()
+
 let extract_mem_ssa_to_map superset =
   let var_use = ref Exp.Map.empty in
   let defuse_map = Addr.Table.create () in
   let add_to_map def use = 
-    Stdlib.ignore @@ Addr.Table.add defuse_map ~key:def ~data:use in
+    Addr.Table.set defuse_map ~key:def ~data:use in
   let lift (mem, insn) =
     Superset.Core.lift_insn superset ((mem, insn)) in
   let pre = pre_mem_ssa superset lift () var_use in

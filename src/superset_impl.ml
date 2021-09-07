@@ -29,14 +29,15 @@ type t = {
 }
 
 let of_components
-    ?main_entry ?insn_map ?insn_risg ?segments ?endianness ?filename arch =
+    ?main_entry ?insn_map ?insn_risg ?lifted ?segments ?endianness ?
+    filename arch =
   let insn_risg =
     match insn_risg with
     | Some insn_risg -> insn_risg
     | None -> Graphlib.create (module G) () in
   let segments = Option.value segments ~default:Memmap.empty in
   let insn_map  = Option.value insn_map ~default:Addr.Map.empty in
-  let lifted = Addr.Table.create ()  in
+  let lifted = Option.value lifted ~default:(Addr.Table.create ()) in
   let module Target = (val target_of_arch arch) in
   let lifter = Target.lift in
   {
