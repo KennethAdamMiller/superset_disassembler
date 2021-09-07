@@ -229,13 +229,12 @@ let post_ssa_with superset lift (defs,defmap) addr f =
       object(self)
         inherit [addr] Exp.finder
         method enter_var v r =
-          match Map.find defmap v with
-          | Some e -> (
-             match Map.find !defs e with
-            | Some addr -> r.return(Some(addr)) 
-            | None -> self#enter_exp e r
-          )
-          | None -> r.return(None)
+          match Map.find !defs Bil.(Var v) with
+          | Some addr -> r.return(Some(addr)) 
+          | None ->
+             match Map.find defmap v with
+             | Some e -> self#enter_exp e r
+             | None -> r.return(None)
       end in
     Set.iter use_vars ~f:(fun use_var ->
         match Exp.find (use_finder !defmap) use_var with
