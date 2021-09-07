@@ -504,7 +504,7 @@ let _distribution_command : unit =
           let s = 
             match fmt, rem with
             | Some fmt, Some rem ->
-               let init = fmt,0 in
+               let init = fmt,1 in
                let s,_=List.fold rem ~init ~f:(fun (fmt,v) s ->
                            let r = Str.regexp @@ sprintf "%%%d" v in
                            let default = sprintf "%s Not a metric" s in
