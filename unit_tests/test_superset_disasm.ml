@@ -972,8 +972,26 @@ let test_ssa test_ctxt =
     let st = [Bil.move stv st] in
     make_chain [ld; st] in
   find_ssa superset ~f:(fun ssa_mem_mem ->
-      assert_bool "Expect >= 1 ssa for memory exp operation"
+      assert_bool
+        "Expect >= 1 ssa for memory exp operation to same addr"
         ((Hash_set.length ssa_mem_mem) > 0));
+  let superset =
+    let open Bil in
+    let s = Size.(`r64) in
+    let mem = Bil.var @@ Var.create "x" (Bil.Types.Imm 64) in
+    let ld = load ~mem ~addr:(Int zero) LittleEndian s in
+    let ldv = Var.create "ld" @@ Bil.Types.Imm 32 in
+    let ld = [Bil.move ldv ld] in
+    let exp = Bil.((var ldv) + mem) in
+    let st =
+      store ~mem ~addr:(Int (Addr.succ zero)) exp LittleEndian s; in
+    let stv = Var.create "st" @@ Bil.Types.Imm 32 in
+    let st = [Bil.move stv st] in
+    make_chain [ld; st] in
+  find_ssa superset ~f:(fun ssa_load_store ->
+      assert_bool
+        "Expect >= 1 ssa for memory exp operation sharing variable"
+        ((Hash_set.length ssa_load_store) > 0));
   let superset =
     let open Bil in
     let v1 = Var.create "v2" @@ Bil.Types.Imm 32 in
