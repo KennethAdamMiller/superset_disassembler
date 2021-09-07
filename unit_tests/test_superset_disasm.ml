@@ -942,8 +942,28 @@ let test_ssa test_ctxt =
     let use = Bil.move v ((Bil.Var v) + (Bil.Int (Addr.succ zero))) in
     make_chain [[def]; [use]] in
   find_ssa superset ~f:(fun ssa_rax ->
-      assert_bool "Expect >= 1 ssa for push pop register"
+      assert_bool "Expect >= 1 ssa for move move"
         ((Hash_set.length ssa_rax) > 0));
+  let superset =
+    let open Bil in
+    let s = Size.(`r64) in
+    let mem = Bil.var @@ Var.create "mem" (Bil.Types.Imm 64) in
+    let exp = Bil.var @@ Var.create "v1" (Bil.Types.Imm 64) in
+    let addr = Var.create "addr" (Bil.Types.Imm 64) in
+    let mv_addr = Bil.move addr Bil.(exp + (Int zero)) in
+    let st = store ~mem ~addr:Bil.(Var addr) exp LittleEndian s; in
+    let stv = Var.create "st" @@ Bil.Types.Imm 32 in
+    let v2 = Var.create "v2" (Bil.Types.Imm 64) in
+    let move_v2 = Bil.(move v2 Bil.(exp + (Int zero))) in
+    let mem = Bil.var @@ Var.create "mem2" (Bil.Types.Imm 64) in
+    let ld = load ~mem ~addr:(Var v2) LittleEndian s in
+    let ldv = Var.create "ld" @@ Bil.Types.Imm 32 in
+    let st = Bil.move stv st in
+    let ld = Bil.move ldv ld in
+    make_chain [[mv_addr; st]; [move_v2; ld]] in
+  find_ssa superset ~f:(fun ssa_renamed ->
+      assert_bool "Expect >= 1 ssa for recognition over renaming"
+        ((Hash_set.length ssa_renamed) > 2));
   let superset =
     let open Bil in
     let s = Size.(`r64) in
