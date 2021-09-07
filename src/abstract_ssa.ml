@@ -1,13 +1,17 @@
 open Bap.Std
 open Core_kernel
 
+type rev_ssa = {
+    exps   : Exp.Set.t;
+    vars   : Var.Set.t;
+    uf_ids : Exp.t Union_find.t;
+  }
+             
 let stmt_def_vars =
   object(self)
     inherit [Exp.Set.t] Stmt.visitor
     method enter_move def use accu =
-      if not Var.(is_virtual def) then
-        Set.add accu Exp.(Bil.Var def)
-      else accu
+      Set.add accu Exp.(Bil.Var def)
   end
 
 let stmt_def_mem =
