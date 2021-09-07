@@ -513,7 +513,7 @@ let _distribution_command : unit =
                            Str.global_replace r s fmt,v+1
                          ) in s
             | _ -> "inproper arguments given to metrics" in
-          info "%s" s;
+          print_endline s;
           KB.return ()
          )
        | None -> KB.return ()
