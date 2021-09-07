@@ -6,13 +6,7 @@ type rev_ssa = {
     vars   : Var.Set.t;
     uf_ids : Exp.t Union_find.t;
   }
-             
-let stmt_def_vars =
-  object(self)
-    inherit [Exp.Set.t] Stmt.visitor
-    method enter_move def use accu =
-      Set.add accu Exp.(Bil.Var def)
-  end
+
 
 let stmt_def_mem =
   object(self)
@@ -29,14 +23,24 @@ let stmt_use_mem =
     method enter_store ~mem ~addr ~exp e s accu =
       Set.add (Set.add (Set.add accu exp) addr) mem
   end
-  
+
+let stmt_def_vars =
+  object(self)
+    inherit [Exp.Set.t] Stmt.visitor
+    method enter_move def use accu =
+      Set.add accu Exp.(Bil.Var def)
+    method enter_let v ~exp ~body accu =
+      Set.add accu Bil.(Var v)
+  end
+
 let stmt_use_vars =
   object(self)
     inherit [Exp.Set.t] Stmt.visitor
     method visit_var v accu =
       Set.add accu Bil.(Var v)
+    method visit_let v ~exp ~body accu =
+      Set.add (Set.add accu exp) body
   end
-
 
 let stmt_def_freevars =
   object(self)

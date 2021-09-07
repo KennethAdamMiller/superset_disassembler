@@ -208,19 +208,42 @@ let extract_constants superset =
    descendants (as execution would move). *)
 let pre_ssa superset lift factors var_use addr =
   ()
-          
-let post_ssa_with superset lift defs addr f = 
+
+let collect_defs =
+  object(self)
+    inherit [exp Var.Map.t] Term.visitor as super
+    method leave_def def accu =
+      let lhs = Def.lhs def in
+      let rhs = Def.rhs def in
+      Map.set accu lhs rhs
+    method enter_let v ~exp ~body accu =
+      Map.set accu v exp
+  end
+  
+let post_ssa_with superset lift (defs,defmap) addr f = 
   match Superset.Core.lift_at superset addr with
   | Some (bil) -> (
     let use_vars = Abstract_ssa.use_ssa bil in
     let use_mems = Abstract_ssa.use_mem_ssa bil in
+    let use_finder defmap =
+      object(self)
+        inherit [addr] Exp.finder
+        method enter_var v r =
+          match Map.find defmap v with
+          | Some e -> (
+             match Map.find !defs e with
+            | Some addr -> r.return(Some(addr)) 
+            | None -> self#enter_exp e r
+          )
+          | None -> r.return(None)
+      end in
     Set.iter use_vars ~f:(fun use_var ->
-        match Map.find !defs use_var with
+        match Exp.find (use_finder !defmap) use_var with
         | Some waddr -> f waddr addr
         | None -> ()
       );
     Set.iter use_mems ~f:(fun use_mem ->
-        match Map.find !defs use_mem with
+        match Exp.find (use_finder !defmap) use_mem with
         | Some waddr -> f waddr addr
         | None -> ()
       );
@@ -237,13 +260,14 @@ let post_ssa_with superset lift defs addr f =
           
 let extract_ssa_to_map superset =
   let var_use = ref Exp.Map.empty in
+  let defmap = ref Var.Map.empty in
   let defuse_map = ref Addr.Map.empty in
   let add_to_map def use = 
     defuse_map := Map.set !defuse_map def use in
   let lift (mem, insn) =
     Superset.Core.lift_insn superset ( (mem, insn)) in
   let pre = pre_ssa superset lift () var_use in
-  let post addr = post_ssa_with superset lift var_use
+  let post addr = post_ssa_with superset lift (var_use,defmap)
       addr add_to_map in
   let entries = Superset.entries_of_isg superset in
   let visited = Addr.Hash_set.create () in
