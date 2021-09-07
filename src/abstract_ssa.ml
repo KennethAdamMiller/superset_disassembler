@@ -31,8 +31,8 @@ let stmt_use_mem =
 let stmt_use_vars =
   object(self)
     inherit [Exp.Set.t] Stmt.visitor
-    method enter_move def use accu =
-      Set.add accu use
+    method visit_var v accu =
+      Set.add accu Bil.(Var v)
   end
 
 
