@@ -957,17 +957,38 @@ let test_ssa test_ctxt =
     let st = [Bil.move stv st] in
     make_chain [ld; st] in
   find_ssa superset ~f:(fun ssa_mem_mem ->
-      assert_bool "Expect >= 1 ssa for mem mem operation"
+      assert_bool "Expect >= 1 ssa for load store, address exp equal"
         ((Hash_set.length ssa_mem_mem) > 0));
   let superset =
     let open Bil in
-    let step1 = [] in
-    let step2 = [] in
-    let step3 = [] in
+    let s = Size.(`r64) in
+    let mem = Bil.var @@ Var.create "mem" (Bil.Types.Imm 64) in
+    let ld = load ~mem ~addr:(Int zero) LittleEndian s in
+    let ldv = Var.create "ld" @@ Bil.Types.Imm 32 in
+    let ld = [Bil.move ldv ld] in
+    let exp = Bil.var @@ Var.create "v1" (Bil.Types.Imm 64) in
+    let st = store ~mem ~addr:(Int zero) exp LittleEndian s; in
+    let stv = Var.create "st" @@ Bil.Types.Imm 32 in
+    let st = [Bil.move stv st] in
+    make_chain [ld; st] in
+  find_ssa superset ~f:(fun ssa_mem_mem ->
+      assert_bool "Expect >= 1 ssa for memory exp operation"
+        ((Hash_set.length ssa_mem_mem) > 0));
+  let superset =
+    let open Bil in
+    let v1 = Var.create "v2" @@ Bil.Types.Imm 32 in
+    let def1 = Bil.move v1 @@ Bil.Int zero in
+    let v2 = Var.create "v2" @@ Bil.Types.Imm 32 in
+    let def2 = Bil.move v2 @@ Bil.Var v1 in
+    let v3 = Var.create "v3" @@ Bil.Types.Imm 32 in
+    let use = Bil.move v3 ((Bil.Var v1) + (Bil.Var v2)) in
+    let step1 = [def1] in
+    let step2 = [def2] in
+    let step3 = [use] in
     make_chain [step1; step2; step3;] in
   find_ssa superset ~f:(fun ssa_chain ->
       assert_bool "Expect >= 2 ssa for register chain"
-        ((Hash_set.length ssa_chain) > 0));
+        ((Hash_set.length ssa_chain) > 1));
   ()
 
 let test_three_address_code test_ctxt = ()
