@@ -202,55 +202,36 @@ let extract_constants superset =
         | _ -> constants
       )
 
-(* TODO unused *)
-let stddev_of hs average pmap = 
-  let deviation,deg_free =
-    Hash_set.fold ~init:(0.0,0) hs ~f:(fun (deviation,deg_free) addr -> 
-        if Map.mem pmap addr then
-          let d = (Option.(value_exn Map.(find pmap addr)) -. average) in
-          let d = d *. d in
-          (deviation +. d, (deg_free+1))
-        else (deviation, (deg_free))
-      ) in
-  sqrt(deviation /. float_of_int (deg_free -1))
-
 (* pre is called from descendant to ancestor order, so we want to
    check for usage and put that into a map, and then for define on
    post visitation, when coming back down from ancestors back to
    descendants (as execution would move). *)
 let pre_ssa superset lift factors var_use addr =
-  match Superset.Core.lift_at superset addr with
-  | Some (bil) -> (
-     try 
-       let use_vars = Abstract_ssa.use_ssa bil in
-       Set.iter use_vars ~f:(fun use_var -> 
-           var_use := Map.set !var_use use_var addr
-         )
-     with _ -> ()
-  )
-  | None -> ()
+  ()
           
-let post_ssa_with superset lift var_use addr f = 
+let post_ssa_with superset lift defs addr f = 
   match Superset.Core.lift_at superset addr with
   | Some (bil) -> (
-     try 
-       let use_vars = Abstract_ssa.use_ssa bil in
-       Set.iter use_vars ~f:(fun use_var -> 
-           var_use := Map.remove !var_use use_var;
-         );
-       let var_defs = Abstract_ssa.def_ssa bil in
-       Set.iter var_defs ~f:(fun var_def -> 
-           match Map.find !var_use var_def with
-           | Some(waddr) ->
-              if not Addr.(waddr = addr) then (
-                f waddr addr
-              )
-           | None -> ()
-         );
-       Set.iter var_defs ~f:(fun write_reg -> 
-           var_use := Map.remove !var_use write_reg
-         )
-     with _ -> ()
+    let use_vars = Abstract_ssa.use_ssa bil in
+    let use_mems = Abstract_ssa.use_mem_ssa bil in
+    Set.iter use_vars ~f:(fun use_var ->
+        match Map.find !defs use_var with
+        | Some waddr -> f waddr addr
+        | None -> ()
+      );
+    Set.iter use_mems ~f:(fun use_mem ->
+        match Map.find !defs use_mem with
+        | Some waddr -> f waddr addr
+        | None -> ()
+      );
+    let var_defs = Abstract_ssa.def_ssa bil in
+    let mem_defs = Abstract_ssa.def_mem_ssa bil in
+    defs := Set.fold ~init:!defs var_defs ~f:(fun defs e ->
+                Map.set defs ~key:e ~data:addr
+              );
+    defs := Set.fold ~init:!defs mem_defs ~f:(fun defs e ->
+                Map.set defs ~key:e ~data:addr
+              );
   )
   | None -> ()
           
