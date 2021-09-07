@@ -946,9 +946,16 @@ let test_ssa test_ctxt =
         ((Hash_set.length ssa_rax) > 0));
   let superset =
     let open Bil in
-    let load = [] in
-    let store = [] in
-    make_chain [load; store] in
+    let s = Size.(`r64) in
+    let mem = Bil.var @@ Var.create "mem" (Bil.Types.Imm 64) in
+    let ld = load ~mem ~addr:(Int zero) LittleEndian s in
+    let ldv = Var.create "ld" @@ Bil.Types.Imm 32 in
+    let ld = [Bil.move ldv ld] in
+    let exp = Bil.var @@ Var.create "v1" (Bil.Types.Imm 64) in
+    let st = store ~mem ~addr:(Int zero) exp LittleEndian s; in
+    let stv = Var.create "st" @@ Bil.Types.Imm 32 in
+    let st = [Bil.move stv st] in
+    make_chain [ld; st] in
   find_ssa superset ~f:(fun ssa_mem_mem ->
       assert_bool "Expect >= 1 ssa for mem mem operation"
         ((Hash_set.length ssa_mem_mem) > 0));
