@@ -18,7 +18,7 @@ let stmt_def_mem =
   object(self)
     inherit [Exp.Set.t] Stmt.visitor
     method enter_load ~mem ~addr e s accu =
-      Set.add accu addr
+      Set.add accu mem
   end
 
 let stmt_use_mem =
