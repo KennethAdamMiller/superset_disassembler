@@ -962,8 +962,12 @@ let test_ssa test_ctxt =
     let ld = Bil.move ldv ld in
     make_chain [[mv_addr; st]; [move_v2; ld]] in
   find_ssa superset ~f:(fun ssa_renamed ->
-      assert_bool "Expect >= 1 ssa for recognition over renaming"
-        ((Hash_set.length ssa_renamed) > 2));
+      let actual = (Hash_set.length ssa_renamed) in
+      let msg =
+        sprintf
+          "Expect >= 2 ssa for recognition over renaming, was %d"
+          actual in
+      assert_bool msg (actual > 2));
   let superset =
     let open Bil in
     let s = Size.(`r64) in
