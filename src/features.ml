@@ -1110,6 +1110,8 @@ let _exfiltset = [
    ((fun x -> transform (fixpoint_tails x)), unfiltered));
   ("FixpointFreevarSSA",
    ((fun x -> transform (fixpoint_freevarssa x 0)), unfiltered));
+  ("FixpointSSA",
+   ((fun x -> transform (fixpoint_ssa x 0)), unfiltered));
   ("FixpointMemSSA", ((fun x -> transform (fixpoint_memssa x)),
                       unfiltered));
   ("DeepestDescendent", (deepest_descendent,unfiltered));
