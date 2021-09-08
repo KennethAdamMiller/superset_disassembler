@@ -14,7 +14,7 @@ let stmt_def_mem =
     method enter_load ~mem ~addr e s accu =
       Set.add accu mem
     method enter_store ~mem ~addr ~exp e s accu =
-      Set.add accu addr
+      Set.add (Set.add accu addr) mem
   end
 
 let stmt_use_mem =
