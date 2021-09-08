@@ -1027,7 +1027,7 @@ let test_ssa test_ctxt =
     let step1 = [def1] in
     let step2 = [def2] in
     let step3 = [use] in
-    make_chain [step1; step2; step3;] in
+    make_chain [step1; step2; step3; step3;] in
   find_ssa superset ~f:(fun ssa_chain ->
       assert_bool "Expect >= 2 ssa for register chain"
         ((Hash_set.length ssa_chain) > 1));
