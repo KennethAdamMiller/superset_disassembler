@@ -960,7 +960,7 @@ let test_ssa test_ctxt =
     let ldv = Var.create "ld" @@ Bil.Types.Imm 32 in
     let st = Bil.move stv st in
     let ld = Bil.move ldv ld in
-    make_chain [[mv_addr; st]; [move_v2; ld]] in
+    make_chain [[mv_addr]; [st]; [move_v2]; [ld];] in
   find_ssa superset ~f:(fun ssa_renamed ->
       let actual = (Hash_set.length ssa_renamed) in
       let msg =
