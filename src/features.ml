@@ -218,11 +218,11 @@ let collect_defs () =
       Map.set accu v e
     method enter_load ~mem ~addr e s accu =
       match mem with
-      | Bil.Var v -> Map.set accu v addr
+      | Bil.Var v -> Map.set accu v mem
       | _ -> accu
     method enter_store ~mem ~addr ~exp e s accu =
       match addr with
-      | Bil.Var v -> Map.set accu v exp
+      | Bil.Var v -> Map.set accu v mem
       | _ -> accu
   end
   
