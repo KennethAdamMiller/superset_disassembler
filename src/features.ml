@@ -244,12 +244,12 @@ let post_ssa_with superset lift (defs,defmap) addr f =
       end in
     Set.iter use_vars ~f:(fun use_var ->
         match Exp.find (use_finder !defmap) use_var with
-        | Some waddr -> f waddr addr
+        | Some waddr -> f addr waddr
         | None -> ()
       );
     Set.iter use_mems ~f:(fun use_mem ->
         match Exp.find (use_finder !defmap) use_mem with
-        | Some waddr -> f waddr addr
+        | Some waddr -> f addr waddr
         | None -> ()
       );
     let var_defs = Abstract_ssa.def_ssa bil in
