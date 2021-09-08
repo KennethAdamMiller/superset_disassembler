@@ -222,7 +222,7 @@ let collect_defs () =
       | _ -> accu
     method enter_store ~mem ~addr ~exp e s accu =
       match addr with
-      | Bil.Var v -> Map.set accu v addr
+      | Bil.Var v -> Map.set accu v exp
       | _ -> accu
   end
   
