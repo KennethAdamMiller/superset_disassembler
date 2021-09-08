@@ -209,15 +209,21 @@ let extract_constants superset =
 let pre_ssa superset lift factors var_use addr =
   ()
 
-let collect_defs =
+let collect_defs () =
   object(self)
-    inherit [exp Var.Map.t] Term.visitor as super
-    method leave_def def accu =
-      let lhs = Def.lhs def in
-      let rhs = Def.rhs def in
-      Map.set accu lhs rhs
+    inherit [exp Var.Map.t] Stmt.visitor as super
     method enter_let v ~exp ~body accu =
       Map.set accu v exp
+    method enter_move v e accu =
+      Map.set accu v e
+    method enter_load ~mem ~addr e s accu =
+      match mem with
+      | Bil.Var v -> Map.set accu v addr
+      | _ -> accu
+    method enter_store ~mem ~addr ~exp e s accu =
+      match addr with
+      | Bil.Var v -> Map.set accu v exp
+      | _ -> accu
   end
   
 let post_ssa_with superset lift (defs,defmap) addr f = 
@@ -248,6 +254,7 @@ let post_ssa_with superset lift (defs,defmap) addr f =
       );
     let var_defs = Abstract_ssa.def_ssa bil in
     let mem_defs = Abstract_ssa.def_mem_ssa bil in
+    defmap := (collect_defs ())#run bil !defmap;
     defs := Set.fold ~init:!defs var_defs ~f:(fun defs e ->
                 Map.set defs ~key:e ~data:addr
               );
