@@ -218,11 +218,11 @@ let collect_defs () =
       Map.set accu v e
     method enter_load ~mem ~addr e s accu =
       match mem with
-      | Bil.Var v -> Map.set accu v mem
+      | Bil.Var v -> Map.set accu v addr
       | _ -> accu
     method enter_store ~mem ~addr ~exp e s accu =
       match addr with
-      | Bil.Var v -> Map.set accu v mem
+      | Bil.Var v -> Map.set accu v exp
       | _ -> accu
   end
   
@@ -279,7 +279,7 @@ let extract_ssa_to_map superset =
   let visited = Addr.Hash_set.create () in
   Hash_set.iter entries ~f:(fun addr ->
       Traverse.with_ancestors_at superset ~visited addr ~post ~pre;
-      var_use := Exp.Map.empty
+    (*var_use := Exp.Map.empty*)
     );
   !defuse_map
 

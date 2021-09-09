@@ -31,10 +31,6 @@ let stmt_def_vars =
       Set.add accu Exp.(Bil.Var def)
     method enter_let v ~exp ~body accu =
       Set.add accu Bil.(Var v)
-    method enter_load ~mem ~addr e s accu =
-      Set.add accu mem
-    method enter_store ~mem ~addr ~exp e s accu =
-      Set.add (Set.add accu addr) mem
   end
 
 let stmt_use_vars =
@@ -44,8 +40,6 @@ let stmt_use_vars =
       Set.add accu Bil.(Var v)
     method visit_let v ~exp ~body accu =
       Set.add (Set.add accu exp) body
-    method enter_store ~mem ~addr ~exp e s accu =
-      Set.add (Set.add (Set.add accu exp) addr) mem
   end
 
 let stmt_def_freevars =
