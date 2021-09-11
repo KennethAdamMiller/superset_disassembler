@@ -250,6 +250,9 @@ module ISG = struct
   let iter_vertex superset f =
     OG.iter_vertex f superset.insn_risg
 
+  let fold_vertex superset f =
+    OG.fold_vertex f superset.insn_risg
+
   let fold_edges superset f =
     let insn_risg = superset.insn_risg in 
     OG.fold_edges f insn_risg
@@ -296,6 +299,10 @@ module ISG = struct
             visit w) ;
       post v
     in if Core.mem superset v then visit v
+
+  let fixpoint superset ?steps ?start ?rev ?step =
+    Graphlib.fixpoint ?steps ?start ?rev ?step
+      (module G) superset.insn_risg
 
   let print_dot ?colorings superset =
     (*if not (colorings = String.Map.empty) then*)
@@ -378,10 +385,7 @@ end
 module Inspection = struct
   let contains_addr superset addr =
     Memmap.contains superset.sections addr
-  (*let img = Option.value_exn superset.img in
-    let segments = Table.to_sequence Image.(segments img) in
-    Seq.fold segments ~init:false ~f:(fun status (mem, segment) ->
-      status || Memory.contains mem addr)*)
+
   let total_bytes superset =
     Seq.fold (Memmap.to_sequence superset.sections) ~init:0
       ~f:(fun total (mem,_) -> (total + (Memory.length mem)))

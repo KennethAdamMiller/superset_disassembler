@@ -1,12 +1,6 @@
 open Bap.Std
 open Core_kernel
-
-type rev_ssa = {
-    exps   : Exp.Set.t;
-    vars   : Var.Set.t;
-    uf_ids : Exp.t Union_find.t;
-  }
-
+open Graphlib.Std
 
 let stmt_def_mem =
   object(self)
@@ -73,6 +67,41 @@ let stmt_use_freevars =
       | Bil.Var v -> Set.add accu v
       | _ -> accu
   end
+
+type rev_ssa = {
+    defs   : Var.Set.t;
+    uses   : Var.Set.t;
+  }
+
+let transitions superset =
+  Superset.ISG.fold_vertex superset (fun addr fs ->
+      match Superset.Core.lift_at superset addr with
+      | Some bil ->
+         Addr.Map.add_exn fs addr {
+             defs = stmt_def_freevars#run bil Var.Set.empty;
+             uses = List.fold bil ~init:Var.Set.empty
+                      ~f:(fun fvars stmt ->
+                        Set.union fvars (Stmt.free_vars stmt));
+           }
+      | None -> fs
+    ) Addr.Map.empty
+
+let (++) = Set.union and (--) = Set.diff
+
+let compute_liveness superset =
+  let _exit = Addr.of_int ~width:1 0 in
+  let start = Addr.of_int ~width:1 1 in
+  let init = Solution.create Addr.Map.empty Var.Set.empty in
+  let tran = transitions superset in
+  let module G = Superset_impl.G in
+  Superset.ISG.fixpoint superset ~init ~start ~rev:true
+    ~merge:Set.union
+    ~equal:Var.Set.equal
+    ~f:(fun n vars ->
+        if Addr.equal n _exit || Addr.equal n start then vars
+        else
+          let {defs; uses} = Map.find_exn tran n in
+          vars -- defs ++ uses)
 
 let def_mem_ssa bil = 
   stmt_def_mem#run bil Exp.Set.empty

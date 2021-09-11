@@ -279,10 +279,17 @@ let extract_ssa_to_map superset =
   let visited = Addr.Hash_set.create () in
   Hash_set.iter entries ~f:(fun addr ->
       Traverse.with_ancestors_at superset ~visited addr ~post ~pre;
-    (*var_use := Exp.Map.empty*)
+      var_use := Exp.Map.empty
     );
   !defuse_map
 
+let extract_liveness superset =
+  let soln = Abstract_ssa.compute_liveness ?step:None ?steps:None
+               superset in
+  let liveness_pairs = Graphlib.Std.Solution.enum soln in
+  Seq.fold liveness_pairs ~init:Addr.Set.empty ~f:(fun s (addr,_) ->
+      Addr.Set.add s addr)
+  
 let pre_freevarssa superset lift factors var_use addr =
   match Superset.Core.lift_at superset addr with
   | Some (bil) -> (
@@ -1142,6 +1149,7 @@ let _exfiltset = [
    ((fun x -> transform (fixpoint_freevarssa x 0)), unfiltered));
   ("FixpointSSA",
    ((fun x -> transform (fixpoint_ssa x 0)), unfiltered));
+  ("Liveness", (extract_liveness,unfiltered));
   ("FixpointMemSSA", ((fun x -> transform (fixpoint_memssa x)),
                       unfiltered));
   ("DeepestDescendent", (deepest_descendent,unfiltered));
@@ -1232,6 +1240,7 @@ let fdists = String.Map.set fdists "DeepestDescendent" 1
 let fdists = String.Map.set fdists "BFSDepth" 1
 let fdists = String.Map.set fdists "AscendantlyReflectiveDescendents" 1
 let fdists = String.Map.set fdists "LineageSetContainment" 1
+let fdists = String.Map.set fdists "Liveness" 1
 (* TODO belongs in report *)
 (* TODO stop using Addr.Map *)
 (* TODO calculate the optimal fdists point value for each feature *)

@@ -7,6 +7,7 @@ type elem = mem * Dis.full_insn option
 type t = Superset_impl.t
 
 module ISG : sig
+  open Graphlib.Std
   (** Returns a list of those addresses for which the argument
   address could be the immediate next instruction of. *)
   val ancestors : t -> addr -> addr list
@@ -15,6 +16,7 @@ module ISG : sig
   val descendants : t -> addr -> addr list
   val mem_vertex : t -> addr -> bool
   val iter_vertex : t -> (addr -> unit) -> unit
+  val fold_vertex : t -> (addr -> 'a -> 'a) -> 'a -> 'a
   val fold_edges : t -> (addr -> addr -> 'a -> 'a) -> 'a -> 'a
   val check_connected : t -> addr -> addr -> bool
   (** Adds an associated directed link from src to dst, tracking
@@ -36,6 +38,16 @@ module ISG : sig
             ?pre:(addr -> unit) -> ?post:(addr -> unit) ->
             (t -> addr -> addr list) -> t -> addr -> unit
 
+  val fixpoint : t ->
+                 ?steps:int ->
+                 ?start:addr ->
+                 ?rev:bool ->
+                 ?step:(int -> addr -> 'a -> 'a -> 'a) ->
+                 init:(addr, 'a) Solution.t ->
+                 equal:('a -> 'a -> bool) ->
+                 merge:('a -> 'a -> 'a) ->
+                 f:(addr -> 'a -> 'a) -> (addr, 'a) Solution.t
+    
   (** Print the graph to file for a given superset *)
   val print_dot : ?colorings:Addr.Hash_set.t String.Map.t -> t -> unit
   (** For all items in the address hash set, remove them from the
