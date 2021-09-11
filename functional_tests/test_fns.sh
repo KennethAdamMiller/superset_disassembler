@@ -1,7 +1,6 @@
 echo "=====$0====="
 eval $(opam config env)
 source scripts/read_cache.sh
-#export SUPERSET_FRONTEND=1
 export features="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
 export gt_bin="${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"

@@ -14,7 +14,7 @@ echo "Executing for ground truth"
 echo "time bap superset_disasm --u ${args} ${suff} "
 time bap superset_disasm --u ${args} ${suff}
 echo "\n"
-suff=="--metrics \"tps: %1, fns: %2\",\"superset-disasm-metrics:true_positives\",\"superset-disasm-metrics:false_negatives\" "
+suff="--metrics \"tps: %1, fns: %2\",\"superset-disasm-metrics:true_positives\",\"superset-disasm-metrics:false_negatives\" "
 time bap superset_distribution ${args} ${suff} 
 if [[ ! (-z ${phases}) ]]; then
     args+=" --invariants=${phases}"
