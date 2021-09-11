@@ -1240,7 +1240,7 @@ let fdists = String.Map.set fdists "DeepestDescendent" 1
 let fdists = String.Map.set fdists "BFSDepth" 1
 let fdists = String.Map.set fdists "AscendantlyReflectiveDescendents" 1
 let fdists = String.Map.set fdists "LineageSetContainment" 1
-let fdists = String.Map.set fdists "Liveness" 10
+let fdists = String.Map.set fdists "Liveness" 20
 (* TODO belongs in report *)
 (* TODO stop using Addr.Map *)
 (* TODO calculate the optimal fdists point value for each feature *)
