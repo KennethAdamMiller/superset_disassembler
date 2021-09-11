@@ -100,8 +100,11 @@ let compute_liveness superset =
     ~f:(fun n vars ->
         if Addr.equal n _exit || Addr.equal n start then vars
         else
-          let {defs; uses} = Map.find_exn tran n in
-          vars -- defs ++ uses)
+          match Map.find tran n with
+          | Some {defs; uses} ->
+             vars -- defs ++ uses
+          | None -> vars
+    )
 
 let def_mem_ssa bil = 
   stmt_def_mem#run bil Exp.Set.empty
