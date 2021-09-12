@@ -11,9 +11,6 @@ suff+=" --invariants=\"\""
 suff+=" --analyses=\"\""
 suff+=" --features=\"\""
 echo "Executing for ground truth"
-echo "time bap superset_disasm --u ${args} "
-time bap superset_disasm --u ${args}
-echo "\n"
 if [[ ! (-z ${phases}) ]]; then
     args+=" --invariants=${phases} "
 fi
