@@ -19,4 +19,8 @@ args+="--rounds=${rounds} "
 echo "time bap superset_disasm --u ${args}"
 time bap superset_disasm --u ${args}
 
-bap superset_distribution --metrics "%1","superset-disasm-metrics:false_negatives" ${args}
+fns=$(bap superset_distribution --metrics "%1","superset-disasm-metrics:false_negatives" ${args})
+if [ 0 -eq ${fns} ]; then
+    echo "Should have some false negatives";
+    exit -1;
+fi
