@@ -17,13 +17,13 @@ echo "\n"
 suff="--metrics \"tps: %1, fns: %2\",\"superset-disasm-metrics:true_positives\",\"superset-disasm-metrics:false_negatives\" "
 time bap superset_distribution ${args} ${suff} 
 if [[ ! (-z ${phases}) ]]; then
-    args+=" --invariants=${phases}"
+    args+=" --invariants=${phases} "
 fi
 if [[ ! (-z ${analyses}) ]]; then
-    args+=" --analyses=${analyses}"
+    args+=" --analyses=${analyses} "
 fi
 if [[ ! (-z ${features}) ]]; then
-    args+=" --features=${features}"
+    args+=" --features=${features} "
 fi
 args+="--rounds=${rounds} "
 echo "time bap superset_disasm --u ${args}"
