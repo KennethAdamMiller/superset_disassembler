@@ -20,6 +20,7 @@ USER root
 #TODO this should use git clone
 RUN mkdir -p /home/opam/workspace/superset_disasm
 WORKDIR $HOME/workspace/superset_disasm
+RUN scripts/install_malamute.sh
 COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace/superset_disasm/ && chown opam:opam /home/opam/workspace
 USER opam

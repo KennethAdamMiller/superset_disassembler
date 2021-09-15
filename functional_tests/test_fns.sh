@@ -15,7 +15,7 @@ fi
 if [[ ! (-z ${features}) ]]; then
     args+=" --features=${features}"
 fi
-args+="--rounds=${rounds} "
+args+=" --rounds=${rounds} "
 echo "time bap superset_disasm --u ${args}"
 time bap superset_disasm --u ${args}
 

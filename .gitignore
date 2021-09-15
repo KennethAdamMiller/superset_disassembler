@@ -16,3 +16,4 @@
 /configure
 /myocamlbuild.ml
 /src/META
+/plugin/superset_disassembler.plugin
