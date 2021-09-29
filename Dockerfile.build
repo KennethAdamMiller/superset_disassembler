@@ -4,7 +4,7 @@ FROM bap:${BAPVERSION}
 RUN mkdir -p /home/opam/workspace/superset_disasm
 ENV PATH="/home/opam/.opam/4.09/bin:"$PATH
 
-RUN sudo apt-get update && sudo apt-get install parallel time -y
+RUN sudo apt-get update && sudo apt-get install dc parallel time -y
 
 USER root
 RUN scripts/install_malamute.sh
@@ -15,4 +15,4 @@ USER opam
 
 WORKDIR /home/opam/workspace/superset_disasm
 ARG CACHEBUST
-RUN rm setup.data && eval `opam config env` && opam depext --install bap-byteweight-frontend landmarks && opam pin add superset_disasm ./ -y --use-internal-solver -n && opam depext --install superset_disasm # && cd plugin && ./build.sh && cd ..
+RUN rm setup.data && eval `opam config env` && opam depext --install bap-byteweight-frontend landmarks && opam pin add superset_disasm ./ -y --use-internal-solver -n && opam depext --install superset_disasm && cd plugin && ./build.sh && cd ..

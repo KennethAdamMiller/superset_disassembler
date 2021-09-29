@@ -43,6 +43,7 @@ compute_disasm() {
 	time bap superset_disasm ${args}
     fi
 }
+export -f compute_disasm
 
 analyze() {
     export binary=${1}
