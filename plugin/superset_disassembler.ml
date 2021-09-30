@@ -605,7 +605,7 @@ let make_plots summaries =
   let safe_conv = Plot.create "safe_conv.png" in
   let occr_numbins = Plot.create "occr_numbins.png" in
   let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
-    List.fold summaries ~init:([],[],[],[],[],[],[],[])
+    List.fold summaries ~init:([],[],[],[],[],[],[],[],[])
       ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps,time) s ->
         let _size,_occ,_occ_space,_fe,_clean,_fns,_fps,_tps,_time = s in
         _size :: sizes, _occ :: occ, _occ_space :: occ_space,
