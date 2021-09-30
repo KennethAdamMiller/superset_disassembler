@@ -324,7 +324,7 @@ let save_metadata digest options =
 let create_and_process
       input outputs loader target update kb options =
   let digest = superset_digest options in
-  let () = save_metadata options digest in
+  let () = save_metadata digest options in
   let had_knowledge = load_knowledge digest kb in
   let () = if not had_knowledge then
              let _ = superset_disasm options in () else () in
