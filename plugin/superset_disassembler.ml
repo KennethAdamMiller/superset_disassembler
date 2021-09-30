@@ -584,18 +584,19 @@ let make_plots summaries =
   let summaries =
     List.filter_map summaries ~f:(fun s ->
         match s.size, s.occ, s.occ_space, s.fe, s.clean, s.fns, s.fps,
-              s.tps with
-        | None, _, _, _, _, _, _, _ -> None
-        | _, None, _, _, _, _, _, _ -> None
-        | _, _, None, _, _, _, _, _ -> None
-        | _, _, _, None, _, _, _, _ -> None
-        | _, _, _, _, None, _, _, _ -> None
-        | _, _, _, _, _, None, _, _ -> None
-        | _, _, _, _, _, _, None, _ -> None
-        | _, _, _, _, _, _, _, None -> None
+              s.tps, s.time with
+        | None, _, _, _, _, _, _, _, _ -> None
+        | _, None, _, _, _, _, _, _, _ -> None
+        | _, _, None, _, _, _, _, _, _ -> None
+        | _, _, _, None, _, _, _, _, _ -> None
+        | _, _, _, _, None, _, _, _, _ -> None
+        | _, _, _, _, _, None, _, _, _ -> None
+        | _, _, _, _, _, _, None, _, _ -> None
+        | _, _, _, _, _, _, _, None, _ -> None
+        | _, _, _, _, _, _, _, _, None -> None
         | Some size, Some occ, Some occ_space, Some fe, Some clean,
-          Some fns, Some fps, Some tps ->
-           Some (size, occ, occ_space, fe, clean, fns, fps, tps)
+          Some fns, Some fps, Some tps, Some time ->
+           Some (size, occ, occ_space, fe, clean, fns, fps, tps, time)
       ) in
   let sz_occ = Plot.create "size_and_occlusion.png" in
   let occ_occspace = Plot.create "occlusion_and_occspace.png" in
@@ -603,12 +604,13 @@ let make_plots summaries =
   let size_time = Plot.create "size_time.png" in
   let safe_conv = Plot.create "safe_conv.png" in
   let occr_numbins = Plot.create "occr_numbins.png" in
-  let sizes,occ,occ_space,fe,clean,fns,fps,tps =
+  let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
     List.fold summaries ~init:([],[],[],[],[],[],[],[])
-      ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps) s ->
-        let _size,_occ,_occ_space,_fe,_clean,_fns,_fps,_tps = s in
+      ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps,time) s ->
+        let _size,_occ,_occ_space,_fe,_clean,_fns,_fps,_tps,_time = s in
         _size :: sizes, _occ :: occ, _occ_space :: occ_space,
-        _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps
+        _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps,
+        _time :: time
       ) in
   Plot.scatter ~h:sz_occ (mat_of_list sizes) (mat_of_list occ);
   Plot.output sz_occ;
