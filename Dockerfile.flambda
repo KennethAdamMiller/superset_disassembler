@@ -18,9 +18,9 @@ RUN sudo apt-get update && sudo apt-get install dc time parallel -y
 RUN opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks && eval `opam config env` && bap-byteweight update
 USER root
 #TODO this should use git clone
-RUN mkdir -p /home/opam/workspace/superset_disasm
+RUN mkdir -p /home/opam/workspace/superset_disasm/scripts
 WORKDIR $HOME/workspace/superset_disasm
-COPY ./scripts/install_malamute.sh ./
+COPY ./scripts/install_malamute.sh ./scripts
 RUN scripts/install_malamute.sh
 COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace/superset_disasm/ && chown opam:opam /home/opam/workspace
