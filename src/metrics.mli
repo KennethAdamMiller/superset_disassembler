@@ -15,6 +15,7 @@ module Cache : sig
   open Bap_core_theory
   open Theory
 
+  val sym_label : program Knowledge.obj KB.t
   val ground_truth_source : (program, string) Knowledge.slot
 
   val function_entrances : (program, Addr.Set.t option) Knowledge.slot
