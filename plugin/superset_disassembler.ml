@@ -318,7 +318,7 @@ let save_metadata digest options =
       KB.return @@
         Cache_metadata.add c
           options.target Data.Cache.Digest.(to_string digest)
-    );
+    )
   
 let create_and_process
       input outputs loader target update kb options =
@@ -328,10 +328,10 @@ let create_and_process
   let () = if not had_knowledge then
              let _ = superset_disasm options in () else () in
   (match options.ground_truth_bin with
-  | Some bin ->
-     KB.promise Metrics.Cache.ground_truth_source
-       (fun _ -> KB.return bin);
-  | None -> ());
+   | Some bin ->
+      KB.promise Metrics.Cache.ground_truth_source
+        (fun _ -> KB.return bin);
+   | None -> ());
   let ro = Metrics.Cache.reduced_occlusion in
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   save_knowledge ~had_knowledge ~update digest kb
