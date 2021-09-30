@@ -581,40 +581,34 @@ let mat_of_list l =
 
 let make_plots summaries =
   let open Metrics in
-  let summaries = List.filter_map summaries ~f:(fun s ->
-                      match s.size, s.occ, s.occ_space, s.fns, s.fps,
-                            s.tps with
-                      | None, _, _, _, _, _ -> None
-                      | _, None, _, _, _, _ -> None
-                      | _, _, None, _, _, _ -> None
-                      | _, _, _, None, _, _ -> None
-                      | _, _, _, _, None, _ -> None
-                      | _, _, _, _, _, None -> None
-                      | _ -> Some s
-                    ) in
+  let summaries =
+    List.filter_map summaries ~f:(fun s ->
+        match s.size, s.occ, s.occ_space, s.fe, s.fns, s.fps,
+              s.tps with
+        | None, _, _, _, _, _, _, _ -> None
+        | _, None, _, _, _, _, _, _ -> None
+        | _, _, None, _, _, _, _, _ -> None
+        | _, _, _, None, _, _, _, _ -> None
+        | _, _, _, _, None, _, _, _ -> None
+        | _, _, _, _, _, None, _, _ -> None
+        | _, _, _, _, _, _, None, _ -> None
+        | _, _, _, _, _, _, _, None -> None
+        | _ -> s.size, s.occ, s.occ_space,
+               s.fe, s.clean, s.fns, s.fps, s.tps
+      ) in
   let sz_occ = Plot.create "size_and_occlusion.png" in
   let occ_occspace = Plot.create "occlusion_and_occspace.png" in
   let occcnt_occfuncs  = Plot.create "occcnt_occfuncs.png" in
   let size_time = Plot.create "size_time.png" in
   let safe_conv = Plot.create "safe_conv.png" in
   let occr_numbins = Plot.create "occr_numbins.png" in
-  let sizes =
-    Option.value_exn @@ Option.all @@
-      List.map summaries ~f:(fun s -> s.size) in
-  let occ = Option.value_exn @@ Option.all @@
-              List.map summaries ~f:(fun s -> s.occ) in
-  let occ_space = Option.value_exn @@ Option.all @@
-                    List.map summaries ~f:(fun s -> s.occ_space) in
-  let fe = Option.value_exn @@ Option.all @@
-             List.map summaries ~f:(fun s -> s.fe) in
-  let clean = Option.value_exn @@ Option.all @@
-                List.map summaries ~f:(fun s -> s.occ_space) in
-  let fns = Option.value_exn @@ Option.all @@
-              List.map summaries ~f:(fun s -> s.fns) in
-  let fps = Option.value_exn @@ Option.all @@
-              List.map summaries ~f:(fun s -> s.fps) in
-  let tps = Option.value_exn @@ Option.all @@
-              List.map summaries ~f:(fun s -> s.tps) in
+  let sizes,occ,occ_space,fe,clean,fns,fps,tps =
+    List.fold summaries ~init:([],[],[],[],[],[],[],[])
+      ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps) s ->
+        let _size,_occ,_occ_space,_fe,_clean,_fns,_fps,_tps = s in
+        _size :: sizes, _occ :: occ, _occ_space :: occ_space,
+        _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps
+      ) in
   Plot.scatter ~h:sz_occ (mat_of_list sizes) (mat_of_list occ);
   Plot.output sz_occ;
   Plot.scatter ~h:occ_occspace (mat_of_list occ)
