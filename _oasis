@@ -15,7 +15,9 @@ BuildDepends:
               ppx_inline_test,
               graphlib,
               landmarks,
-              bap-future
+              bap-future,
+	      owl,
+	      owl-plplot
 
 Library superset_disassemblers
   Path:                 src/
@@ -37,7 +39,8 @@ Library superset_disassemblers
                         Report,
                         Streams,
                         Superset_impl,
-                        Three_address_code
+                        Three_address_code,
+			Metadata,
 
 Document "superset_disassemblers_api"
   Type: ocamlbuild (0.4)

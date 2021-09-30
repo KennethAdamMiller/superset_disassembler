@@ -35,6 +35,16 @@ module Cache : sig
     
 end
 
-(** Given a file location to a debug binary and a superset, collect
-    metrics on the disassembly. *)
-val compute_metrics : Superset.t -> unit
+type t = {
+    size      : int option;
+    time      : int option;
+    occ       : int option;
+    occ_space : int option;
+    fe        : int option;
+    clean     : int option;
+    fns       : int option;
+    fps       : int option;
+    tps       : int option;
+  }
+
+val get_summary : unit -> t

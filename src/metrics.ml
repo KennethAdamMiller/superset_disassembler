@@ -88,6 +88,9 @@ module Cache = struct
   open Bap_core_theory
 
   let package = "superset-disasm-metrics"
+  let sym_label =
+    KB.Symbol.intern "superset_analysis" Theory.Program.cls
+
   let bool_t = Knowledge.Domain.optional
                  ~inspect:sexp_of_bool ~equal:Bool.equal "bool"
   let bool_persistent =
@@ -130,6 +133,14 @@ module Cache = struct
   let ground_truth =
     attr addrs_t addrs_persistent "ground_truth"
       "Statically reachable descendents of function entrances"
+
+  let size =
+    attr int_t int_persistent "code_size"
+      "Total number of byte that the code memory segments occupy"
+
+  let time =
+    attr int_t int_persistent "processing_time"
+      "Time required to process this binary"
     
   let occlusive_space =
     attr int_t int_persistent "occlusive_space"
@@ -276,4 +287,30 @@ let compute_metrics superset =
                else c) in
          KB.return (Some false_positives)
       | None -> KB.return None
-    );
+    )
+
+type t = {
+    size      : int option;
+    time      : int option;
+    occ       : int option;
+    occ_space : int option;
+    fe        : int option;
+    clean     : int option;
+    fns       : int option;
+    fps       : int option;
+    tps       : int option;
+  }
+
+let get_summary () = {
+    size = Toplevel.eval Cache.size Cache.sym_label;
+    time = Toplevel.eval Cache.time Cache.sym_label;
+    fe = Option.map ~f:Set.length @@
+           Toplevel.eval Cache.function_entrances Cache.sym_label;
+    occ_space = Toplevel.eval Cache.occlusive_space Cache.sym_label;
+    occ = Toplevel.eval Cache.reduced_occlusion Cache.sym_label;
+    fns = Toplevel.eval Cache.false_negatives Cache.sym_label;
+    fps = Toplevel.eval Cache.false_positives Cache.sym_label;
+    tps = Toplevel.eval Cache.true_positives Cache.sym_label;
+    clean = Option.map ~f:Set.length @@
+      Toplevel.eval Cache.clean_functions Cache.sym_label;
+  }

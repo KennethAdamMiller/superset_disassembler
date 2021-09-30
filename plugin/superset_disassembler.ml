@@ -8,6 +8,7 @@ open Cmdoptions
 open Bap_main
 open Bap_plugins.Std
 open Bap_knowledge
+open Owl_plplot
 
 include Self()
 module Dis = Disasm_expert.Basic
@@ -78,7 +79,9 @@ let superset_disasm options =
     With_options(struct
         let options = options
       end) in
+  let t = Sys.time() in
   let superset = With_options.with_options () in
+  KB.promise Metrics.Cache.time (fun o -> KB.return (Sys.time() -. t));
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
   KB.promise Theory.Label.is_valid
@@ -288,6 +291,12 @@ let save_knowledge ~had_knowledge ~update digest = function
   | Some _ -> ()
 
 
+let compute_digest target disasm =
+  make_digest [
+      Caml.Digest.file target;
+      disasm;
+    ]
+
 let superset_digest options =
   let open Cmdoptions in
   let invariants = options.phases in
@@ -300,14 +309,21 @@ let superset_digest options =
         options.disassembler;
       ]
 
-let gtruth_digest gt_bin =
-  make_digest [
-      Caml.Digest.file gt_bin;
-    ]
+let save_metadata digest options =
+  Toplevel.set @@ Knowledge.load "superset-cache-metadata";
+  let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
+  let current = Toplevel.eval digests guide in
+  KB.promise digests (fun o ->
+      let c = Option.value current ~default:Cache_metadata.empty in
+      KB.return @@
+        Cache_metadata.add c
+          options.target Data.Cache.Digest.(to_string digest)
+    );
   
 let create_and_process
       input outputs loader target update kb options =
   let digest = superset_digest options in
+  let () = save_metadata options digest in
   let had_knowledge = load_knowledge digest kb in
   let () = if not had_knowledge then
              let _ = superset_disasm options in () else () in
@@ -316,10 +332,8 @@ let create_and_process
      KB.promise Metrics.Cache.ground_truth_source
        (fun _ -> KB.return bin);
   | None -> ());
-  let lbl = KB.Symbol.intern
-               "superset_analysis" Theory.Program.cls in
   let ro = Metrics.Cache.reduced_occlusion in
-  let _ = Toplevel.eval ro lbl in
+  let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   save_knowledge ~had_knowledge ~update digest kb
   
 let rounds =
@@ -474,6 +488,7 @@ let _distribution_command : unit =
     Toplevel.exec @@
       (match metrics with
        | Some metrics ->
+          (* TODO This symbol belongs in Metrics *)
           KB.Symbol.intern "superset_analysis"
             Theory.Program.cls >>= (fun label ->
           let oc_space = Metrics.Cache.occlusive_space in
@@ -525,6 +540,12 @@ let _distribution_command : unit =
       );
     Ok ()
 
+let show_cache_digest =
+  Extension.Command.flag "show_cache_digest"
+
+let reset_cache =
+  Extension.Command.flag "reset_cache"
+  
 let _cache_command : unit =
   let args =
     let open Extension.Command in
@@ -534,4 +555,61 @@ let _cache_command : unit =
     ~requires:features_used args @@
     fun input outputs loader target update kb
         ctxt ->
+    let d = compute_digest input loader ~namespace:"knowledge" in
+    info "%a" Data.Cache.Digest.pp d;
     Ok ()
+
+
+let mat_of_list l =
+  let num = List.length l in
+  let d = Owl_dense_matrix.D.create num 1 0.0 in
+  List.iteri l ~f:(fun idx e ->
+      Owl_dense_matrix.D.set d idx 1 (float_of_int e)
+    );
+  d
+  
+(* Plots:
+   binary size to occlusive rate (occlusion by occ space)
+   occlusive space to occlusion
+   scatter plot occlusive count and number of occ functions
+   size and processing time
+   least value required for safe convergence
+   number of binaries and occ rate
+ *)
+
+let make_plots summaries =
+  let open Metrics in
+  let sz_occ = Plot.create "size_and_occlusionr.png" in
+  let occ_occspace = Plot.create "occlusion_and_occspace.png" in
+  let occcnt_occfuncs  = Plot.create "occcnt_occfuncs.png" in
+  let size_time = Plot.create "size_time.png" in
+  let safe_conv = Plot.create "safe_conv.png" in
+  let occr_numbins = Plot.create "occr_numbins.png" in
+  let sizes = List.map summaries ~f:(fun s -> s.size) in
+  let occ = List.map summaries ~f:(fun s -> s.occ) in
+  let occ_space = List.map summaries ~f:(fun s -> s.occ_space) in
+  let fe = List.map summaries ~f:(fun s -> s.fe) in
+  let clean = List.map summaries ~f:(fun s -> s.occ_space) in
+  let fns = List.map summaries ~f:(fun s -> s.fns) in
+  let fps = List.map summaries ~f:(fun s -> s.fps) in
+  let tps = List.map summaries ~f:(fun s -> s.tps) in
+  Plot.scatter ~h:sz_occ (mat_of_list sizes) (mat_of_list occ);
+  Plot.scatter ~h:occ_occspace (mat_of_list occ)
+    (mat_of_list occ_space);
+  let occfuncs = List.map2 fe clean (fun x y -> x - y) in
+  Plot.scatter ~h:occcnt_occfuncs (mat_of_list occ)
+    (mat_of_list occfuncs);
+  Plot.scatter ~h:size_time (mat_of_list sizes) (mat_of_list time);
+  Plot.scatter ~h:occr_numbins (mat_of_list sizes) (mat_of_list time);
+  
+let _plot_cache : unit =
+  let args =
+    let open Extension.Command in
+    args $knowledge
+  in
+  Extension.Command.declare ~doc:man "plot_cache"
+    ~requires:[] args @@
+    fun  kb ctxt ->
+    let summaries =
+      Metadata.with_digests Metadata.cache_corpus_metrics in
+    Ok (make_plots summaries)
