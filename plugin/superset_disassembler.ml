@@ -598,14 +598,16 @@ let make_plots summaries =
   let size_time = Plot.create "size_time.png" in
   let safe_conv = Plot.create "safe_conv.png" in
   let occr_numbins = Plot.create "occr_numbins.png" in
-  let sizes = List.map summaries ~f:(fun s -> s.size) in
-  let occ = List.map summaries ~f:(fun s -> s.occ) in
-  let occ_space = List.map summaries ~f:(fun s -> s.occ_space) in
-  let fe = List.map summaries ~f:(fun s -> s.fe) in
-  let clean = List.map summaries ~f:(fun s -> s.occ_space) in
-  let fns = List.map summaries ~f:(fun s -> s.fns) in
-  let fps = List.map summaries ~f:(fun s -> s.fps) in
-  let tps = List.map summaries ~f:(fun s -> s.tps) in
+  let sizes = Option.all @@ List.map summaries ~f:(fun s -> s.size) in
+  let occ = Option.all @@ List.map summaries ~f:(fun s -> s.occ) in
+  let occ_space = Option.all @@
+                    List.map summaries ~f:(fun s -> s.occ_space) in
+  let fe = Option.all @@ List.map summaries ~f:(fun s -> s.fe) in
+  let clean = Option.all @@
+                List.map summaries ~f:(fun s -> s.occ_space) in
+  let fns = Option.all @@ List.map summaries ~f:(fun s -> s.fns) in
+  let fps = Option.all @@ List.map summaries ~f:(fun s -> s.fps) in
+  let tps = Option.all @@ List.map summaries ~f:(fun s -> s.tps) in
   Plot.scatter ~h:sz_occ (mat_of_list sizes) (mat_of_list occ);
   Plot.output sz_occ;
   Plot.scatter ~h:occ_occspace (mat_of_list occ)
