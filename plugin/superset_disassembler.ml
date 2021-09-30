@@ -317,7 +317,7 @@ let save_metadata digest options =
       let c = Option.value current
                 ~default:Metadata.Cache_metadata.empty in
       KB.return @@
-        Metadata.Cache_metadata.add c
+        Metadata.Cache_metadata.set c
           options.target Data.Cache.Digest.(to_string digest)
     )
   

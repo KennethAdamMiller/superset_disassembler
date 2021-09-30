@@ -23,7 +23,7 @@ let knowledge_cache () =
 module Cache_metadata = struct
   type t = string String.Map.t [@@deriving sexp, bin_io]
   let equal = String.Map.equal String.equal
-  let add = String.Map.add
+  let set = String.Map.set
   let empty = String.Map.empty
 end
 
