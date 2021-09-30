@@ -594,13 +594,18 @@ let make_plots summaries =
   let fps = List.map summaries ~f:(fun s -> s.fps) in
   let tps = List.map summaries ~f:(fun s -> s.tps) in
   Plot.scatter ~h:sz_occ (mat_of_list sizes) (mat_of_list occ);
+  Plot.output sz_occ;
   Plot.scatter ~h:occ_occspace (mat_of_list occ)
     (mat_of_list occ_space);
+  Plot.output occ_occspace;
   let occfuncs = List.map2 fe clean (fun x y -> x - y) in
   Plot.scatter ~h:occcnt_occfuncs (mat_of_list occ)
     (mat_of_list occfuncs);
+  Plot.output occcnt_occfuncs;
   Plot.scatter ~h:size_time (mat_of_list sizes) (mat_of_list time);
+  Plot.output size_time;
   Plot.scatter ~h:occr_numbins (mat_of_list sizes) (mat_of_list time);
+  Plot.output occr_numbins
   
 let _superset_plot_cache : unit =
   let args =

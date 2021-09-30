@@ -16,8 +16,8 @@ BuildDepends:
               graphlib,
               landmarks,
               bap-future,
-	      owl,
-	      owl-plplot
+              owl,
+              owl-plplot
 
 Library superset_disassemblers
   Path:                 src/
@@ -40,7 +40,7 @@ Library superset_disassemblers
                         Streams,
                         Superset_impl,
                         Three_address_code,
-			Metadata,
+                        Metadata
 
 Document "superset_disassemblers_api"
   Type: ocamlbuild (0.4)
