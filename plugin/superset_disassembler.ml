@@ -310,6 +310,7 @@ let superset_digest options =
       ]
 
 let save_metadata digest options =
+  let digest = digest ~namespace:"knowledge" in
   Toplevel.set @@ Knowledge.load "superset-cache-metadata";
   let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
   let current = Toplevel.eval Metadata.digests guide in
