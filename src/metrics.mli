@@ -35,6 +35,8 @@ module Cache : sig
     
 end
 
+val compute_metrics : Superset.t -> unit
+     
 type t = {
     size      : int option;
     time      : int option;

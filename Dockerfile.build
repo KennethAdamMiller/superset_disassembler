@@ -15,4 +15,4 @@ USER opam
 
 WORKDIR /home/opam/workspace/superset_disasm
 ARG CACHEBUST
-RUN rm setup.data && eval `opam config env` && opam depext --install bap-byteweight-frontend landmarks && opam pin add superset_disasm ./ -y --use-internal-solver -n && opam depext --install superset_disasm && cd plugin && ./build.sh && cd ..
+RUN rm setup.data && eval `opam config env` && opam depext --install bap-byteweight-frontend landmarks owl owl-plplots && opam pin add superset_disasm ./ -y --use-internal-solver -n && opam depext --install superset_disasm && cd plugin && ./build.sh && cd ..
