@@ -25,6 +25,7 @@ module Cache_metadata = struct
   let equal = String.Map.equal String.equal
   let set = String.Map.set
   let empty = String.Map.empty
+  let fold = String.Map.fold
 end
 
 let cache_metadata_t =
@@ -53,7 +54,7 @@ let with_digests f =
   f ds
   
 let cache_corpus_metrics ds =
-  String.Map.fold ds ~init:[] ~f:(fun ~key ~data l ->
+  Cache_metadata.fold ds ~init:[] ~f:(fun ~key ~data l ->
       let digest = Data.Cache.Digest.of_string data in
       let cache = knowledge_cache () in
       match Data.Cache.load cache digest with
