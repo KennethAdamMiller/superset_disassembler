@@ -593,8 +593,9 @@ let make_plots summaries =
         | _, _, _, _, _, None, _, _ -> None
         | _, _, _, _, _, _, None, _ -> None
         | _, _, _, _, _, _, _, None -> None
-        | _ -> Some (s.size, s.occ, s.occ_space,
-               s.fe, s.clean, s.fns, s.fps, s.tps)
+        | Some size, Some occ, Some occ_space, Some fe, Some clean,
+          Some fns, Some fps, Some tps ->
+           Some (size, occ, occ_space, fe, clean, fns, fps, tps)
       ) in
   let sz_occ = Plot.create "size_and_occlusion.png" in
   let occ_occspace = Plot.create "occlusion_and_occspace.png" in
