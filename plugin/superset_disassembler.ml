@@ -664,7 +664,7 @@ let _superset_show_binary : unit =
   in
   Extension.Command.declare ~doc:man "superset_show_binary"
     ~requires:[] args @@
-    fun  kb ctxt ->
+    fun input kb ctxt ->
     (* Calculate the principle  *)
     Ok ()
 
