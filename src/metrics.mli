@@ -21,6 +21,10 @@ module Cache : sig
 
   val ground_truth : (program, Addr.Set.t option) Knowledge.slot
 
+  val size : (program, int option) Knowledge.slot
+
+  val time : (program, int option) Knowledge.slot
+
   val occlusive_space : (program, int option) Knowledge.slot
 
   val reduced_occlusion : (program, int option) Knowledge.slot
