@@ -579,7 +579,7 @@ let mat_of_list l =
 
 let make_plots summaries =
   let open Metrics in
-  let sz_occ = Plot.create "size_and_occlusionr.png" in
+  let sz_occ = Plot.create "size_and_occlusion.png" in
   let occ_occspace = Plot.create "occlusion_and_occspace.png" in
   let occcnt_occfuncs  = Plot.create "occcnt_occfuncs.png" in
   let size_time = Plot.create "size_time.png" in
@@ -602,14 +602,43 @@ let make_plots summaries =
   Plot.scatter ~h:size_time (mat_of_list sizes) (mat_of_list time);
   Plot.scatter ~h:occr_numbins (mat_of_list sizes) (mat_of_list time);
   
-let _plot_cache : unit =
+let _superset_plot_cache : unit =
   let args =
     let open Extension.Command in
     args $knowledge
   in
-  Extension.Command.declare ~doc:man "plot_cache"
+  Extension.Command.declare ~doc:man "superset_plot_cache"
     ~requires:[] args @@
     fun  kb ctxt ->
     let summaries =
       Metadata.with_digests Metadata.cache_corpus_metrics in
     Ok (make_plots summaries)
+
+(* TODO *)
+let _superset_show_cache : unit =
+  let args =
+    let open Extension.Command in
+    args $knowledge
+  in
+  Extension.Command.declare ~doc:man "superset_show_cache"
+    ~requires:[] args @@
+    fun  kb ctxt ->
+    let summaries =
+      Metadata.with_digests Metadata.cache_corpus_metrics in
+    (* Number of fns *)
+    (* Avg reduced occlusion *)
+    (*  *)
+    Ok ()
+
+(* TODO *)
+let _superset_show_binary : unit =
+  let args =
+    let open Extension.Command in
+    args $input $knowledge
+  in
+  Extension.Command.declare ~doc:man "superset_show_binary"
+    ~requires:[] args @@
+    fun  kb ctxt ->
+    (* Calculate the principle  *)
+    Ok ()
+
