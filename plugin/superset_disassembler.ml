@@ -316,9 +316,9 @@ let save_metadata digest options =
   KB.promise Metadata.digests (fun o ->
       let c = Option.value current
                 ~default:Metadata.Cache_metadata.empty in
-      KB.return @@
-        Metadata.Cache_metadata.set c
-          options.target Data.Cache.Digest.(to_string digest)
+      KB.return @@ (Some
+        (Metadata.Cache_metadata.set c
+          options.target Data.Cache.Digest.(to_string digest)))
     )
   
 let create_and_process
