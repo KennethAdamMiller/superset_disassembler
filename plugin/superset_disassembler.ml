@@ -81,7 +81,7 @@ let superset_disasm options =
       end) in
   let t = Sys.time() in
   let superset = With_options.with_options () in
-  KB.promise Metrics.Cache.time (fun o -> KB.return (Sys.time() -. t));
+  KB.promise Metrics.Cache.time (fun o -> KB.return (Some (int_of_float (Sys.time() -. t))));
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
   KB.promise Theory.Label.is_valid
@@ -312,11 +312,12 @@ let superset_digest options =
 let save_metadata digest options =
   Toplevel.set @@ Knowledge.load "superset-cache-metadata";
   let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
-  let current = Toplevel.eval digests guide in
-  KB.promise digests (fun o ->
-      let c = Option.value current ~default:Cache_metadata.empty in
+  let current = Toplevel.eval Metadata.digests guide in
+  KB.promise Metadata.digests (fun o ->
+      let c = Option.value current
+                ~default:Metadata.Cache_metadata.empty in
       KB.return @@
-        Cache_metadata.add c
+        Metadata.Cache_metadata.add c
           options.target Data.Cache.Digest.(to_string digest)
     )
   
