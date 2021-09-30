@@ -54,13 +54,16 @@ let with_digests f =
   f ds
   
 let cache_corpus_metrics ds =
-  Cache_metadata.fold ds ~init:[] ~f:(fun ~key ~data l ->
-      let digest = Data.Cache.Digest.of_string data in
-      let cache = knowledge_cache () in
-      match Data.Cache.load cache digest with
-      | Some state ->
-         Toplevel.set state;
-         let r = Metrics.get_summary () in
-         r :: l
-      | None -> l
-    )
+  match ds with
+  | Some ds -> 
+     Cache_metadata.fold ds ~init:[] ~f:(fun ~key ~data l ->
+         let digest = Data.Cache.Digest.of_string data in
+         let cache = knowledge_cache () in
+         match Data.Cache.load cache digest with
+         | Some state ->
+            Toplevel.set state;
+            let r = Metrics.get_summary () in
+            r :: l
+         | None -> l
+       )
+  | None -> []
