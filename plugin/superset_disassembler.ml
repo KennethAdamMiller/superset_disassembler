@@ -582,7 +582,7 @@ let mat_of_list l =
 let make_plots summaries =
   let open Metrics in
   let summaries = List.filter_map summaries ~f:(fun s ->
-                      match s.zie, s.occ, s.occ_space, s.fns, s.fps,
+                      match s.size, s.occ, s.occ_space, s.fns, s.fps,
                             s.tps with
                       | None, _, _, _, _, _ -> None
                       | _, None, _, _, _, _ -> None
