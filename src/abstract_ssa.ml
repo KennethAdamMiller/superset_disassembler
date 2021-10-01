@@ -41,8 +41,6 @@ let stmt_def_freevars =
     inherit [Var.Set.t] Stmt.visitor
     method enter_move def use accu =
       Set.add accu def
-    method enter_let v ~exp ~body accu =
-      Set.add accu v
     (*method enter_load ~mem ~addr e s accu =
       match mem with
       | Bil.Var v -> Set.add accu v
@@ -81,9 +79,7 @@ let transitions superset =
       | Some bil ->
          Addr.Map.add_exn fs addr {
              defs = stmt_def_freevars#run bil Var.Set.empty;
-             uses = List.fold bil ~init:Var.Set.empty
-                      ~f:(fun fvars stmt ->
-                        Set.union fvars (Stmt.free_vars stmt));
+             uses = Bil.free_vars bil;
            }
       | None -> fs
     ) Addr.Map.empty
