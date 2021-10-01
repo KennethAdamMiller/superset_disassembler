@@ -12,6 +12,7 @@ doc: setup.data build
 test: setup.data build
 	$(SETUP) -test $(TESTFLAGS)
 
+#TODO edit the makefile to build/run docker
 all:
 	$(SETUP) -all $(ALLFLAGS)
 

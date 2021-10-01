@@ -90,11 +90,17 @@ let (++) = Set.union and (--) = Set.diff
 
 let compute_liveness superset =
   let _exit = Addr.of_int ~width:1 0 in
+  let entries = Superset.entries_of_isg superset in
+  let superset = Hash_set.fold ~init:superset entries
+    ~f:(fun s e -> Superset.ISG.link s _exit e) in
   let start = Addr.of_int ~width:1 1 in
+  let frond = Superset.frond_of_isg superset in
+  let superset = Hash_set.fold frond ~init:superset 
+                   ~f:(fun s e -> Superset.ISG.link s start e) in
   let init = Solution.create Addr.Map.empty Var.Set.empty in
   let tran = transitions superset in
   let module G = Superset_impl.G in
-  Superset.ISG.fixpoint superset ~init ~start ~rev:true
+  let r = Superset.ISG.fixpoint superset ~init ~start ~rev:true
     ~merge:Var.Set.union
     ~equal:Var.Set.equal
     ~f:(fun n vars ->
@@ -104,7 +110,10 @@ let compute_liveness superset =
           | Some {defs; uses} ->
              vars -- defs ++ uses
           | None -> vars
-    )
+    ) in
+  let superset = Superset.ISG.remove superset _exit in
+  let _ = Superset.ISG.remove superset start in
+  r
 
 let def_mem_ssa bil = 
   stmt_def_mem#run bil Exp.Set.empty
