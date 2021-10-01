@@ -1,5 +1,6 @@
 #this should run docker or docker should call this?
 make clean && make && ./test_superset_disasm.native
+
 ./functional_tests/test_cache.sh > cache_tests.txt
 cat cache_tests.txt
 

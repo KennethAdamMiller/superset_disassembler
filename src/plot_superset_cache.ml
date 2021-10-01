@@ -27,6 +27,8 @@ let mat_of_list l =
    number of binaries and occ rate
  *)
 let make_plots summaries =
+  let s = sprintf "Have %d summmaries" List.(length summaries) in
+  print_endline s;
   let open Metrics in
   let summaries =
     List.filter_map summaries ~f:(fun s ->

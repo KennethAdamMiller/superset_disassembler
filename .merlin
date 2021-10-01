@@ -7,6 +7,8 @@ PKG monads
 PKG landmarks
 PKG bap-future
 PKG bap-knowledge
+PKG owl
+PKG owl-plplot
 
 S src/
 

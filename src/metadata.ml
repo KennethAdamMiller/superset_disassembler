@@ -71,7 +71,9 @@ let make_digest inputs =
   fun ~namespace ->
     let d = Data.Cache.Digest.create ~namespace in
     Data.Cache.Digest.add d "%s" inputs
-    
+
+let guide = KB.Symbol.intern "cache_map" Theory.Program.cls
+
 (* Retrieve the metadata of all digests *)
 let with_digests f =
   let metadata_digest =
@@ -79,7 +81,6 @@ let with_digests f =
   let state = Toplevel.current () in
   let _ = load_knowledge metadata_digest (Some "superset-cache-metadata") in
   let open KB.Syntax in
-  let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
   let ds = Toplevel.eval digests guide in
   Toplevel.set state;
   f ds

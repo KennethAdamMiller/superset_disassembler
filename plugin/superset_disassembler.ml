@@ -316,9 +316,8 @@ let save_metadata  options =
     (make_digest [ "superset-cache-metadata" ]) in
   let state = Toplevel.current () in
   let _ = load_knowledge metadata_digest (Some "superset-cache-metadata") in
-  let digest = metadata_digest ~namespace:"knowledge" in
-  let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
-  let metadata = Toplevel.eval Metadata.digests guide in
+  let digest = superset_digest options ~namespace:"knowledge"  in
+  let metadata = Toplevel.eval Metadata.digests Metadata.guide in
   KB.promise Metadata.digests (fun o ->
       let c = Option.value metadata
                 ~default:Metadata.Cache_metadata.empty in
