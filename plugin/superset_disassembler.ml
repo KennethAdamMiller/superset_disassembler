@@ -311,10 +311,12 @@ let superset_digest options =
         options.disassembler;
       ]
 
-let save_metadata digest options =
-  let digest = digest ~namespace:"knowledge" in
+let save_metadata  options =
+  let metadata_digest =
+    (make_digest [ "superset-cache-metadata" ]) in
   let state = Toplevel.current () in
-  let _ = load_knowledge digest (Some "superset-cache-metadata") in
+  let _ = load_knowledge metadata_digest (Some "superset-cache-metadata") in
+  let digest = metadata_digest ~namespace:"knowledge" in
   let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
   let metadata = Toplevel.eval Metadata.digests guide in
   KB.promise Metadata.digests (fun o ->
@@ -324,14 +326,12 @@ let save_metadata digest options =
         (Metadata.Cache_metadata.set c
           options.target Data.Cache.Digest.(to_string digest)))
     );
-  store_knowledge_in_cache digest;
+  store_knowledge_in_cache metadata_digest;
   Toplevel.set state
   
 let create_and_process
       input outputs loader target update kb options =
-  let metadata_digest =
-    (make_digest [ "superset-cache-metadata" ]) in
-  let () = save_metadata metadata_digest options in
+  let () = save_metadata options in
   let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
   let () = if not had_knowledge then
