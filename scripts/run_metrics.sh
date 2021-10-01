@@ -45,4 +45,5 @@ run ${jobs} x86-binaries/elf/binutils
 
 #find ~/workspace/x86_64-binaries/speccpu2000 -name "*.exe" -type f -exec zsh -c 'echo $(basename {}) ; echo $(basename {}) >> metrics.txt ; ~/workspace/superset_disassembler/superset_disasm.native --ground_truth {} --target "/Users/kennethadammiller/workspace/x86-binaries/stripped_speccpu2000/$(basename {})" >> metrics.txt' \;
 
-./scripts/collect_results.sh
+./scripts/plot_cache.sh
+./scripts/display_cache.sh

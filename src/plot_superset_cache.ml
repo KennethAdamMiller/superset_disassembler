@@ -26,7 +26,6 @@ let mat_of_list l =
    least value required for safe convergence
    number of binaries and occ rate
  *)
-
 let make_plots summaries =
   let open Metrics in
   let summaries =
@@ -77,7 +76,7 @@ let make_plots summaries =
   Plot.output occr_numbins
   
 
-(* TODO plot cache, show_cache, show_binary *)
+(* TODO plot cache, show_cache *)
 let () = 
   let summaries =
     Metadata.with_digests Metadata.cache_corpus_metrics in

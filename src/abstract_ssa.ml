@@ -40,15 +40,17 @@ let stmt_def_freevars =
   object(self)
     inherit [Var.Set.t] Stmt.visitor
     method enter_move def use accu =
-        Set.add accu def
-    method enter_load ~mem ~addr e s accu =
+      Set.add accu def
+    method enter_let v ~exp ~body accu =
+      Set.add accu v
+    (*method enter_load ~mem ~addr e s accu =
       match mem with
       | Bil.Var v -> Set.add accu v
       | _ -> accu
     method enter_store ~mem ~addr ~exp e s accu =
       match addr with
       | Bil.Var v -> Set.add accu v
-      | _ -> accu
+      | _ -> accu*)
   end
 
 let stmt_use_freevars =

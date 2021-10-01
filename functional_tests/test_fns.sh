@@ -22,5 +22,6 @@ time bap superset_disasm --u ${args}
 fns=$(bap superset_distribution --metrics "%1","superset-disasm-metrics:false_negatives" ${args})
 if [ 0 -eq ${fns} ]; then
     echo "Should have some false negatives";
+    echo "${fns}"
     exit -1;
 fi
