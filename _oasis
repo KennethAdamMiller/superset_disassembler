@@ -15,9 +15,7 @@ BuildDepends:
               ppx_inline_test,
               graphlib,
               landmarks,
-              bap-future,
-              owl,
-              owl-plplot
+              bap-future
 
 Library superset_disassemblers
   Path:                 src/
