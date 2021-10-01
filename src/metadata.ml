@@ -45,12 +45,43 @@ let digests =
   attr cache_metadata_t cache_persistent "cache_metadata_t"
     "Information about what other items can be looked up in the cache"
 
+let load_cache_with_digest cache digest =
+  match Data.Cache.load cache digest with
+  | None -> false
+  | Some state ->
+     Toplevel.set state;
+     true
+  
+let import_knowledge_from_cache digest =
+  let digest = digest ~namespace:"knowledge" in
+  let cache = knowledge_cache () in
+  load_cache_with_digest cache digest
+
+
+let load_knowledge digest = function
+  | None -> import_knowledge_from_cache digest
+  | Some path when not (Sys.file_exists path) ->
+    import_knowledge_from_cache digest
+  | Some path ->
+    Toplevel.set @@ Knowledge.load path;
+    true
+
+let make_digest inputs =
+  let inputs = String.concat inputs in
+  fun ~namespace ->
+    let d = Data.Cache.Digest.create ~namespace in
+    Data.Cache.Digest.add d "%s" inputs
+    
 (* Retrieve the metadata of all digests *)
 let with_digests f =
-  Toplevel.set @@ Knowledge.load "superset-cache-metadata";
+  let metadata_digest =
+    (make_digest [ "superset-cache-metadata" ]) in
+  let state = Toplevel.current () in
+  let _ = load_knowledge metadata_digest (Some "superset-cache-metadata") in
   let open KB.Syntax in
   let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
   let ds = Toplevel.eval digests guide in
+  Toplevel.set state;
   f ds
   
 let cache_corpus_metrics ds =

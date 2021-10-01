@@ -94,7 +94,7 @@ let compute_liveness superset =
   let start = Addr.of_int ~width:1 1 in
   let frond = Superset.frond_of_isg superset in
   let superset = Hash_set.fold frond ~init:superset 
-                   ~f:(fun s e -> Superset.ISG.link s start e) in
+                   ~f:(fun s e -> Superset.ISG.link s e start) in
   let init = Solution.create Addr.Map.empty Var.Set.empty in
   let tran = transitions superset in
   let module G = Superset_impl.G in

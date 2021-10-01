@@ -119,8 +119,6 @@ analyze() {
 	fi
 	printf "Finished with ${name}\n"
     done
-    cd "${workdir}"
-    ${disasm_dir}/scripts/collect_results.sh
-    cd ..
+    cd "${workdir}"/..
 }
 export -f analyze
