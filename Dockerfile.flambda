@@ -1,9 +1,11 @@
-FROM ocaml/opam2:ubuntu-18.04
+FROM owlbarn/openblas:ubuntu
+#FROM ocaml/opam2:ubuntu-18.04
+FROM ocaml/opam2:ubuntu-20.04
 ARG BAPVERSION=2.3.0
 
 RUN sudo apt-get update  \
  && opam update \
- && opam switch install 4.09.0+flambda \
+ && opam switch create 4.10.0+flambda \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
 # && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
@@ -14,9 +16,16 @@ RUN sudo apt-get update  \
  && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
  && rm -rf /home/opam/opam-repository
 
-RUN sudo apt-get update && sudo apt-get install dc time parallel liblapacke liblapacke-dev -y
-RUN opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks owl owl-plplot && eval `opam config env` && bap-byteweight update
+RUN sudo apt-get update && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections && DEBIAN_FRONTEND=noninteractive sudo apt-get install dc time parallel liblapacke liblapacke-dev keyboard-configuration m4 wget unzip aspcud libshp-dev libplplot-dev gfortran pkg-config git -y
 USER root
+WORKDIR /home/opam
+COPY --from=0 /home/opam/OpenBLAS OpenBLAS
+RUN make -C OpenBLAS/ install
+RUN ldconfig /opt/OpenBLAS/lib/
+ENV OWLPATH /home/opam/owl
+ENV OWL_DISABLE_LAPACKE_LINKING_FLAG 1
+ENV OWL_COMPILE_CFLAGS "-I/opt/OpenBLAS/include -I/home/opam/OpenBLAS/lapack-netlib/LAPACKE/include/ -L/opt/OpenBLAS/lib"
+RUN CFLAGS=${OWL_COMPILE_CFLAGS} opam install owl owl-plplot -y
 #TODO this should use git clone
 RUN mkdir -p /home/opam/workspace/superset_disasm/scripts
 WORKDIR $HOME/workspace/superset_disasm
@@ -26,4 +35,5 @@ COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace/superset_disasm/ && chown opam:opam /home/opam/workspace
 
 USER opam
+RUN opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks && eval `opam config env` && bap-byteweight update
 RUN rm setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver ; 

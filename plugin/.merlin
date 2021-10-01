@@ -8,8 +8,7 @@ PKG landmarks
 PKG bap-future
 PKG bap-knowledge
 PKG uuidm
-PKG owl
-PKG owl-plplot
+
 
 S ../src/
 

@@ -147,17 +147,20 @@ let project_state_cache () =
   let writer = Data.Write.create ~to_bigstring () in
   Data.Cache.Service.request reader writer
 
+let load_cache_with_digest cache digest =
+  match Data.Cache.load cache digest with
+  | None -> false
+  | Some state ->
+     info "importing knowledge from cache";
+     Toplevel.set state;
+     true
+  
 let import_knowledge_from_cache digest =
   let digest = digest ~namespace:"knowledge" in
   info "looking for knowledge with digest %a"
     Data.Cache.Digest.pp digest;
   let cache = knowledge_cache () in
-  match Data.Cache.load cache digest with
-  | None -> false
-  | Some state ->
-    info "importing knowledge from cache";
-    Toplevel.set state;
-    true
+  load_cache_with_digest cache digest
     
 let store_knowledge_in_cache digest =
   let digest = digest ~namespace:"knowledge" in
@@ -310,21 +313,26 @@ let superset_digest options =
 
 let save_metadata digest options =
   let digest = digest ~namespace:"knowledge" in
-  Toplevel.set @@ Knowledge.load "superset-cache-metadata";
+  let state = Toplevel.current () in
+  let _ = load_knowledge digest (Some "superset-cache-metadata") in
   let guide = KB.Symbol.intern "cache_map" Theory.Program.cls in
-  let current = Toplevel.eval Metadata.digests guide in
+  let metadata = Toplevel.eval Metadata.digests guide in
   KB.promise Metadata.digests (fun o ->
-      let c = Option.value current
+      let c = Option.value metadata
                 ~default:Metadata.Cache_metadata.empty in
       KB.return @@ (Some
         (Metadata.Cache_metadata.set c
           options.target Data.Cache.Digest.(to_string digest)))
-    )
+    );
+  store_knowledge_in_cache digest;
+  Toplevel.set state
   
 let create_and_process
       input outputs loader target update kb options =
+  let metadata_digest =
+    (make_digest [ "superset-cache-metadata" ]) in
+  let () = save_metadata metadata_digest options in
   let digest = superset_digest options in
-  let () = save_metadata digest options in
   let had_knowledge = load_knowledge digest kb in
   let () = if not had_knowledge then
              let _ = superset_disasm options in () else () in
