@@ -58,6 +58,13 @@ Executable superset_disasm
   CompiledObject: 	best
   BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, bap-future #,landmarks.ppx
 
+Executable plot_superset_cache
+  Path:			src/
+  Install:        	true
+  MainIs:	  	plot_superset_cache.ml
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, owl, owl-plplot, bap-future, bap-knowledge #,landmarks.ppx
+
 Executable test_superset_disasm
   Path:			unit_tests
   MainIs:		test_superset_disasm.ml
