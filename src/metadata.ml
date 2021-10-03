@@ -3,9 +3,6 @@ open Bap.Std
 open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
-open Monads.Std
-open Bap_plugins.Std
-open Bap_knowledge
 
 let package = "superset-cache-guide"
 
@@ -26,6 +23,7 @@ module Cache_metadata = struct
   let set = String.Map.set
   let empty = String.Map.empty
   let fold = String.Map.fold
+  let length = String.Map.length
 end
 
 let cache_metadata_t =
@@ -35,7 +33,8 @@ let cache_metadata_t =
 
 let cache_persistent =
   Knowledge.Persistent.of_binable
-    (module struct type t = Cache_metadata.t option [@@deriving bin_io] end)
+    (module struct
+       type t = Cache_metadata.t option [@@deriving bin_io] end)
 
 let digests =
   let attr ty persistent name desc =
@@ -57,7 +56,11 @@ let import_knowledge_from_cache digest =
   let cache = knowledge_cache () in
   load_cache_with_digest cache digest
 
-
+let store_knowledge_in_cache digest =
+  let digest = digest ~namespace:"knowledge" in
+  let cache = knowledge_cache () in
+  Toplevel.current () |>
+  Data.Cache.save cache digest
 let load_knowledge digest = function
   | None -> import_knowledge_from_cache digest
   | Some path when not (Sys.file_exists path) ->
@@ -73,14 +76,17 @@ let make_digest inputs =
     Data.Cache.Digest.add d "%s" inputs
 
 let guide = KB.Symbol.intern "cache_map" Theory.Program.cls
+let metadata_digest =
+  (make_digest [ "superset-cache-metadata" ])
 
+let save () =
+  let _ = Toplevel.eval digests guide in
+  store_knowledge_in_cache metadata_digest
 (* Retrieve the metadata of all digests *)
 let with_digests f =
-  let metadata_digest =
-    (make_digest [ "superset-cache-metadata" ]) in
   let state = Toplevel.current () in
-  let _ = load_knowledge metadata_digest (Some "superset-cache-metadata") in
-  let open KB.Syntax in
+  let b = load_knowledge metadata_digest None in
+  let d = (metadata_digest ~namespace:"knowledge") in
   let ds = Toplevel.eval digests guide in
   Toplevel.set state;
   f ds

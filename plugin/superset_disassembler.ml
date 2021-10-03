@@ -7,7 +7,6 @@ open Monads.Std
 open Cmdoptions
 open Bap_main
 open Bap_plugins.Std
-open Bap_knowledge
 
 include Self()
 module Dis = Disasm_expert.Basic
@@ -136,16 +135,6 @@ let knowledge_cache () =
   Data.Cache.Service.request
     knowledge_reader
     knowledge_writer
-
-let project_state_cache () =
-  let module State = struct
-    type t = Project.state [@@deriving bin_io]
-  end in
-  let of_bigstring = Binable.of_bigstring (module State) in
-  let to_bigstring = Binable.to_bigstring (module State) in
-  let reader = Data.Read.create ~of_bigstring () in
-  let writer = Data.Write.create ~to_bigstring () in
-  Data.Cache.Service.request reader writer
 
 let load_cache_with_digest cache digest =
   match Data.Cache.load cache digest with
@@ -301,32 +290,20 @@ let compute_digest target disasm =
 
 let superset_digest options =
   let open Cmdoptions in
-  let invariants = options.phases in
-  let analyses = options.analyses in
-  let featureset = options.featureset in
-  make_digest (*@@ List.append invariants @@
-    List.append analyses @@ List.append featureset @@*)
-      [
-        Caml.Digest.file options.target;
-        options.disassembler;
-      ]
+  compute_digest options.target options.disassembler
 
 let save_metadata  options =
-  let metadata_digest =
-    (make_digest [ "superset-cache-metadata" ]) in
-  let state = Toplevel.current () in
-  let _ = load_knowledge metadata_digest (Some "superset-cache-metadata") in
   let digest = superset_digest options ~namespace:"knowledge"  in
-  let metadata = Toplevel.eval Metadata.digests Metadata.guide in
-  KB.promise Metadata.digests (fun o ->
+  Metadata.with_digests (fun metadata ->
       let c = Option.value metadata
                 ~default:Metadata.Cache_metadata.empty in
-      KB.return @@ (Some
-        (Metadata.Cache_metadata.set c
-          options.target Data.Cache.Digest.(to_string digest)))
+      KB.promise Metadata.digests (fun o ->
+          KB.return @@ (Some
+                          (Metadata.Cache_metadata.set c
+                             options.target Data.Cache.Digest.(to_string digest)))
+        );
     );
-  store_knowledge_in_cache metadata_digest;
-  Toplevel.set state
+  Metadata.save ()
   
 let create_and_process
       input outputs loader target update kb options =
