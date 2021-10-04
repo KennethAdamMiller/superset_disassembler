@@ -98,7 +98,7 @@ let compute_liveness superset =
   let init = Solution.create Addr.Map.empty Var.Set.empty in
   let tran = transitions superset in
   let module G = Superset_impl.G in
-  let r = Superset.ISG.fixpoint superset ~init ~start ~rev:true
+  let r = Superset.ISG.fixpoint superset ~init ~start:_exit ~rev:true
     ~merge:Var.Set.union
     ~equal:Var.Set.equal
     ~f:(fun n vars ->
