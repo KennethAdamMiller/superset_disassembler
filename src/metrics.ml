@@ -172,6 +172,10 @@ let compute_metrics superset =
   let open Bap_knowledge in
   let open Bap_core_theory in
   let open KB.Syntax in
+  KB.promise Cache.size (fun label ->
+      KB.return (Some (Superset.Inspection.total_bytes superset))
+    );
+  
   KB.promise Cache.function_entrances (fun label ->
       KB.collect Cache.ground_truth_source label >>= fun bin ->
       (* list of compiler intended entrances *)
