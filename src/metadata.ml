@@ -50,18 +50,25 @@ let load_cache_with_digest cache digest =
   | Some state ->
      Toplevel.set state;
      true
-  
-let import_knowledge_from_cache digest =
-  let digest = digest ~namespace:"knowledge" in
-  let cache = knowledge_cache () in
-  load_cache_with_digest cache digest
 
 let store_knowledge_in_cache digest =
   let digest = digest ~namespace:"knowledge" in
   let cache = knowledge_cache () in
   Toplevel.current () |>
   Data.Cache.save cache digest
-let load_knowledge digest = function
+
+let import_knowledge_from_cache digest =
+  let cache = knowledge_cache () in
+  let d = Data.Cache.Digest.to_string digest in
+  let path = "/home/kennethadammiller/.cache/bap/data/" ^ d in
+  if (Sys.file_exists path) then
+    ( Toplevel.set @@ Knowledge.load path; true )
+  else
+    load_cache_with_digest cache digest
+
+let load_knowledge digest p =
+  let digest = digest ~namespace:"knowledge" in
+  match p with
   | None -> import_knowledge_from_cache digest
   | Some path when not (Sys.file_exists path) ->
     import_knowledge_from_cache digest
@@ -79,29 +86,35 @@ let guide = KB.Symbol.intern "cache_map" Theory.Program.cls
 let metadata_digest =
   (make_digest [ "superset-cache-metadata" ])
 
+(* Either save isn't working or load isn't working *)
 let save () =
   let _ = Toplevel.eval digests guide in
   store_knowledge_in_cache metadata_digest
+          
 (* Retrieve the metadata of all digests *)
 let with_digests f =
   let state = Toplevel.current () in
-  let b = load_knowledge metadata_digest None in
-  let d = (metadata_digest ~namespace:"knowledge") in
+  let d = Data.Cache.Digest.to_string
+            (metadata_digest ~namespace:"knowledge") in
+  let s = "/home/kennethadammiller/.cache/bap/data/" ^ d in
+  let b = load_knowledge metadata_digest (Some s) in
+  print_endline @@
+    sprintf "metadata_digest %s, had_knowledge %b"
+      d b;
   let ds = Toplevel.eval digests guide in
   Toplevel.set state;
   f ds
   
 let cache_corpus_metrics ds =
   match ds with
-  | Some ds -> 
+  | Some ds ->
+     print_endline @@
+       sprintf "got %d cached metadatas"
+         (Cache_metadata.length ds);
      Cache_metadata.fold ds ~init:[] ~f:(fun ~key ~data l ->
          let digest = Data.Cache.Digest.of_string data in
-         let cache = knowledge_cache () in
-         match Data.Cache.load cache digest with
-         | Some state ->
-            Toplevel.set state;
-            let r = Metrics.get_summary () in
-            r :: l
-         | None -> l
+         print_endline @@ sprintf "loading %s" data;
+         if import_knowledge_from_cache digest then
+           Metrics.get_summary () :: l else l
        )
   | None -> []
