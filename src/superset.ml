@@ -130,15 +130,15 @@ module Core = struct
     run (disasm mem)
 
   let run_all dis mem =
-    let rec disasm accu cur_mem = 
+    let rec run_disasm accu cur_mem = 
       let elem = match Dis.insn_of_mem dis cur_mem with
         | Ok (m, insn, _) -> (m, insn)
         | Error _ -> (cur_mem, None) in
       match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
-      | Ok next -> disasm (elem::accu) next
+      | Ok next -> run_disasm (elem::accu) next
       | Error _ -> accu in
-    (disasm [] mem)
-    
+    run_disasm [] mem
+      
   (** Fold over the memory at every byte offset with function f *)
   let run dis ~accu ~f mem =
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
@@ -149,7 +149,7 @@ module Core = struct
       ~f:(fun d ->
         let all = List.rev @@ run_all d mem in
         Ok (List.fold ~init:accu all ~f:(fun accu x ->
-            f accu x
+            f x accu 
           ))
       )
 
