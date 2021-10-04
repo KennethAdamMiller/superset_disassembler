@@ -94,12 +94,7 @@ let save () =
 (* Retrieve the metadata of all digests *)
 let with_digests f =
   let state = Toplevel.current () in
-  let d = Data.Cache.Digest.to_string
-            (metadata_digest ~namespace:"knowledge") in
-  let b = load_knowledge metadata_digest None in
-  print_endline @@
-    sprintf "metadata_digest %s, had_knowledge %b"
-      d b;
+  let _ = load_knowledge metadata_digest None in
   let ds = Toplevel.eval digests guide in
   Toplevel.set state;
   f ds
@@ -107,12 +102,8 @@ let with_digests f =
 let cache_corpus_metrics ds =
   match ds with
   | Some ds ->
-     print_endline @@
-       sprintf "got %d cached metadatas"
-         (Cache_metadata.length ds);
      Cache_metadata.fold ds ~init:[] ~f:(fun ~key ~data l ->
          let digest = Data.Cache.Digest.of_string data in
-         print_endline @@ sprintf "loading %s" data;
          if import_knowledge_from_cache digest then
            Metrics.get_summary () :: l else l
        )
