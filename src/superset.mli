@@ -89,8 +89,7 @@ module Core : sig
   (** This function is the fundamental superset disassembly, and
       disassembles at the addresses given by the supplied sequence. *)
   val disasm :
-    ?backend:string ->
-    addrs:addr seq -> accu:'a -> 
+    ?backend:string -> accu:'a -> 
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'a -> 'a) ->
     Arch.t -> mem -> 'a Or_error.t
 
@@ -121,7 +120,6 @@ module Core : sig
       it loads the memory images into the superset. *)
   val update_with_mem :
     ?backend:string ->
-    ?addrs:addr seq ->
     ?f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> t -> t) ->
     t -> mem -> t
 

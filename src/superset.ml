@@ -116,55 +116,33 @@ module Core = struct
         let next_addr = Addr.succ cur_addr in
         gen_next_addr next_addr
     in run (gen_next_addr Addr.(succ addr))
-    
-  (** Builds a sequence disassembly sequence at every byte offset of
-  the memory mem. *)
+
   let run_seq dis mem =
-    let start_addr = Memory.min_addr mem in
-    let len = Memory.length mem in
-    let addrs = seq_of_addr_range start_addr len in
-    Seq.filter_map addrs ~f:(fun addr ->
-        let m = Memory.view ~from:addr mem in
-        match m with
-        | Error _ -> None
-        | Ok m -> (
-            match Dis.insn_of_mem dis m with
-            | Ok (m, insn, _) -> Some (m, insn)
-            | Error _ -> Some (m, None)
-          )
-      )
+    let open Seq.Generator in 
+    let rec disasm cur_mem = 
+      let elem = match Dis.insn_of_mem dis cur_mem with
+        | Ok (m, insn, _) -> (m, insn)
+        | Error _ -> (cur_mem, None) in
+      yield elem >>= fun () ->
+      match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
+      | Ok next -> disasm next
+      | Error _ -> return () in
+    run (disasm mem)
 
   (** Fold over the memory at every byte offset with function f *)
   let run dis ~accu ~f mem =
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
   (** This builds the disasm type, and runs it on the memory. *)
-  let disasm ?(backend="llvm") ~addrs ~accu ~f arch memry =
-    print_endline "Superset.Core.disasm";
-    Or_error.map 
-      (Dis.with_disasm ~backend (Arch.to_string arch)
-        ~f:(fun d ->
-          let rec next state (addrs,accu) =
-            match Seq.next addrs with
-            | None -> Dis.stop state (addrs,accu)
-            | Some(addr,addrs) ->
-               match Memory.view ~from:addr memry with
-               | Error _ -> next state (addrs,accu)
-               | Ok jtgt -> Dis.jump state jtgt (addrs,accu) in
-          let invalid state m (addrs,accu) =
-            let accu = f (m, None) accu in
-            next state (addrs,accu) in
-          let hit state m insn (addrs,accu) =
-            let accu = f (m, (Some insn)) accu in 
-            next state (addrs,accu) in
-          Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
-               ~hit d ~init:(addrs,accu) ~return:ident memry)
-        )) ~f:(fun (_,accu) -> accu)
+  let disasm ?(backend="llvm") ~accu ~f arch mem =
+    Dis.with_disasm ~backend (Arch.to_string arch)
+      ~f:(fun d -> Ok(run d ~accu ~f mem))
 
   let disasm_all ?(backend="llvm") ~accu ~f arch memry =
-    let addrs = seq_of_addr_range
-                  (Memory.min_addr memry) (Memory.length memry) in
-    disasm ~backend ~addrs ~accu ~f arch memry 
+    (*let open KB.Syntax in
+    Disasm.Driver.scan memry Disasm.Driver.init >>= fun s ->
+    Seq.fold ~f ~init:accu Disasm.(insns s)*)
+    disasm ~backend ~accu ~f arch memry
 
   let lift_at superset addr =
     match Addr.Table.find superset.lifted addr with
@@ -191,15 +169,12 @@ module Core = struct
     lift_at superset addr
        
   (** Perform superset disassembly on mem and add the results. *)
-  let update_with_mem ?backend ?addrs ?f superset mem =
+  let update_with_mem ?backend ?f superset mem =
     let f = Option.value f ~default:(fun (m, i) a -> a) in
     let f (mem, insn) superset =
       let superset = add superset mem insn in
       f (mem, insn) superset in
-    let default = seq_of_addr_range
-                    (Memory.min_addr mem) (Memory.length mem) in
-    let addrs = Option.value addrs ~default  in
-    disasm ?backend ~accu:superset ~f ~addrs superset.arch mem |> ok_exn
+    disasm ?backend ~accu:superset ~f superset.arch mem |> ok_exn
 
   let is_unbalanced superset =
     Map.length superset.insn_map <> OG.nb_vertex superset.insn_risg
@@ -666,12 +641,11 @@ let import backend bin graph =
   let segments =   Image.memory img in
   let main_entry = Image.entry_point img in  
   let insn_map  = Addr.Map.empty in
-  let addrs = Seq.of_list (OG.fold_vertex List.cons insn_risg []) in
   let superset  =
     of_components ~main_entry ~insn_risg ~insn_map ~segments arch in
   with_img ~accu:superset img
     ~f:(fun ~accu mem -> 
-        Core.update_with_mem ~backend ~addrs accu mem
+        Core.update_with_mem ~backend accu mem
       )
 
 
