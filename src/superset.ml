@@ -140,6 +140,7 @@ module Core = struct
 
   (** This builds the disasm type, and runs it on the memory. *)
   let disasm ?(backend="llvm") ~addrs ~accu ~f arch memry =
+    print_endline "Superset.Core.disasm";
     Or_error.map 
       (Dis.with_disasm ~backend (Arch.to_string arch)
         ~f:(fun d ->
