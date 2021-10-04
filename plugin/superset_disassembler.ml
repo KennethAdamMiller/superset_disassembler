@@ -319,6 +319,7 @@ let create_and_process
    | None -> ());
   let ro = Metrics.Cache.reduced_occlusion in
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
+  let _ = Toplevel.eval Metrics.Cache.size Metrics.Cache.sym_label in
   save_knowledge ~had_knowledge ~update digest kb
   
 let rounds =
