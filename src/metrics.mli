@@ -54,4 +54,7 @@ type t = {
     tps       : int option;
   }
 
+val t_of_sexp : Sexp.t -> t
+val sexp_of_t : t -> Sexp.t
+
 val get_summary : unit -> t

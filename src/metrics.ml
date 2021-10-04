@@ -299,7 +299,7 @@ type t = {
     fns       : int option;
     fps       : int option;
     tps       : int option;
-  }
+  } [@@deriving sexp]
 
 let get_summary () = {
     size = Toplevel.eval Cache.size Cache.sym_label;
