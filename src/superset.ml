@@ -129,6 +129,16 @@ module Core = struct
       | Error _ -> return () in
     run (disasm mem)
 
+  let run_all dis mem =
+    let rec disasm accu cur_mem = 
+      let elem = match Dis.insn_of_mem dis cur_mem with
+        | Ok (m, insn, _) -> (m, insn)
+        | Error _ -> (cur_mem, None) in
+      match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
+      | Ok next -> disasm (elem::accu) next
+      | Error _ -> accu in
+    (disasm [] mem)
+    
   (** Fold over the memory at every byte offset with function f *)
   let run dis ~accu ~f mem =
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
@@ -136,7 +146,12 @@ module Core = struct
   (** This builds the disasm type, and runs it on the memory. *)
   let disasm ?(backend="llvm") ~accu ~f arch mem =
     Dis.with_disasm ~backend (Arch.to_string arch)
-      ~f:(fun d -> Ok(run d ~accu ~f mem))
+      ~f:(fun d ->
+        let all = List.rev @@ run_all d mem in
+        Ok (List.fold ~init:accu all ~f:(fun accu x ->
+            f accu x
+          ))
+      )
 
   let disasm_all ?(backend="llvm") ~accu ~f arch memry =
     (*let open KB.Syntax in
@@ -162,8 +177,8 @@ module Core = struct
         Some (bil)
       )
       | None -> None
-       )
-    
+    )
+            
   let lift_insn superset (mem,insn) =
     let addr = Memory.(min_addr mem) in
     lift_at superset addr
