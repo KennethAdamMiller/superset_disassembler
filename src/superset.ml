@@ -116,48 +116,49 @@ module Core = struct
         let next_addr = Addr.succ cur_addr in
         gen_next_addr next_addr
     in run (gen_next_addr Addr.(succ addr))
-
+    
+  (** Builds a sequence disassembly sequence at every byte offset of
+  the memory mem. *)
   let run_seq dis mem =
-    let open Seq.Generator in 
-    let rec disasm cur_mem = 
-      let elem = match Dis.insn_of_mem dis cur_mem with
-        | Ok (m, insn, _) -> (m, insn)
-        | Error _ -> (cur_mem, None) in
-      yield elem >>= fun () ->
-      match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
-      | Ok next -> disasm next
-      | Error _ -> return () in
-    run (disasm mem)
+    let start_addr = Memory.min_addr mem in
+    let len = Memory.length mem in
+    let addrs = seq_of_addr_range start_addr len in
+    Seq.filter_map addrs ~f:(fun addr ->
+        let m = Memory.view ~from:addr mem in
+        match m with
+        | Error _ -> None
+        | Ok m -> (
+            match Dis.insn_of_mem dis m with
+            | Ok (m, insn, _) -> Some (m, insn)
+            | Error _ -> Some (m, None)
+          )
+      )
 
-  let run_all dis mem =
-    let rec run_disasm accu cur_mem = 
-      let elem = match Dis.insn_of_mem dis cur_mem with
-        | Ok (m, insn, _) -> (m, insn)
-        | Error _ -> (cur_mem, None) in
-      match next_chunk mem ~addr:(Memory.min_addr cur_mem) with
-      | Ok next -> run_disasm (elem::accu) next
-      | Error _ -> accu in
-    run_disasm [] mem
-      
   (** Fold over the memory at every byte offset with function f *)
   let run dis ~accu ~f mem =
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
   (** This builds the disasm type, and runs it on the memory. *)
-  let disasm ?(backend="llvm") ~accu ~f arch mem =
-    Dis.with_disasm ~backend (Arch.to_string arch)
-      ~f:(fun d ->
-        let all = List.rev @@ run_all d mem in
-        Ok (List.fold ~init:accu all ~f:(fun accu x ->
-            f x accu 
-          ))
-      )
+  let disasm ?(backend="llvm") ~accu ~f arch memry =
+    print_endline "Superset.Core.disasm";
+      (Dis.with_disasm ~backend (Arch.to_string arch)
+        ~f:(fun d ->
+          let rec next state accu addr =
+            match next_chunk memry ~addr with
+            | Error(_) -> Dis.stop state accu
+            | Ok(jtgt) -> Dis.jump state jtgt accu in
+          let invalid state m accu =
+            let accu = f (m, None) accu in
+            next state accu Memory.(min_addr m) in
+          let hit state m insn accu =
+            let accu = f (m, (Some insn)) accu in 
+            next state accu Memory.(min_addr m) in
+          Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
+               ~hit d ~init:accu ~return:ident memry)
+        ))
 
   let disasm_all ?(backend="llvm") ~accu ~f arch memry =
-    (*let open KB.Syntax in
-    Disasm.Driver.scan memry Disasm.Driver.init >>= fun s ->
-    Seq.fold ~f ~init:accu Disasm.(insns s)*)
-    disasm ~backend ~accu ~f arch memry
+    disasm ~backend ~accu ~f arch memry 
 
   let lift_at superset addr =
     match Addr.Table.find superset.lifted addr with
