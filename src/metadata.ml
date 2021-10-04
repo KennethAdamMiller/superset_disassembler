@@ -59,11 +59,11 @@ let store_knowledge_in_cache digest =
 
 let import_knowledge_from_cache digest =
   let cache = knowledge_cache () in
-  let d = Data.Cache.Digest.to_string digest in
+  (*let d = Data.Cache.Digest.to_string digest in
   let path = "/home/kennethadammiller/.cache/bap/data/" ^ d in
-  if (Sys.file_exists path) then
-    ( Toplevel.set @@ Knowledge.load path; true )
-  else
+  if (Sys.file_exists path) then (
+    Toplevel.set @@ Knowledge.load path; true
+  ) else*)
     load_cache_with_digest cache digest
 
 let load_knowledge digest p =
@@ -96,8 +96,7 @@ let with_digests f =
   let state = Toplevel.current () in
   let d = Data.Cache.Digest.to_string
             (metadata_digest ~namespace:"knowledge") in
-  let s = "/home/kennethadammiller/.cache/bap/data/" ^ d in
-  let b = load_knowledge metadata_digest (Some s) in
+  let b = load_knowledge metadata_digest None in
   print_endline @@
     sprintf "metadata_digest %s, had_knowledge %b"
       d b;

@@ -4,12 +4,16 @@ open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
-open Cmdoptions
-open Bap_main
-open Bap_plugins.Std
-open Bap_knowledge
 open Owl_plplot
 
+   
+let () = match Bap_main.init () with
+  | Ok () -> ()
+  | Error err -> 
+     let open Bap_main in
+     Bap_main.Extension.Error.pp Format.std_formatter err;
+     exit 1
+   
 let mat_of_list l =
   let num = List.length l in
   let d = Owl_dense_matrix.D.create num 1 0.0 in
