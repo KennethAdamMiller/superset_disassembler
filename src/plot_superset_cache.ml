@@ -18,7 +18,7 @@ let mat_of_list l =
   let num = List.length l in
   let d = Owl_dense_matrix.D.create num 1 0.0 in
   List.iteri l ~f:(fun idx e ->
-      Owl_dense_matrix.D.set d idx 1 (float_of_int e)
+      Owl_dense_matrix.D.set d idx 0 (float_of_int e)
     );
   d
   
