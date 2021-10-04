@@ -51,12 +51,11 @@ let make_plots summaries =
       ) in
   let s = sprintf "Have %d summmaries" List.(length summaries) in
   print_endline s;
-  let sz_occ = Plot.create "size_and_occlusion.png" in
-  let occ_occspace = Plot.create "occlusion_and_occspace.png" in
-  let occcnt_occfuncs  = Plot.create "occcnt_occfuncs.png" in
-  let size_time = Plot.create "size_time.png" in
-  let safe_conv = Plot.create "safe_conv.png" in
-  let occr_numbins = Plot.create "occr_numbins.png" in
+  let make_plot name x y =
+    let h = Plot.create name in
+    Plot.scatter ~h (mat_of_list x) (mat_of_list y);
+    Plot.output h;
+  in
   let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
     List.fold summaries ~init:([],[],[],[],[],[],[],[],[])
       ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps,time) s ->
@@ -65,21 +64,17 @@ let make_plots summaries =
         _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps,
         _time :: time
       ) in
-  Plot.scatter ~h:sz_occ (mat_of_list sizes) (mat_of_list occ);
-  Plot.output sz_occ;
-  Plot.scatter ~h:occ_occspace (mat_of_list occ)
-    (mat_of_list occ_space);
-  Plot.output occ_occspace;
-  match List.map2 fe clean (fun x y -> x - y) with
-  | List.Or_unequal_lengths.Ok occfuncs ->
-     Plot.scatter ~h:occcnt_occfuncs (mat_of_list occ)
-       (mat_of_list occfuncs);
-     Plot.output occcnt_occfuncs;
-  | _ -> ();
-  Plot.scatter ~h:size_time (mat_of_list sizes) (mat_of_list time);
-  Plot.output size_time;
-  Plot.scatter ~h:occr_numbins (mat_of_list sizes) (mat_of_list time);
-  Plot.output occr_numbins
+  make_plot "size_and_occlusion.png" sizes occ;
+  make_plot "occlusion_and_occspace.png" occ occ_space;
+  let () =
+    match List.map2 fe clean (fun x y -> x - y) with
+    | List.Or_unequal_lengths.Ok occfuncs ->
+       make_plot "occcnt_occfuncs.png" occ occfuncs
+    | _ -> () in
+  make_plot "size_time.png" sizes time;
+  (* TODO *)
+  (*let safe_conv = Plot.create "safe_conv.png" in*) ()
+  (*make_plot "occr_numbins.png" *)
   
 
 (* TODO plot cache, show_cache *)
