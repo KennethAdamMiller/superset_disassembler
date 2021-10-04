@@ -79,7 +79,8 @@ let superset_disasm options =
       end) in
   let t = Sys.time() in
   let superset = With_options.with_options () in
-  KB.promise Metrics.Cache.time (fun o -> KB.return (Some (int_of_float (Sys.time() -. t))));
+  KB.promise Metrics.Cache.time (fun o ->
+      KB.return (Some (int_of_float (Sys.time() -. t))));
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
   KB.promise Theory.Label.is_valid

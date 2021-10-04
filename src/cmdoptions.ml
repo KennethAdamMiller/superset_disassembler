@@ -670,6 +670,7 @@ module With_options(Conf : Provider)  = struct
 
   let with_options () =
     let superset = checkpoint options.target phases in
+    print_endline "disassembly finished";
     let trim = Trim.Default.trim in
     let before = Superset.Inspection.count superset in
     let (trim,setops) = build_setops trim options.setops in
