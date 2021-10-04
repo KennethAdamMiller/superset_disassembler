@@ -49,11 +49,22 @@ let make_plots summaries =
           Some fns, Some fps, Some tps, Some time ->
            Some (size, occ, occ_space, fe, clean, fns, fps, tps, time)
       ) in
-  let s = sprintf "Have %d summmaries" List.(length summaries) in
-  print_endline s;
-  let make_plot name x y =
-    let h = Plot.create name in
-    Plot.scatter ~h (mat_of_list x) (mat_of_list y);
+  let make_plot xlabel ylabel fname x y =
+    let m = List.length x in
+    let n = List.length y in
+    let h = Plot.create ~m ~n fname in
+    Plot.set_background_color h 255 255 255;
+    (*Plot.subplot h 0 0;*)
+    Plot.set_xlabel h xlabel;
+    Plot.set_ylabel h ylabel;
+    let title = xlabel ^ " and " ^ ylabel in
+    Plot.set_title h title;
+    Plot.set_font_size h 6.0;
+    let x,y = 
+      if (List.length x = 1) || (List.length y = 1) then
+        1 :: x, 1 :: y else x, y in
+    Plot.scatter ~h ~spec:[ RGB (255,0,50); MarkerSize 10. ]
+      (mat_of_list x) (mat_of_list y);
     Plot.output h;
   in
   let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
@@ -64,14 +75,16 @@ let make_plots summaries =
         _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps,
         _time :: time
       ) in
-  make_plot "size_and_occlusion.png" sizes occ;
-  make_plot "occlusion_and_occspace.png" occ occ_space;
+  make_plot "Size" "Occlusion" "size_and_occlusion.png" sizes occ;
+  make_plot "Actual Occlusion" "Possible Occlusion"
+    "occlusion_and_occspace.png" occ occ_space;
   let () =
     match List.map2 fe clean (fun x y -> x - y) with
     | List.Or_unequal_lengths.Ok occfuncs ->
-       make_plot "occcnt_occfuncs.png" occ occfuncs
+       make_plot "Total Occlusion" "# Unclean functions"
+         "occcnt_occfuncs.png" occ occfuncs
     | _ -> () in
-  make_plot "size_time.png" sizes time;
+  make_plot "Size" "Time" "size_time.png" sizes time;
   (* TODO *)
   (*let safe_conv = Plot.create "safe_conv.png" in*) ()
   (*make_plot "occr_numbins.png" *)
