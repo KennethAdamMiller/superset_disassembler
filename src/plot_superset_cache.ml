@@ -31,8 +31,6 @@ let mat_of_list l =
    number of binaries and occ rate
  *)
 let make_plots summaries =
-  let s = sprintf "Have %d summmaries" List.(length summaries) in
-  print_endline s;
   let open Metrics in
   let summaries =
     List.filter_map summaries ~f:(fun s ->
@@ -51,6 +49,8 @@ let make_plots summaries =
           Some fns, Some fps, Some tps, Some time ->
            Some (size, occ, occ_space, fe, clean, fns, fps, tps, time)
       ) in
+  let s = sprintf "Have %d summmaries" List.(length summaries) in
+  print_endline s;
   let sz_occ = Plot.create "size_and_occlusion.png" in
   let occ_occspace = Plot.create "occlusion_and_occspace.png" in
   let occcnt_occfuncs  = Plot.create "occcnt_occfuncs.png" in
