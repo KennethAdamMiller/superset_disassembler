@@ -640,8 +640,12 @@ let superset_of_img ?f ~backend img =
   with_img ~accu:superset img
     ~f:(fun ~accu mem ->
       let a = Addr.to_string @@ Memory.min_addr mem in
-      print_endline @@ sprintf "superset_of_img with mem at %s" a;
-      Core.update_with_mem ~backend accu mem ~f
+      print_endline @@ sprintf "superset_of_img starting with mem at %s" a;
+      let b = Core.update_with_mem ~backend accu mem ~f in
+      let a = Addr.to_string @@ Memory.min_addr mem in
+      print_endline
+      @@ sprintf "superset_of_img finished with mem at %s" a;
+      b
     )
 
 let superset_disasm_of_file ?(backend="llvm") ?f binary =
