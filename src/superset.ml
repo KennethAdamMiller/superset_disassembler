@@ -148,13 +148,9 @@ module Core = struct
             | Error(_) -> Dis.stop state accu
             | Ok(jtgt) -> Dis.jump state jtgt accu in
           let invalid state m accu =
-            let a = Memory.min_addr m in
-            print_endline @@ sprintf "hit at %s" Addr.(to_string a);
             let accu = f (m, None) accu in
             next state accu Memory.(min_addr m) in
           let hit state m insn accu =
-            let a = Memory.min_addr m in
-            print_endline @@ sprintf "hit at %s" Addr.(to_string a);
             let accu = f (m, (Some insn)) accu in 
             next state accu Memory.(min_addr m) in
           Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
@@ -642,9 +638,11 @@ let superset_of_img ?f ~backend img =
   let superset =
     of_components ~main_entry ?filename ~segments arch in
   with_img ~accu:superset img
-    ~f:(fun ~accu mem -> 
-        Core.update_with_mem ~backend accu mem ~f
-      )
+    ~f:(fun ~accu mem ->
+      let a = Addr.to_string @@ Memory.min_addr mem in
+      print_endline @@ sprintf "superset_of_img with mem at %s" a;
+      Core.update_with_mem ~backend accu mem ~f
+    )
 
 let superset_disasm_of_file ?(backend="llvm") ?f binary =
   let img, errs = Image.create ~backend binary |> ok_exn in
