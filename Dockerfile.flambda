@@ -5,7 +5,7 @@ ARG BAPVERSION=2.3.0
 
 RUN sudo apt-get update  \
  && opam update \
- && opam switch create 4.10.0+flambda \
+ && opam switch create 4.11.0+flambda \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
 # && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
