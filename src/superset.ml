@@ -146,6 +146,7 @@ module Core = struct
     let r = (Dis.with_disasm ~backend (Arch.to_string arch)
                ~f:(fun d ->
                  let rec next state accu addr =
+                   print_endline @@ sprintf "next at %s" Addr.(to_string addr);                   
                    match next_chunk memry ~addr with
                    | Error(_) -> Dis.stop state accu
                    | Ok(jtgt) -> Dis.jump state jtgt accu in
