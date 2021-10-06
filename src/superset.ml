@@ -140,20 +140,23 @@ module Core = struct
 
   (** This builds the disasm type, and runs it on the memory. *)
   let disasm ?(backend="llvm") ~accu ~f arch memry =
-    print_endline "Superset.Core.disasm";
+    print_endline @@ sprintf "Superset.Core.disasm from %s to %s"
+                       Addr.(to_string Memory.(min_addr memry))
+                       Addr.(to_string Memory.(max_addr memry));
     let r = (Dis.with_disasm ~backend (Arch.to_string arch)
                ~f:(fun d ->
                  let rec next state accu addr =
-                   if Addr.(addr > Memory.(max_addr memry)) then
-                     Dis.stop state accu
-                   else
-                     match next_chunk memry ~addr with
-                     | Error(_) -> Dis.stop state accu
-                     | Ok(jtgt) -> Dis.jump state jtgt accu in
+                   match next_chunk memry ~addr with
+                   | Error(_) -> Dis.stop state accu
+                   | Ok(jtgt) -> Dis.jump state jtgt accu in
                  let invalid state m accu =
+                   let a = Memory.min_addr m in
+                   print_endline @@ sprintf "invalid at %s" Addr.(to_string a);
                    let accu = f (m, None) accu in
                    next state accu Memory.(min_addr m) in
                  let hit state m insn accu =
+                   let a = Memory.min_addr m in
+                   print_endline @@ sprintf "hit at %s" Addr.(to_string a);
                    let accu = f (m, (Some insn)) accu in 
                    next state accu Memory.(min_addr m) in
                  Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
