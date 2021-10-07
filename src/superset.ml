@@ -160,7 +160,7 @@ module Core = struct
                    print_endline @@ sprintf "hit at %s" Addr.(to_string a);
                    let accu = f (m, (Some insn)) accu in 
                    next state accu Memory.(min_addr m) in
-                 Ok(Dis.run ~backlog:0 ~stop_on:[`Valid] ~invalid
+                 Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
                       ~hit d ~init:accu ~return:ident memry)
             )) in print_endline "disasm finished";
                   r
