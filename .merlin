@@ -7,8 +7,7 @@ PKG monads
 PKG landmarks
 PKG bap-future
 PKG bap-knowledge
-PKG owl
-PKG owl-plplot
+PKG matplotlib
 
 S src/
 
