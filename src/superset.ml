@@ -140,30 +140,21 @@ module Core = struct
 
   (** This builds the disasm type, and runs it on the memory. *)
   let disasm ?(backend="llvm") ~accu ~f arch memry =
-    printf "Superset.Core.disasm from %s to %s\n%!"
-                       Addr.(to_string Memory.(min_addr memry))
-                       Addr.(to_string Memory.(max_addr memry));
-    let r = (Dis.with_disasm ~backend (Arch.to_string arch)
-               ~f:(fun d ->
-                 let rec next state accu addr =
-                   printf "next at %s\n%!" Addr.(to_string addr);                   
-                   match next_chunk memry ~addr with
-                   | Error(_) -> Dis.stop state accu
-                   | Ok(jtgt) -> Dis.jump state jtgt accu in
-                 let invalid state m accu =
-                   let a = Memory.min_addr m in
-                   printf "invalid at %s\n%!" Addr.(to_string a);
-                   let accu = f (m, None) accu in
-                   next state accu Memory.(min_addr m) in
-                 let hit state m insn accu =
-                   let a = Memory.min_addr m in
-                   printf "hit at %s\n%!" Addr.(to_string a);
-                   let accu = f (m, (Some insn)) accu in 
-                   next state accu Memory.(min_addr m) in
-                 Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
-                      ~hit d ~init:accu ~return:ident memry)
-            )) in printf "disasm finished\n%!";
-                  r
+    (Dis.with_disasm ~backend (Arch.to_string arch)
+       ~f:(fun d ->
+         let rec next state accu addr =
+           match next_chunk memry ~addr with
+           | Error(_) -> Dis.stop state accu
+           | Ok(jtgt) -> Dis.jump state jtgt accu in
+         let invalid state m accu =
+           let accu = f (m, None) accu in
+           next state accu Memory.(min_addr m) in
+         let hit state m insn accu =
+           let accu = f (m, (Some insn)) accu in 
+           next state accu Memory.(min_addr m) in
+         Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
+              ~hit d ~init:accu ~return:ident memry)
+    ))
 
   let disasm_all ?(backend="llvm") ~accu ~f arch memry =
     disasm ~backend ~accu ~f arch memry 
@@ -647,14 +638,7 @@ let superset_of_img ?f ~backend img =
     of_components ~main_entry ?filename ~segments arch in
   with_img ~accu:superset img
     ~f:(fun ~accu mem ->
-      let a = Addr.to_string @@ Memory.min_addr mem in
-      print_endline @@ sprintf "superset_of_img starting with mem at %s" a;
-      let b = Core.update_with_mem ~backend accu mem ~f in
-      let a = Addr.to_string @@ Memory.min_addr mem in
-      print_endline
-      @@ sprintf "superset_of_img finished with mem at %s" a;
-      printf "superset_of_img finished with mem at %s\n%!" a;
-      b
+      Core.update_with_mem ~backend accu mem ~f
     )
 
 let superset_disasm_of_file ?(backend="llvm") ?f binary =
