@@ -39,7 +39,9 @@ let transform defmap =
     method map_exp e =
       match Map.find defmap (super#map_exp e) with
       | Some (v) -> Bil.Var v
-      | None -> super#map_exp e
+      | None ->
+         printf "stuck here!\n%!";
+         super#map_exp e
   end
 
 let is_var e =
