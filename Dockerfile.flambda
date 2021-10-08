@@ -25,6 +25,7 @@ COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace/superset_disasm/ && chown opam:opam /home/opam/workspace
 
 USER opam
-RUN sudo apt-get update && sudo apt-get install python3-pip -y && pip3 install matplotlib
-RUN opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks matplotlib && eval `opam config env` && bap-byteweight update
+#RUN sudo apt-get install gnuplot -y;
+RUN sudo apt-get update && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections && sudo apt-get install dc time parallel -y && sudo apt-get install python3-pip -y && pip3 install matplotlib
+RUN DEBIAN_FRONTEND=noninteractive opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks gnuplot && eval `opam config env` && bap-byteweight update
 RUN rm setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver ; 

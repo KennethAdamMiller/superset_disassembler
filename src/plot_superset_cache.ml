@@ -4,7 +4,6 @@ open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
-open Matplotlib
    
 let () = match Bap_main.init () with
   | Ok () -> ()
@@ -54,12 +53,15 @@ let make_plots summaries =
     let y = List.map y ~f:float_of_int in
     match List.zip x y with
     | Ok data -> 
-       let data = Array.of_list data in
-       Pyplot.xlabel xlabel;
-       Pyplot.ylabel ylabel;
-       Pyplot.grid true;
-       Pyplot.scatter ~marker:'o' data;
-       Mpl.savefig fname;
+       let title = (xlabel ^ " and " ^ ylabel) in
+       let labels = Gnuplot.Labels.create ~x:xlabel ~y:ylabel () in
+       let color = Gnuplot.Color.(`Blue) in
+       let plot = Gnuplot.Series.points_xy ~title ~color data in
+       let gp = Gnuplot.create () in
+       let output = (Gnuplot.Output.create (`Png (title ^ ".png"))) in
+       Gnuplot.set ~use_grid:true gp;
+       Gnuplot.plot ~output ~labels gp plot;
+       Gnuplot.close gp;
        ()
     | _ -> () in
   make_plot "Size" "Occlusion" "size_and_occlusion.png" sizes occ;

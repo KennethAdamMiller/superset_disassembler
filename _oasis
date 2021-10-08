@@ -15,7 +15,8 @@ BuildDepends:
               ppx_inline_test,
               graphlib,
               landmarks,
-              bap-future
+              bap-future,
+              gnuplot
 
 Library superset_disassemblers
   Path:                 src/
@@ -61,7 +62,7 @@ Executable plot_superset_cache
   Install:        	true
   MainIs:	  	plot_superset_cache.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, matplotlib, bap-future, bap-knowledge #,landmarks.ppx
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, gnuplot, bap-future, bap-knowledge #,landmarks.ppx
 
 
 Executable test_superset_disasm
