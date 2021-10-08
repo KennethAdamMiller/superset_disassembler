@@ -1,6 +1,7 @@
 #!/bin/bash
 echo "=====$0====="
 eval $(opam config env)
+rm -f  ${HOME}/.cache/bap/data/*
 source scripts/read_cache.sh
 export features="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
