@@ -119,9 +119,9 @@ let find_non_mem_accesses superset =
     | _ -> r in
   (object(self) 
     inherit [bool] Stmt.finder
-    method! enter_load ~mem ~addr _ _ r = 
+    method enter_load ~mem ~addr _ _ r = 
       check_return_addr r addr
-    method! enter_store ~mem ~addr ~exp _ _ r =
+    method enter_store ~mem ~addr ~exp _ _ r =
       check_return_addr r addr
   end)
 

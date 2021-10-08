@@ -71,8 +71,6 @@ let man = {|
   |}
 
 let superset_disasm options =
-  let open Bap_future.Std in
-  let open Format in
   let module With_options =
     With_options(struct
         let options = options
