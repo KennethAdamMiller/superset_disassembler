@@ -650,8 +650,8 @@ module With_options(Conf : Provider)  = struct
     | None ->
        (*let _ = Project.Input.load ~target ~loader input in*)
        (* TODO use Project.Input.load and cycle through the code *)
+       let invariants = Invariants.tag_success ::invariants in
        let f = Invariants.tag ~invariants in
-       (*let invariants = ([Invariants.tag_success]) in*)
        Superset.superset_disasm_of_file ~backend bin ~f
 
   let args_to_funcs args funcs =
