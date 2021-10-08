@@ -37,11 +37,9 @@ let transform defmap =
   object(self)
     inherit Exp.mapper as super
     method map_exp e =
-      match Map.find defmap (super#map_exp e) with
+      match Map.find defmap e with
       | Some (v) -> Bil.Var v
-      | None ->
-         printf "stuck here!\n%!";
-         super#map_exp e
+      | None -> e
   end
 
 let is_var e =
