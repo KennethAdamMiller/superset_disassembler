@@ -168,19 +168,15 @@ module Cache = struct
 
 end
 
-let compute_metrics superset =
+let set_ground_truth superset =
   let open Bap_knowledge in
   let open Bap_core_theory in
   let open KB.Syntax in
-  KB.promise Cache.size (fun label ->
-      KB.return (Some (Superset.Inspection.total_bytes superset))
-    );
-  
   KB.promise Cache.function_entrances (fun label ->
       KB.collect Cache.ground_truth_source label >>= fun bin ->
       (* list of compiler intended entrances *)
       let function_addrs = ground_truth_of_unstripped_bin bin
-                            |> ok_exn in
+                           |> ok_exn in
       let function_addrs =
         Addr.Set.of_list @@ Seq.to_list function_addrs in
       KB.return (Some function_addrs)
@@ -200,6 +196,14 @@ let compute_metrics superset =
            let ground_truth = Hash_set.fold visited ~init:
                                 Addr.Set.empty ~f:Set.add in
            KB.return (Some ground_truth)
+    )
+
+let compute_metrics superset =
+  let open Bap_knowledge in
+  let open Bap_core_theory in
+  let open KB.Syntax in
+  KB.promise Cache.size (fun label ->
+      KB.return (Some (Superset.Inspection.total_bytes superset))
     );
 
   KB.promise Cache.occlusive_space (fun label ->

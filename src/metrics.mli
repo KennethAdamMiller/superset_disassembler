@@ -40,6 +40,7 @@ module Cache : sig
     
 end
 
+val set_ground_truth : Superset.t -> unit
 val compute_metrics : Superset.t -> unit
      
 type t = {
