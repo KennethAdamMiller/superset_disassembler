@@ -61,7 +61,8 @@ Executable plot_superset_cache
   Install:        	true
   MainIs:	  	plot_superset_cache.ml
   CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, owl, owl-plplot, bap-future, bap-knowledge #,landmarks.ppx
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, matplotlib, bap-future, bap-knowledge #,landmarks.ppx
+
 
 Executable test_superset_disasm
   Path:			unit_tests

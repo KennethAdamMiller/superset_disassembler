@@ -4,8 +4,7 @@ open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
-open Owl_plplot
-
+open Matplotlib
    
 let () = match Bap_main.init () with
   | Ok () -> ()
@@ -14,14 +13,7 @@ let () = match Bap_main.init () with
      Bap_main.Extension.Error.pp Format.std_formatter err;
      exit 1
    
-let mat_of_list l =
-  let num = List.length l in
-  let d = Owl_dense_matrix.D.create num 1 0.0 in
-  List.iteri l ~f:(fun idx e ->
-      Owl_dense_matrix.D.set d idx 0 (float_of_int e)
-    );
-  d
-  
+ 
 (* Plots:
    binary size to occlusive rate (occlusion by occ space)
    occlusive space to occlusion
@@ -49,24 +41,6 @@ let make_plots summaries =
           Some fns, Some fps, Some tps, Some time ->
            Some (size, occ, occ_space, fe, clean, fns, fps, tps, time)
       ) in
-  let make_plot xlabel ylabel fname x y =
-    let m = List.length x in
-    let n = List.length y in
-    let h = Plot.create ~m ~n fname in
-    Plot.set_background_color h 255 255 255;
-    (*Plot.subplot h 0 0;*)
-    Plot.set_xlabel h xlabel;
-    Plot.set_ylabel h ylabel;
-    let title = xlabel ^ " and " ^ ylabel in
-    Plot.set_title h title;
-    Plot.set_font_size h 6.0;
-    let x,y = 
-      if (List.length x = 1) || (List.length y = 1) then
-        1 :: x, 1 :: y else x, y in
-    Plot.scatter ~h ~spec:[ RGB (255,0,50); MarkerSize 10. ]
-      (mat_of_list x) (mat_of_list y);
-    Plot.output h;
-  in
   let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
     List.fold summaries ~init:([],[],[],[],[],[],[],[],[])
       ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps,time) s ->
@@ -75,6 +49,19 @@ let make_plots summaries =
         _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps,
         _time :: time
       ) in
+  let make_plot xlabel ylabel fname x y = 
+    let x  = List.map x ~f:float_of_int in
+    let y = List.map y ~f:float_of_int in
+    match List.zip x y with
+    | Ok data -> 
+       let data = Array.of_list data in
+       Pyplot.xlabel xlabel;
+       Pyplot.ylabel ylabel;
+       Pyplot.grid true;
+       Pyplot.scatter ~marker:'o' data;
+       Mpl.savefig fname;
+       ()
+    | _ -> () in
   make_plot "Size" "Occlusion" "size_and_occlusion.png" sizes occ;
   make_plot "Actual Occlusion" "Possible Occlusion"
     "occlusion_and_occspace.png" occ occ_space;
@@ -85,13 +72,11 @@ let make_plots summaries =
          "occcnt_occfuncs.png" occ occfuncs
     | _ -> () in
   make_plot "Size" "Time" "size_time.png" sizes time;
-  (* TODO *)
-  (*let safe_conv = Plot.create "safe_conv.png" in*) ()
-  (*make_plot "occr_numbins.png" *)
-  
+  ()
 
 (* TODO plot cache, show_cache *)
-let () = 
+let () =
   let summaries =
     Metadata.with_digests Metadata.cache_corpus_metrics in
   make_plots summaries;
+

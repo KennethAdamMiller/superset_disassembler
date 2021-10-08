@@ -32,6 +32,7 @@ depends: [
     "ocamlgraph"
     "landmarks"
     "bap-future"
+    "matplotlib"
 ]
 
 depexts: [
