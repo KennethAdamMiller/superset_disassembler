@@ -366,7 +366,7 @@ let ground_truth_bin =
   let doc = ("Compare results against a ground truth constructed" ^
                " from debug symbols of an unstripped binary") in
   Extension.Command.parameter
-    ~doc Extension.Type.("<FILE>" %: (some string))
+    ~doc Extension.Type.("<FILE>" %: (some string) =? None)
     "ground_truth_bin"
 
 let ground_truth_file =

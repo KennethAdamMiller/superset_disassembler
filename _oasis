@@ -38,7 +38,6 @@ Library superset_disassemblers
                         Report,
                         Streams,
                         Superset_impl,
-                        Three_address_code,
                         Metadata
 
 Document "superset_disassemblers_api"
