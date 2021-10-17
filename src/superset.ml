@@ -61,6 +61,12 @@ module Core = struct
     let superset = add_to_map superset mem insn in
     superset
 
+  let remove superset addr =
+    let insn_risg = OG.remove_vertex superset.insn_risg addr in
+    let insn_map = Map.remove superset.insn_map addr in
+    Addr.Table.remove superset.lifted addr;
+    { superset with insn_risg; insn_map } 
+
   let empty arch =
     let brancher = Brancher.of_bil arch in
     let module Target = (val target_of_arch arch) in
@@ -255,13 +261,6 @@ module ISG = struct
   let unlink superset v1 v2 = 
     let insn_risg = OG.remove_edge superset.insn_risg v1 v2 in
     { superset with insn_risg }
-
-  (* TODO belongs in core *)
-  let remove superset addr =
-    let insn_risg = OG.remove_vertex superset.insn_risg addr in
-    let insn_map = Map.remove superset.insn_map addr in
-    Addr.Table.remove superset.lifted addr;
-    { superset with insn_risg; insn_map } 
 
   let mem_vertex superset = OG.mem_vertex superset.insn_risg
 

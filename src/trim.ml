@@ -20,7 +20,7 @@ let run superset =
   let _ = Superset.with_bad superset ~visited ~pre ~post accu in
   let superset = 
     Hash_set.fold visited ~init:superset ~f:(fun superset addr ->
-        Superset.ISG.remove superset addr
+        Superset.Core.remove superset addr
       ) in
   Hash_set.clear visited;
   Superset.Core.clear_all_bad superset;

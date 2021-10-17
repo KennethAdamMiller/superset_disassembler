@@ -48,8 +48,8 @@ let compute_liveness superset =
              vars -- defs ++ uses
           | None -> vars
     ) in
-  let superset = Superset.ISG.remove superset _exit in
-  let _ = Superset.ISG.remove superset start in
+  let superset = Superset.Core.remove superset _exit in
+  let _ = Superset.Core.remove superset start in
   let liveness_pairs = Solution.enum soln in
   Seq.fold liveness_pairs ~init:Addr.Set.empty ~f:(fun s (addr,_) ->
       Addr.Set.add s addr)  

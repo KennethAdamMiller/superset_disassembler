@@ -123,7 +123,8 @@ module With_options(Conf : Provider)  = struct
           let superset = Fixpoint.iterate options.rounds f superset in
           Metrics.compute_metrics superset;
         else ()
-      )
+      );
+    superset
        
   let main = with_options 
 

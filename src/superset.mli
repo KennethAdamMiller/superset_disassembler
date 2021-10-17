@@ -25,9 +25,7 @@ module ISG : sig
   (** Removes a link between two addresses, but not stop tracking
   those addresses even if they each have no more links *)
   val unlink : t -> addr -> addr -> t
-  (** Stops tracking an address. Can unbalance the internal
-  structure, requiring further balanace and trim calls *)
-  val remove : t -> addr -> t
+
   (** Uses strongly connected components to determine loop lists, but
   does no filtering. *)
   val raw_loops : t -> addr list list
@@ -64,6 +62,9 @@ module Core : sig
 
   (** Insert the memory and disassembled instruction into the superset *)
   val add : t -> mem -> Dis.full_insn option -> t
+  (** Stops tracking an address. Can unbalance the internal
+  structure, requiring further balanace and trim calls *)
+  val remove : t -> addr -> t
   val empty : arch -> t
 
   (** This primary core function is the core of disassembly, and
