@@ -1,14 +1,5 @@
 open Core_kernel
 open Bap.Std
-
-(* TODO remove in favor of knowledge base *)
-val ground_truth_of_unstripped_bin : string -> addr seq Or_error.t
-
-(* TODO remove in favor of knowledge base *)
-val true_positives_of_ground_truth : Superset.t -> Addr.Set.t -> Addr.Hash_set.t
-
-(* TODO remove in favor of knowledge base *)
-val true_positives : Superset.t -> string -> Addr.Hash_set.t
   
 module Cache : sig
   open Bap_knowledge

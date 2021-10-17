@@ -33,7 +33,7 @@ let man = {|
   assembler, and run with a limited scope/visibility of just
   instructions. Analyses are typically processes that identify less
   visible violations of well-formed assembler rules or other lawful
-  assembler characteristics that require global visibility. Features
+  assembler characteristics that require global visibility. Heuristics
   are data traits that may be dirty and require some iterative
   convergence to recognize the subset within the initial superset that
   can be guaranteeably cleansed. Once convergence occurs, the bodies
@@ -81,8 +81,7 @@ let superset_disasm options =
       KB.return (Some (int_of_float (Sys.time() -. t))));
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
-  KB.promise Theory.Label.is_valid
-  @@ (fun label ->
+  KB.promise Theory.Label.is_valid @@ (fun label ->
     let open KB.Syntax in
     (* (target is just the machine target) *)
     Theory.Label.target label >>= fun tgt ->
@@ -158,6 +157,23 @@ let store_knowledge_in_cache digest =
   Toplevel.current () |>
   Data.Cache.save cache digest
 
+let load_knowledge digest = function
+  | None -> import_knowledge_from_cache digest
+  | Some path when not (Sys.file_exists path) ->
+    import_knowledge_from_cache digest
+  | Some path ->
+    info "importing knowledge from %S" path;
+    Toplevel.set @@ Knowledge.load path;
+    true
+
+let save_knowledge ~had_knowledge ~update digest = function
+  | None ->
+    store_knowledge_in_cache digest
+  | Some path when update ->
+    info "storing knowledge base to %S" path;
+    Knowledge.save (Toplevel.current ()) path
+  | Some _ -> ()
+
 let outputs =
   Extension.Command.parameters
     ~doc:"Dumps the program to <FILE> (defaults to stdout) \
@@ -232,12 +248,6 @@ let option_digest f = function
   | None -> "none"
   | Some s -> f s
 
-let make_digest inputs =
-  let inputs = String.concat inputs in
-  fun ~namespace ->
-    let d = Data.Cache.Digest.create ~namespace in
-    Data.Cache.Digest.add d "%s" inputs
-
 module Dump_formats = struct
   let parse_fmt fmt =
     match String.split ~on:'-' fmt with
@@ -263,23 +273,11 @@ module Dump_formats = struct
     List.map outputs ~f:parse_format
 end
 
-let load_knowledge digest = function
-  | None -> import_knowledge_from_cache digest
-  | Some path when not (Sys.file_exists path) ->
-    import_knowledge_from_cache digest
-  | Some path ->
-    info "importing knowledge from %S" path;
-    Toplevel.set @@ Knowledge.load path;
-    true
-
-let save_knowledge ~had_knowledge ~update digest = function
-  | None ->
-    store_knowledge_in_cache digest
-  | Some path when update ->
-    info "storing knowledge base to %S" path;
-    Knowledge.save (Toplevel.current ()) path
-  | Some _ -> ()
-
+let make_digest inputs =
+  let inputs = String.concat inputs in
+  fun ~namespace ->
+    let d = Data.Cache.Digest.create ~namespace in
+    Data.Cache.Digest.add d "%s" inputs
 
 let compute_digest target disasm =
   make_digest [
@@ -291,7 +289,7 @@ let superset_digest options =
   let open Cmdoptions in
   compute_digest options.target options.disassembler
 
-let save_metadata  options =
+let save_metadata options =
   let digest = superset_digest options ~namespace:"knowledge"  in
   Metadata.with_digests (fun metadata ->
       let c = Option.value metadata
@@ -330,37 +328,18 @@ let tp_threshold =
   Extension.Command.parameter ~doc Extension.Type.(float =? 0.99)
     "threshold"
 
-(* TODO rename featureset to heuristics *)
-let featureset =
+let heuristics =
   let doc =
     "Specify the features used to converge upon the true positive set" in
   Extension.Command.parameter ~doc
-    ~aliases:["enable_feature"] (* TODO remove alias enable_feature *)
-    Extension.Type.(list string =? Features.default_features)
+    Extension.Type.(list string =? Heuristics.defaults)
     "features"
 
 let invariants =
   let doc = "Specify the desired invariants to apply to the superset" in
   let deflt = List.map Invariants.default_tags ~f:fst in
   Extension.Command.parameter ~doc
-    ~aliases:["phases"] (* TODO remove phases alians *)
     Extension.Type.(list string =? deflt) "invariants"
-  
-let trim_method =
-  let doc =
-    "The false positives removal proceedure may be changed." in
-  Extension.Command.parameter ~doc
-    Extension.Type.(enum list_trimmers) "trimmer" 
-
-
-(*let import_superset =
-  Extension.Command.parameter
-    ~doc:"Import the disassembly graph."
-    Extension.Type.(some string =? None) "import"
-
-let export_superset =
-  Extension.Command.parameter Extension.Type.(some (string) =? None) 
-    ~doc:"Export the disassembly graph." "export"*)
 
 let ground_truth_bin =
   let doc = ("Compare results against a ground truth constructed" ^
@@ -369,62 +348,44 @@ let ground_truth_bin =
     ~doc Extension.Type.("<FILE>" %: (some string) =? None)
     "ground_truth_bin"
 
-let ground_truth_file =
-  let doc = ("Compare results against a file that contains the " ^
-               "addresses of true positives") in
-  Extension.Command.parameter ~doc
-    Extension.Type.("<FILE>" %: some string) "ground_truth_file"
-
 let analyses =
   let deflt = ["Strongly Connected Component Data"] in
   Extension.Command.parameter
     Extension.Type.(list string =? deflt) "analyses"
 
-let save_addrs = Extension.Command.flag "save_addrs"
-let save_gt = Extension.Command.flag "save_gt"
 let save_dot = Extension.Command.flag "save_dot"
+             
 let collect_report =
   Extension.Command.flag "collect_reports"
-  
-let dforest =
-  Extension.Command.parameter
-    Extension.Type.(some (enum list_decision_trees) =? None)
-    "decision_tree"
-let cut =
-  Extension.Command.parameter
-    Extension.Type.(some (t3 (enum list_cuts) string int) =? None)
-    "cut"
+
+let converge =
+  Extension.Command.flag "converge"
+
+let protect =
+  Extension.Command.flag "protect"
 
 let _superset_disassemble_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
-    $ground_truth_bin $ground_truth_file $invariants $analyses
-    $trim_method $tp_threshold $featureset $save_addrs
-    $save_gt $save_dot $rounds $collect_report
-    $dforest $cut
+    $ground_truth_bin $invariants $analyses $tp_threshold $featureset
+    $save_dot $rounds $collect_report $converge $protect
   in
   Extension.Command.declare ~doc:man "superset_disasm"
     ~requires:features_used args @@
     fun input outputs loader target update kb
-        ground_truth_bin ground_truth_file invariants
-        analyses trim_method tp_threshold featureset save_addrs
-        save_gt save_dot rounds collect_report dforest cut 
-        ctxt  ->
+        ground_truth_bin invariants analyses tp_threshold featureset
+        save_dot rounds collect_report converge protect ctxt  ->
     let options =
-      Fields.create ~import:None ~export:None ~disassembler:loader
-        ~ground_truth_bin ~ground_truth_file ~target:input
-        ~trim_method ~setops:[] ~cut ~save_dot
-        ~save_gt ~save_addrs ~tp_threshold ~rounds ~featureset
-        ~analyses ~collect_report ~phases:invariants ~dforest in
+      Fields.create ~disassembler:loader
+        ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
+        ~rounds ~featureset ~analyses ~collect_report
+        ~converge ~protect ~phases:invariants in
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
     Ok (create_and_process input outputs loader
           target update kb options)
-    
-let converge =
-  Extension.Command.flag "converge"
 
 let metrics =
   let doc =
@@ -436,16 +397,12 @@ let metrics =
   Extension.Command.parameter ~doc
     Extension.Type.(some (list string)) "metrics"
 
-
-(* TODO review features_used to possibly remove some *)
 let _distribution_command : unit =
   let args =
-    (* TODO can remove unnecessary arguments now that digest is by file *)
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
     $ground_truth_bin $invariants $analyses
-    (* TODO use collect_report and featureset to evaluate them *)
-    $tp_threshold $featureset $rounds $collect_report
+    $tp_threshold $heuristics $rounds $collect_report
     $converge $metrics in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
@@ -458,24 +415,19 @@ let _distribution_command : unit =
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
     let options =
-      Fields.create ~import:None ~export:None ~disassembler:loader
-        ~ground_truth_bin ~ground_truth_file:None ~target:input
-        ~trim_method:Cmdoptions.Simple ~setops:[] ~cut:None
-        ~save_dot:false
-        ~save_gt:false ~save_addrs:false ~tp_threshold ~rounds ~featureset
-        ~analyses ~collect_report ~phases:invariants ~dforest:None in
+      Fields.create ~disassembler:loader
+        ~ground_truth_bin ~target:input ~save_dot:false ~tp_threshold
+        ~rounds ~heuristics ~analyses ~collect_report
+        ~phases:invariants in
     let digest = superset_digest options in
     let _ = load_knowledge digest kb in
-    (*let _ = Project.Input.load ~target ~loader input in*)
     let map_opt =
       function | None -> "unknown" | Some v -> sprintf "%d" v in
     let open KB.Syntax in
     Toplevel.exec @@
       (match metrics with
        | Some metrics ->
-          (* TODO This symbol belongs in Metrics *)
-          KB.Symbol.intern "superset_analysis"
-            Theory.Program.cls >>= (fun label ->
+          Metrics.sym_label >>= (fun label ->
           let oc_space = Metrics.Cache.occlusive_space in
           let ro = Metrics.Cache.reduced_occlusion in
           let fns = Metrics.Cache.false_negatives in

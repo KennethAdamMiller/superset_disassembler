@@ -22,19 +22,18 @@ Library superset_disassemblers
   Path:                 src/
   Install:		true
   CompiledObject:	best
-  BuildDepends:		bap, core_kernel, cmdliner, graphlib, ppx_inline_test, bap-future #, landmarks.ppx
+  BuildDepends:		bap, core_kernel, graphlib, ppx_inline_test, bap-future #, landmarks.ppx
   Modules:		
                         Superset,
                         Metrics,
                         Cmdoptions, 
-                        Traverse, 
+                        Traverse,
+                        Fixpoint, 
                         Trim, 
                         Invariants, 
                         Grammar, 
-                        Sheathed, 
-                        Decision_trees,
-                        Abstract_ssa,
-                        Features,
+                        Liveness,
+                        Heuristics,
                         Report,
                         Streams,
                         Superset_impl,
@@ -48,13 +47,6 @@ Document "superset_disassemblers_api"
   XOCamlbuildExtraArgs:
     "-docflags '-colorize-code -short-functors -charset utf-8'"
   XOCamlbuildLibraries: superset_disassemblers
-
-Executable superset_disasm
-  Path:			src/
-  Install:        	true
-  MainIs:	  	superset_disasm.ml
-  CompiledObject: 	best
-  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, bap-future #,landmarks.ppx
 
 Executable plot_superset_cache
   Path:			src/

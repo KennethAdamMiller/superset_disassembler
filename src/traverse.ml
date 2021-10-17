@@ -58,15 +58,6 @@ let visit_by_block superset
            (Map.set jmps src target, Set.add targets target)
          else (jmps, targets)
       ) (Addr.Map.empty,Addr.Set.empty) in
-  (*let loop_addrs = Superset_risg.get_loop_addrs insn_risg in
-    let jmps = Set.fold loop_addrs ~init:jmps ~f:(fun jmps addr -> 
-      match Map.find jmps addr with
-      | Some(j) -> 
-    if Set.mem loop_addrs j then
-          Map.remove jmps j
-        else jmps
-      | None -> jmps
-    ) in*)
   let superset = 
     Map.fold jmps ~init:superset ~f:(fun ~key ~data superset -> 
         Superset.ISG.unlink superset key data;

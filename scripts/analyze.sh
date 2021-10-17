@@ -4,7 +4,7 @@ compute_disasm() {
     import_name=$1
     export_name=$2
     gt_bin=$3
-    phases=$4
+    invariants=$4
     analyses=$5
     features=$6
     rounds=$7
@@ -17,8 +17,8 @@ compute_disasm() {
 	if [[ ! (-z $export_name) ]]; then
 	    args+=" --export=${export_name}"
 	fi
-	if [[ ! (-z ${phases}) ]]; then
-	    args+=" --phases=${phases}"
+	if [[ ! (-z ${invariants}) ]]; then
+	    args+=" --invariants=${invariants}"
 	fi
 	if [[ ! (-z ${analyses}) ]]; then
 	    args+=" --analyses=${analyses}"
@@ -30,8 +30,8 @@ compute_disasm() {
 	time superset_disasm ${args}
     else
 	args="./$(basename ${gt_bin}) --ground_truth_bin=${gt_bin} --rounds=${rounds} "
-	if [[ ! (-z ${phases}) ]]; then
-	    args+=" --invariants=${phases}"
+	if [[ ! (-z ${invariants}) ]]; then
+	    args+=" --invariants=${invariants}"
 	fi
 	if [[ ! (-z ${analyses}) ]]; then
 	    args+=" --analyses=${analyses}"

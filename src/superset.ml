@@ -373,14 +373,18 @@ module ISG = struct
 end
 
 module Inspection = struct
+
   let contains_addr superset addr =
     Memmap.contains superset.sections addr
 
   let total_bytes superset =
     Seq.fold (Memmap.to_sequence superset.sections) ~init:0
       ~f:(fun total (mem,_) -> (total + (Memory.length mem)))
+
   let count superset = OG.nb_vertex superset.insn_risg
+
   let count_unbalanced superset = Map.length superset.insn_map
+
   let unbalanced_diff superset =
     let kys = (Map.keys superset.insn_map) in
     let mapaddrs =
@@ -388,59 +392,49 @@ module Inspection = struct
     let gaddrs = OG.fold_vertex (fun x s -> Set.add s x)
         superset.insn_risg Addr.Set.empty in
     Set.diff mapaddrs gaddrs, Set.diff gaddrs mapaddrs
+
   let get_memmap superset = superset.sections
+
   let get_main_entry superset = superset.main_entry
+
   let filename superset = superset.filename
+
   let static_successors superset mem insn =
     let brancher = superset.brancher in
     let addr = Memory.min_addr mem in
     if Addr.Table.mem superset.lifted addr then
       let l = ISG.descendants superset addr in
-      List.map l ~f:(fun dst ->
-          (Some dst, `Fall)
-        )
+      List.map l ~f:(fun dst -> (Some dst, `Fall))
     else
       match insn with 
       | None -> [None, `Fall]
       | Some insn -> 
          try
-           (*match KB.Value.get Insn.Slot.dests insn with 
-         | None -> KB.return []
-         | Some dsts ->
-            let open KB.Syntax in
-            KB.all @@
-            List.map (Set.to_list dsts) ~f:(fun branchlbl ->
-                Theory.Label.target branchlbl >>= fun tgt -> (
-                  KB.collect Theory.Label.addr branchlbl >>= fun addr ->
-                  KB.return @@ Option.map addr ~f:(fun addr ->
-                      (Word.code_addr tgt addr, `Fall)
-                    )
-                )
-              )*)
            Brancher.resolve brancher mem insn
          with _ -> (
            print_endline @@ 
              "Target resolve failed on memory at " ^ Memory.to_string mem; 
            [None, `Fall] (*KB.return []*)
          )
+
   let len_at superset at = 
     let insn_map = get_map superset in
     match Map.find insn_map at with
     | None -> 0
     | Some(mem, _) -> Memory.length mem
+
   let get_base superset =
     let insn_map = get_map superset in
     let x = Addr.Map.min_elt insn_map in
     let (base_addr, _)  = Option.value_exn x in
     base_addr
+
   let num_bad superset =
     Hash_set.length superset.bad
 
   let is_bad_at superset at = Hash_set.mem superset.bad at
 
-  let get_segments superset =
-    superset.sections
-  (*Image.segments Option.(value_exn superset.img)*)
+  let get_segments superset = superset.sections
 
   let get_endianness superset = superset.endianness
 

@@ -42,46 +42,7 @@ let true_positives superset f =
   in
   let ground_truth =
     Addr.Set.of_list @@ Seq.to_list function_starts in
-  true_positives_of_ground_truth superset ground_truth
-  
-let reduced_occlusion superset tp =
-  let fps = Addr.Hash_set.create () in
-  Hash_set.iter tp ~f:(fun addr ->
-      Superset.Occlusion.with_data_of_insn superset addr
-        ~f:(fun x -> Hash_set.add fps x);
-      Hash_set.remove fps addr;
-    );
-  fps  
-
-let calc_false_positive_set superset ro = 
-  let fps = Addr.Hash_set.create () in
-  Hash_set.iter ro ~f:(fun v ->
-      if Superset.ISG.mem_vertex superset v then
-        Hash_set.add fps v
-    );
-  fps
-
-let fn_insn_cnt superset tps =
-  Hash_set.fold ~init:0 tps ~f:(fun count v -> 
-      if Superset.ISG.mem_vertex superset v then count 
-      else count+1)
-
-let check_tp_set true_positives s =
-  let n = Hash_set.length s in
-  let tp_of_s = 
-    Hash_set.fold ~init:0 true_positives
-      ~f:(fun tp_of_s x -> 
-          if Hash_set.mem s x
-          then tp_of_s + 1 else tp_of_s) in
-  let fp_of_s = n - tp_of_s in
-  fp_of_s, tp_of_s
-
-let check_fn_entries superset ground_truth =
-  let detected_insns = 
-    Superset.Core.fold superset ~init:Addr.Set.empty
-      ~f:(fun ~key ~data detected_insns ->
-          Set.add detected_insns key) in
-  Set.diff ground_truth detected_insns
+  true_positives_of_ground_truth superset ground_truth  
 
 module Cache = struct
   open Bap_knowledge
@@ -120,7 +81,7 @@ module Cache = struct
   let string_persistent =
     Knowledge.Persistent.of_binable
       (module struct type t = string [@@deriving bin_io] end)
-    
+
   let ground_truth_source =
     let open Knowledge.Domain in
     attr string string_persistent "ground_truth_source"
@@ -166,6 +127,9 @@ module Cache = struct
     attr addrs_t addrs_persistent "clean_functions"
       "Functions with completely empty occlusive space"
 
+  let occluded_entrances =
+    attr addrs_t addrs_persistent "occluded_entrances"
+      "Functions with at least one address that is obstructed"
 end
 
 let set_ground_truth superset =
@@ -254,6 +218,27 @@ let compute_metrics superset =
                   if ro_at x then clean else Set.add clean x
                 ))
              )
+    );
+
+  KB.promise Cache.occluded_entrances (fun label ->
+      KB.collect Cache.function_entrances label >>= function
+      | None -> KB.return None
+      | Some funcs -> 
+         let occluded_starts =
+           Set.fold funcs ~init:Addr.Set.empty ~f:(fun occluded start ->
+               let behind = Addr.(start -- 20) in
+               let range = Superset.Core.seq_of_addr_range behind 21 in
+               let range = Seq.filter range ~f:(fun v -> not Addr.(v = start)) in
+               let addr =
+                 Seq.find range ~f:(fun current ->
+                     Seq.exists
+                       (Superset.Occlusion.conflict_seq_at superset current)
+                       ~f:(fun conflict -> Addr.((not (conflict = current))
+                                                 && conflict = start)
+                   )) in
+               Option.value_map addr ~default:occluded ~f:Set.(add occluded)
+             ) in
+         KB.return (Some occluded_starts)
     );
 
   KB.promise Cache.true_positives (fun label ->
