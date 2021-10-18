@@ -399,13 +399,13 @@ let _distribution_command : unit =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
     $ground_truth_bin $invariants $analyses
-    $tp_threshold $heuristics $rounds $collect_report
+    $tp_threshold $heuristics $rounds
     $converge $metrics in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
     fun input outputs loader target update kb
         ground_truth_bin invariants
-        analyses tp_threshold heuristics rounds collect_report
+        analyses tp_threshold heuristics rounds 
         converge metrics
         ctxt ->
     validate_knowledge update kb >>= fun () ->
@@ -414,7 +414,7 @@ let _distribution_command : unit =
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot:false ~tp_threshold
-        ~rounds ~heuristics ~analyses ~collect_report
+        ~rounds ~heuristics ~analyses
         ~invariants in
     let digest = superset_digest options in
     let _ = load_knowledge digest kb in
@@ -424,7 +424,7 @@ let _distribution_command : unit =
     Toplevel.exec @@
       (match metrics with
        | Some metrics ->
-          Metrics.sym_label >>= (fun label ->
+          Metrics.Cache.sym_label >>= (fun label ->
           let oc_space = Metrics.Cache.occlusive_space in
           let ro = Metrics.Cache.reduced_occlusion in
           let fns = Metrics.Cache.false_negatives in
