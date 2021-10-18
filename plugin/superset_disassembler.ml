@@ -368,18 +368,18 @@ let _superset_disassemble_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
-    $ground_truth_bin $invariants $analyses $tp_threshold $featureset
+    $ground_truth_bin $invariants $analyses $tp_threshold $heuristics
     $save_dot $rounds $collect_report $converge $protect
   in
   Extension.Command.declare ~doc:man "superset_disasm"
     ~requires:features_used args @@
     fun input outputs loader target update kb
-        ground_truth_bin invariants analyses tp_threshold featureset
+        ground_truth_bin invariants analyses tp_threshold heuristics
         save_dot rounds collect_report converge protect ctxt  ->
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
-        ~rounds ~featureset ~analyses ~collect_report
+        ~rounds ~heuristics ~analyses ~collect_report
         ~converge ~protect ~phases:invariants in
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
@@ -408,7 +408,7 @@ let _distribution_command : unit =
     ~requires:features_used args @@
     fun input outputs loader target update kb
         ground_truth_bin invariants
-        analyses tp_threshold featureset rounds collect_report
+        analyses tp_threshold heuristics rounds collect_report
         converge metrics
         ctxt ->
     validate_knowledge update kb >>= fun () ->
