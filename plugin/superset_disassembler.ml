@@ -377,7 +377,7 @@ let _superset_disassemble_command : unit =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
         ~rounds ~heuristics ~analyses
-        ~converge ~protect ~phases:invariants in
+        ~converge ~protect ~invariants in
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
@@ -415,7 +415,7 @@ let _distribution_command : unit =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot:false ~tp_threshold
         ~rounds ~heuristics ~analyses ~collect_report
-        ~phases:invariants in
+        ~invariants in
     let digest = superset_digest options in
     let _ = load_knowledge digest kb in
     let map_opt =
