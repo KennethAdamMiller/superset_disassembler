@@ -414,7 +414,7 @@ let _distribution_command : unit =
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot:false ~tp_threshold
-        ~rounds ~heuristics ~analyses
+        ~rounds ~heuristics ~analyses ~converge:false ~protect:false
         ~invariants in
     let digest = superset_digest options in
     let _ = load_knowledge digest kb in
