@@ -14,7 +14,7 @@ let list_analyses = [
     "Grammar convergent", tag_grammar;
   ]
   
-type opts = {
+type t = {
   disassembler       : string;
   ground_truth_bin   : string option;
   target             : string;
@@ -27,8 +27,8 @@ type opts = {
   rounds             : int;
   heuristics         : string list;
 } [@@deriving sexp, fields, bin_io]
-type t = opts
-
+type opts = t [@@deriving sexp, bin_io]
+       
 module Cache = struct
 
   let disasm_opts =
