@@ -354,9 +354,6 @@ let analyses =
     Extension.Type.(list string =? deflt) "analyses"
 
 let save_dot = Extension.Command.flag "save_dot"
-             
-let collect_report =
-  Extension.Command.flag "collect_reports"
 
 let converge =
   Extension.Command.flag "converge"
@@ -369,17 +366,17 @@ let _superset_disassemble_command : unit =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
     $ground_truth_bin $invariants $analyses $tp_threshold $heuristics
-    $save_dot $rounds $collect_report $converge $protect
+    $save_dot $rounds $converge $protect
   in
   Extension.Command.declare ~doc:man "superset_disasm"
     ~requires:features_used args @@
     fun input outputs loader target update kb
         ground_truth_bin invariants analyses tp_threshold heuristics
-        save_dot rounds collect_report converge protect ctxt  ->
+        save_dot rounds converge protect ctxt  ->
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
-        ~rounds ~heuristics ~analyses ~collect_report
+        ~rounds ~heuristics ~analyses
         ~converge ~protect ~phases:invariants in
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
