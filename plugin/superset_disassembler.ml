@@ -76,13 +76,13 @@ let superset_disasm options =
         let options = options
       end) in
   let t = Sys.time() in
+  let open KB.Syntax in
   With_options.with_options () >>= fun superset ->
   KB.promise Metrics.Cache.time (fun o ->
       KB.return (Some (int_of_float (Sys.time() -. t))));
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
   KB.promise Theory.Label.is_valid @@ (fun label ->
-    let open KB.Syntax in
     (* (target is just the machine target) *)
     Theory.Label.target label >>= fun tgt ->
     (* For each address the in the knowledge base *)
