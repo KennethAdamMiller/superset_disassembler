@@ -71,12 +71,11 @@ module With_options(Conf : Provider)  = struct
           analyze superset
         )
 
-  let checkpoint bin invariants =
-    (* TODO use the knowledge base to import the superset *)
+  let checkpoint ?addrs bin invariants =
     let backend = options.disassembler in
     let invariants = Invariants.tag_success ::invariants in
     let f = Invariants.tag ~invariants in
-    Superset.superset_disasm_of_file ~backend bin ~f
+    Superset.superset_disasm_of_file ?addrs ~backend bin ~f
 
   let args_to_funcs args funcs =
     let l = List.filter_map args
@@ -93,12 +92,29 @@ module With_options(Conf : Provider)  = struct
   let analyses = args_to_funcs options.analyses list_analyses
 
   let with_options () =
-    let superset = checkpoint options.target invariants in
-    let () = Metrics.set_ground_truth superset in
-    let trim = Trim.run in
-    let superset = trim superset in
-    let superset = with_analyses superset analyses in
-    let superset = trim superset in
+    let open KB.Syntax in
+    Superset.Cache.sym_label >>= fun sym_label ->
+    KB.collect Superset.Cache.superset_graph sym_label
+    >>= fun graph ->
+    let superset = 
+      match graph with
+      | None -> 
+         let superset = checkpoint options.target invariants in
+         let () = Metrics.set_ground_truth superset in
+         let trim = Trim.run in
+         let superset = trim superset in
+         let superset = with_analyses superset analyses in
+         let superset = trim superset in
+         KB.promise Superset.Cache.superset_graph
+           (fun _ -> KB.return @@ Some Superset.ISG.(to_list superset));
+         superset
+      | Some graph ->
+         let graph = Seq.of_list graph in
+         let graph =
+           Seq.concat @@ Seq.map graph ~f:(fun (s,d) ->
+                             Seq.of_list [s;d]
+                           ) in
+         checkpoint ~addrs:graph options.target [] in
     let pnts_of_percent prcnt =
       Int.of_float (1.0/.(1.0-.prcnt)) in
     let threshold = (pnts_of_percent options.tp_threshold) in
@@ -124,7 +140,7 @@ module With_options(Conf : Provider)  = struct
           Metrics.compute_metrics superset;
         else ()
       );
-    superset
+    KB.return superset
        
   let main = with_options 
 

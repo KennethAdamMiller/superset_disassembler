@@ -35,7 +35,6 @@ Library superset_disassemblers
                         Liveness,
                         Heuristics,
                         Report,
-                        Streams,
                         Superset_impl,
                         Metadata
 

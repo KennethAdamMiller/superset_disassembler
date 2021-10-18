@@ -8,20 +8,29 @@ type t = Superset_impl.t
 
 module ISG : sig
   open Graphlib.Std
+
   (** Returns a list of those addresses for which the argument
   address could be the immediate next instruction of. *)
   val ancestors : t -> addr -> addr list
+
   (** Returns a list of those addresses for which the argument
   address could potentially lead to. *)
   val descendants : t -> addr -> addr list
+
   val mem_vertex : t -> addr -> bool
+
   val iter_vertex : t -> (addr -> unit) -> unit
+
   val fold_vertex : t -> (addr -> 'a -> 'a) -> 'a -> 'a
+
   val fold_edges : t -> (addr -> addr -> 'a -> 'a) -> 'a -> 'a
+
   val check_connected : t -> addr -> addr -> bool
+
   (** Adds an associated directed link from src to dst, tracking
   addresses if they are not already. *)
   val link : t -> addr -> addr -> t
+
   (** Removes a link between two addresses, but not stop tracking
   those addresses even if they each have no more links *)
   val unlink : t -> addr -> addr -> t
@@ -29,12 +38,16 @@ module ISG : sig
   (** Uses strongly connected components to determine loop lists, but
   does no filtering. *)
   val raw_loops : t -> addr list list
+
   val dfs_fold :
     ?visited:Addr.Hash_set.t -> t -> pre:('a -> addr -> 'a) ->
     post:('a -> addr -> 'a) -> 'a -> addr -> 'a
+
   val dfs : ?terminator:(addr -> bool) -> ?visited:Addr.Hash_set.t ->
             ?pre:(addr -> unit) -> ?post:(addr -> unit) ->
             (t -> addr -> addr list) -> t -> addr -> unit
+
+  val to_list : t -> (addr * addr) list
 
   val fixpoint : t ->
                  ?steps:int ->
@@ -48,12 +61,15 @@ module ISG : sig
     
   (** Print the graph to file for a given superset *)
   val print_dot : ?colorings:Addr.Hash_set.t String.Map.t -> t -> unit
+
   (** For all items in the address hash set, remove them from the
   superset. This is a raw removal, so it does not mark bad and
   traverse to perform maximal removals. *)
   val filter : t -> Addr.Hash_set.t -> t
+
   (** Prints the isg via a formatter in gml format. *)
   val format_isg : ?format:Format.formatter -> t -> unit
+
   (** Prints the isg to a string buffer in gml format. *)
   val isg_to_string : t -> string
 end
@@ -90,7 +106,7 @@ module Core : sig
   (** This function is the fundamental superset disassembly, and
       disassembles at the addresses given by the supplied sequence. *)
   val disasm :
-    ?backend:string -> accu:'a -> 
+    ?backend:string -> addrs:addr seq -> accu:'a ->
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'a -> 'a) ->
     Arch.t -> mem -> 'a Or_error.t
 
@@ -103,8 +119,7 @@ module Core : sig
    invariants, heuristics and performance that are vital to good 
    operation. *)
   val disasm_all :
-    ?backend:string ->
-    accu:'a -> 
+    ?backend:string -> accu:'a ->
     f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> 'a -> 'a) ->
     Arch.t -> mem -> 'a Or_error.t
 
@@ -120,7 +135,7 @@ module Core : sig
       disassembler from the ground up almost certainly uses this as
       it loads the memory images into the superset. *)
   val update_with_mem :
-    ?backend:string ->
+    ?backend:string -> ?addrs:addr seq ->
     ?f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> t -> t) ->
     t -> mem -> t
 
@@ -143,6 +158,8 @@ module Core : sig
       longer distinguishable as previously. *)
   val clear_bad : t -> addr -> unit
 
+  val clear_each : t -> Addr.Hash_set.t -> unit
+    
   (** Removes all addresses from being tracked as bad, without
       removing them from the superset. *)
   val clear_all_bad : t -> unit
@@ -214,17 +231,19 @@ module Inspection : sig
 end
 
 module Cache : sig
+  open Bap_knowledge
+  open Bap_core_theory
+  open Theory
+
   val package : string
+  val sym_label : program Knowledge.obj KB.t
   val superset_graph_t :
-    (Bap.Std.Addr.t * Bap.Std.Addr.t) list option
-    Bap_knowledge.Knowledge.domain
+    (addr * addr) list option Knowledge.domain
   val superset_graph_persistent :
-    (Bap.Std.addr * Bap.Std.addr) list option
-    Bap_knowledge.Knowledge.persistent
+    (addr * addr) list option Knowledge.persistent
   val superset_graph :
-    (Bap_core_theory.Theory.program,
-     (Bap.Std.Addr.t * Bap.Std.Addr.t) list option)
-    Bap_knowledge.Knowledge.slot
+    (program, (addr * addr) list option) Knowledge.slot
+
 end
      
 module Occlusion : sig
@@ -299,17 +318,10 @@ val with_bad :
   t -> ?visited:Addr.Hash_set.t -> pre:('b -> addr -> 'c) ->
   post:('c -> addr -> 'b) -> 'b -> 'b
 
-(** Read a given superset from file. *)
-val import : string -> string -> string -> t
-(** Save a superset to a given file location. *)
-val export : string -> t -> unit
-(** Save only the remaining disassembled addresses. *)
-val export_addrs : string -> t -> unit
-
 (** Take the raw superset of a given file name of a compiled object of
     any kind that Image can parse. *)
 val superset_disasm_of_file :
-  ?backend:string ->
+  ?backend:string -> 
   ?f:(mem * (Dis.asm, Dis.kinds) Dis.insn option -> t -> t) ->
-  string -> t
+  ?addrs:addr seq -> string -> t
 

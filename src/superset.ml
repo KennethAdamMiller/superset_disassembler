@@ -31,7 +31,9 @@ let add_to_graph superset mem insn =
 
 module Cache = struct
   let package = "superset-disasm"
-
+  let sym_label =
+    KB.Symbol.intern "superset" Theory.Program.cls
+    
   let superset_graph_t =
     let sexp_of_edge (s,d) =
       Tuple2.sexp_of_t Addr.sexp_of_t Addr.sexp_of_t (s,d) in
@@ -98,6 +100,11 @@ module Core = struct
   let clear_bad superset addr =
     Hash_set.remove superset.bad addr
 
+  let clear_each superset s =
+    Hash_set.iter s ~f:(fun v -> 
+        clear_bad superset v
+      )
+    
   let clear_all_bad superset =
     Hash_set.clear superset.bad
 
@@ -145,26 +152,32 @@ module Core = struct
     Seq.fold ~init:accu ~f:(fun x y -> f y x) (run_seq dis mem)
 
   (** This builds the disasm type, and runs it on the memory. *)
-  let disasm ?(backend="llvm") ~accu ~f arch memry =
-    (Dis.with_disasm ~backend (Arch.to_string arch)
-       ~f:(fun d ->
-         let rec next state accu addr =
-           match next_chunk memry ~addr with
-           | Error(_) -> Dis.stop state accu
-           | Ok(jtgt) -> Dis.jump state jtgt accu in
-         let invalid state m accu =
-           let accu = f (m, None) accu in
-           next state accu Memory.(min_addr m) in
-         let hit state m insn accu =
-           let accu = f (m, (Some insn)) accu in 
-           next state accu Memory.(min_addr m) in
-         Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
-              ~hit d ~init:accu ~return:ident memry)
-    ))
+  let disasm ?(backend="llvm") ~addrs ~accu ~f arch memry =
+    Or_error.map 
+      (Dis.with_disasm ~backend (Arch.to_string arch)
+        ~f:(fun d ->
+          let rec next state (addrs,accu) =
+            match Seq.next addrs with
+            | None -> Dis.stop state (addrs,accu)
+            | Some(addr,addrs) ->
+               match Memory.view ~from:addr memry with
+               | Error _ -> next state (addrs,accu)
+               | Ok jtgt -> Dis.jump state jtgt (addrs,accu) in
+          let invalid state m (addrs,accu) =
+            let accu = f (m, None) accu in
+            next state (addrs,accu) in
+          let hit state m insn (addrs,accu) =
+            let accu = f (m, (Some insn)) accu in 
+            next state (addrs,accu) in
+          Ok(Dis.run ~backlog:1 ~stop_on:[`Valid] ~invalid
+               ~hit d ~init:(addrs,accu) ~return:ident memry)
+        )) ~f:(fun (_,accu) -> accu)
 
   let disasm_all ?(backend="llvm") ~accu ~f arch memry =
-    disasm ~backend ~accu ~f arch memry 
-
+    let addrs = seq_of_addr_range
+                  (Memory.min_addr memry) (Memory.length memry) in
+    disasm ~backend ~addrs ~accu ~f arch memry 
+    
   let lift_at superset addr =
     match Addr.Table.find superset.lifted addr with
     | Some (bil) -> Some (bil)
@@ -189,12 +202,15 @@ module Core = struct
     lift_at superset addr
        
   (** Perform superset disassembly on mem and add the results. *)
-  let update_with_mem ?backend ?f superset mem =
+  let update_with_mem ?backend ?addrs ?f superset mem =
     let f = Option.value f ~default:(fun (m, i) a -> a) in
     let f (mem, insn) superset =
       let superset = add superset mem insn in
       f (mem, insn) superset in
-    disasm ?backend ~accu:superset ~f superset.arch mem |> ok_exn
+    let default = seq_of_addr_range
+                    (Memory.min_addr mem) (Memory.length mem) in
+    let addrs = Option.value addrs ~default  in
+    disasm ?backend ~accu:superset ~f ~addrs superset.arch mem |> ok_exn
 
   let is_unbalanced superset =
     Map.length superset.insn_map <> OG.nb_vertex superset.insn_risg
@@ -252,6 +268,17 @@ module ISG = struct
   let fold_edges superset f =
     let insn_risg = superset.insn_risg in 
     OG.fold_edges f insn_risg
+
+  let to_list superset =
+    let init = [] in
+    let f s d acc = (s,d) :: acc in
+    let l = fold_edges superset f init in
+    let f v acc =
+      let g = superset.insn_risg in 
+      if OG.in_degree g v = 0 && OG.out_degree g v = 0 then
+        (v,v) :: acc
+      else acc in
+    fold_vertex superset f l
 
   let link superset v1 v2 =
     let e = G.Edge.create v1 v2 () in
@@ -588,6 +615,14 @@ let is_fall_through superset parent child =
   let ft = fall_through_of superset parent in
   Addr.(child = ft)
 
+let get_non_fall_through_edges superset = 
+  ISG.fold_edges superset
+    (fun child parent jmps -> 
+       if is_fall_through superset parent child then
+         Map.set jmps child parent
+       else jmps
+    ) Addr.Map.empty
+  
 let get_callers superset addr =
   let g = (get_graph superset) in
   if OG.mem_vertex g addr &&
@@ -596,21 +631,6 @@ let get_callers superset addr =
     List.filter callers ~f:(fun caller ->
         not (is_fall_through superset caller addr))
   else []
-
-let export_addrs bin superset =
-  let insn_map = get_map superset in
-  let addrs = Map.keys insn_map in
-  let addrs = List.map addrs ~f:Addr.to_string in
-  let base = Filename.basename bin in
-  let addrs_file = Out_channel.create ("./" ^ base ^ "_addrs.txt") in
-  Out_channel.output_lines addrs_file addrs
-
-let export bin superset = 
-  let graph_f   = Out_channel.create (bin ^ ".graph") in
-  let formatter = Format.formatter_of_out_channel graph_f in
-  let () = ISG.format_isg ~format:formatter superset in
-  let () = Out_channel.close graph_f in
-  export_addrs bin superset
   
 let with_img ~accu img ~f =
   let segments = Table.to_sequence @@ Image.segments img in
@@ -620,7 +640,7 @@ let with_img ~accu img ~f =
       else accu 
     )
   
-let superset_of_img ?f ~backend img =
+let superset_of_img ?f ?addrs ~backend img =
   let arch = Image.arch img in
   let segments =   Image.memory img in
   let main_entry = Image.entry_point img in
@@ -630,30 +650,10 @@ let superset_of_img ?f ~backend img =
     of_components ~main_entry ?filename ~segments arch in
   with_img ~accu:superset img
     ~f:(fun ~accu mem ->
-      Core.update_with_mem ~backend accu mem ~f
+      Core.update_with_mem ~backend ?addrs accu mem ~f
     )
 
-let superset_disasm_of_file ?(backend="llvm") ?f binary =
+let superset_disasm_of_file ?(backend="llvm") ?f ?addrs binary =
   let img, errs = Image.create ~backend binary |> ok_exn in
-  (*List.iter errs ~f:(fun err ->
-      Format.fprintf Format.std_formatter "%s - \n%a\n"
-        binary Error.pp err;
-    );*)
-  superset_of_img ~backend img ?f
+  superset_of_img ~backend img ?addrs ?f
 
-let import backend bin graph =
-  let img, errs = Image.create ~backend bin |> ok_exn in
-  let insn_risg = ISG.parse_isg graph in
-  let arch = Image.arch img in
-  let segments =   Image.memory img in
-  let main_entry = Image.entry_point img in  
-  let insn_map  = Addr.Map.empty in
-  let superset  =
-    of_components ~main_entry ~insn_risg ~insn_map ~segments arch in
-  with_img ~accu:superset img
-    ~f:(fun ~accu mem -> 
-        Core.update_with_mem ~backend accu mem
-      )
-
-
-    

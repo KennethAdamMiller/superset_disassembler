@@ -18,7 +18,7 @@ let protect superset f =
    * some unexpectedly complicated possibilities at edge corner
    * cases, they could get marked bad by belonging on the edge. *)
   let r = f superset in 
-  Heuristics.clear_each superset visited;
+  Superset.Core.clear_each superset visited;
   r
   
 let converge superset heuristics feature_pmap =

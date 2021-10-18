@@ -34,7 +34,7 @@ module HeurismSet(H : Heurism) = struct
   end
 end
 
-let default_features = [
+let defaults = [
   "ImgEntry";
   (*"NoExit";*)
   (*"LoopsWithBreak";*)
@@ -53,24 +53,9 @@ let default_features = [
   (*"Grammar";*)
   (*"Constant";*)
 ]
-let default_features = List.rev default_features
+let defaults = List.rev defaults
 
 let transform = Hash_set.fold ~init:Addr.Set.empty ~f:Set.add
-
-(* TODO belongs in superset *)
-let clear_each superset visited =
-  Hash_set.iter visited ~f:(fun tp -> 
-      Superset.Core.clear_bad superset tp
-    )
-
-(* TODO belongs in superset *)
-let get_non_fall_through_edges superset = 
-  Superset.ISG.fold_edges superset
-    (fun child parent jmps -> 
-       if Superset.is_fall_through superset parent child then
-         Map.set jmps child parent
-       else jmps
-    ) Addr.Map.empty
 
 (** A callsite is a location which is shared as the target of a call
     by several other locations in the binary. *)
@@ -102,7 +87,6 @@ let tag_callsites visited ?callsites superset =
     );
   superset
 
-(* TODO belongs in superset *)
 let find_free_insns superset = 
   let mem = Superset.Core.mem superset in
   let all_conflicts = Addr.Hash_set.create () in
@@ -242,30 +226,21 @@ let extract_trim_clamped superset =
             ~visited ~datas superset c
         )
     );
-  (*Hash_set.iter datas ~f:(fun d -> 
-      if Hash_set.(mem visited d) || Set.(mem to_clamp d) then
-        Superset.Core.clear_bad superset d
-    );*)
-  clear_each superset visited;
+  Superset.Core.clear_each superset visited;
   List.iter to_clamp ~f:(Superset.Core.clear_bad superset);
   superset
 
-(* TODO call to Safely.protected *)
-(* TODO can optimize this just for a few seconds off, but it results
- * in lower accuracy *)
 let extract_trim_limited_clamped superset =
   let protection = Addr.Hash_set.create () in
-  if Hash_set.length protection = 0 then (
-    let callsites = get_callsites ~threshold:0 superset in
-    let f s = tag_callsites protection ~callsites s in
-    let superset = f superset in
-    Superset.Core.clear_all_bad superset
-  );
+  let superset = 
+    if Hash_set.length protection = 0 then (
+      let callsites = get_callsites ~threshold:0 superset in
+      tag_callsites protection ~callsites superset
+    ) else superset in
   Superset.Core.clear_all_bad superset;
   let superset = extract_trim_clamped superset in
-  clear_each superset protection; superset
+  Superset.Core.clear_each superset protection; superset
 
-(* TODO move to fixpoint *)
 let fixpoint_descendants superset extractf depth = 
   let rec fix_descendants cur_features d =
     if d >= depth then
@@ -288,10 +263,6 @@ let fixpoint_descendants superset extractf depth =
   let cur_features = extractf superset in
   fix_descendants cur_features 0
 
-(* TODO change type of pmap from Addr.Map to ...? *)
-(* Only contain convergence ancestors points *)
-(* TODO move to fixpoint *)
-(* TODO possibly operates incorrectly! *)
 let fixpoint_map superset feature_pmap = 
   let visited = Addr.Hash_set.create () in
   let entries = Superset.frond_of_isg superset in
@@ -310,15 +281,10 @@ let fixpoint_map superset feature_pmap =
       else feature_pmap
     )
 
-(* TODO move to fixpoint *)
 let fixpoint_grammar superset depth =
-  let branches = Superset.get_branches superset in
-  print_endline @@
-    sprintf "\tfixpoint_grammar: %d" (Hash_set.length branches);
   let extractf superset = 
     Superset.get_branches superset in
   fixpoint_descendants superset extractf depth
-
 
 (* TODO all features is not all features *)
 let allfeatures = 
@@ -335,7 +301,7 @@ let allfeatures =
   "FixpointSSA"            ::
   "FixpointFreevarSSA"     :: 
   "FixpointTails"          :: 
-  default_features
+  defaults
 
 let get_branches superset = 
   let branches = Superset.get_branches superset in
@@ -348,17 +314,14 @@ let linear_grammar superset =
 let classic_grammar superset =
   transform Grammar.(identify_branches superset)
 
-(* TODO: duplicated in other parts of the code *)
 let extract_loops_to_set superset =
   let loops = Superset.ISG.raw_loops superset in
   let loops = List.filter loops ~f:(fun l -> List.length l >= 2) in
   Grammar.addrs_of_loops loops
 
-(* TODO: duplicated in other parts of the code *)
 let extract_filter_loops superset =
   Grammar.addrs_of_filtered_loops superset
 
-(* TODO is this necessary? *)
 let extract_loops_with_break superset =
   let loop_addrs = extract_loop_addrs superset in
   Map.fold ~init:Addr.Set.empty loop_addrs ~f:(fun ~key ~data loops -> 
@@ -391,7 +354,6 @@ let extract_constants_to_set superset =
       Set.add consts data
     )
 
-(* TODO move to fixpoint or traverse *)
 let collect_descendants superset ?visited ?datas targets = 
   let visited = Option.value visited ~default:(Addr.Hash_set.create ()) in
   let datas = Option.value datas ~default:(Addr.Hash_set.create ()) in
@@ -403,11 +365,7 @@ let collect_descendants superset ?visited ?datas targets =
 let extract_img_entry superset =
   let e = Addr.Set.empty in
   match Superset.Inspection.get_main_entry superset with
-  | Some mentry -> 
-    let s = sprintf "entry: %s" 
-        Addr.(to_string  mentry) in
-    print_endline s;
-    Set.add e mentry 
+  | Some mentry -> Set.add e mentry 
   | None -> e
 
 let extract_trim_callsites superset =
@@ -417,38 +375,18 @@ let extract_trim_callsites superset =
   collect_descendants superset ~visited protection;
   Superset.Core.clear_all_bad superset;
   let superset = tag_callsites visited ~callsites superset in
-  clear_each superset visited;
+  Superset.Core.clear_each superset visited;
   superset
-let extract_trim_loops_with_break superset = 
-  (*let loops = extract_loops_with_break superset in*)
-  superset
+
 let extract_trim_entry superset =
   let imgentry = extract_img_entry superset in
   Set.iter imgentry ~f:Traverse.(mark_descendent_bodies_at superset);
   superset
 
-
 let extract_trim_noexit superset =
   let exitless = extract_exitless superset in
   Set.iter exitless ~f:Superset.Core.(mark_bad superset);
   superset
-
-let extract_trim_fixpoint_grammar superset =
-  (* TODO The fixpoint threshold should be a parameter *)
-  let gdesc = fixpoint_grammar superset 10 in
-  let visited = Addr.Hash_set.create () in
-  let datas   = Addr.Hash_set.create () in
-  let callsites = get_callsites ~threshold:0 superset in
-  let superset = tag_callsites visited ~callsites superset in
-  Superset.Core.clear_all_bad superset;
-  collect_descendants ~visited superset gdesc;
-  Hash_set.iter datas ~f:(fun d -> 
-      if Hash_set.(mem visited d) || Hash_set.(mem gdesc d) then
-        Superset.Core.clear_bad superset d
-    );
-  clear_each superset visited;
-  clear_each superset gdesc;
-  superset  
 
 type extractor = (Superset.t -> Addr.Set.t)
 type ('b) mapextractor = (Superset.t -> 'b Addr.Map.t)
@@ -487,12 +425,10 @@ let exfiltset :(setexfilt) String.Map.t
 
 let featureflist =
   [("Callsites3", extract_trim_callsites);
-   ("LoopsWithBreak", extract_trim_loops_with_break);
    ("ImgEntry",extract_trim_entry);
    (*("SCC", extract_tag_loops)*)
    ("NoExit", extract_trim_noexit);
    ("TrimLimitedClamped" ,extract_trim_limited_clamped);
-   ("TrimFixpointGrammar", extract_trim_fixpoint_grammar);
   ]
 let featuremap = List.fold featureflist ~init:String.Map.empty
     ~f:(fun featuremap (name, f) ->
@@ -504,28 +440,21 @@ let with_featureset ~f ~init featureset superset =
       match Map.(find featuremap fname) with
       | None -> accu
       | Some (feature) ->
-         (* TODO remove debug/console printing code *)
-        print_endline @@ sprintf "with_featureset %s" fname;
         f fname feature accu
     ) in
   superset
 
-(* TODO hide the type of fdists behind an api *)
 let fdists = String.Map.empty
 let fdists = String.Map.set fdists "FixpointGrammar" 1
 let fdists = String.Map.set fdists "Liveness" 12
-(* TODO belongs in report *)
-(* TODO stop using Addr.Map *)
-(* TODO calculate the optimal fdists point value for each feature *)
+
 let make_featurepmap featureset superset = 
   List.fold ~f:(fun (feature_pmap) feature -> 
       let p = Map.find fdists feature in
       let p = Option.value p ~default:2 in
-      print_endline @@ sprintf "searching for: %s" feature;
       match Map.(find exfiltset feature) with
       | None -> feature_pmap
       | Some (extract,filter) -> 
-        print_endline @@ sprintf "make_featurepmap %s" feature;
         let fset = extract superset in
         Set.fold fset ~init:feature_pmap 
           ~f:(fun feature_pmap x -> 
@@ -536,16 +465,8 @@ let make_featurepmap featureset superset =
             )
     ) ~init:Addr.Map.empty featureset
 
-(* TODO belongs in report *)
 let with_featurepmap featureset superset ~f =
   let feature_pmap = make_featurepmap featureset superset in
-  print_endline @@
-    sprintf "make fpmap built size: %d" @@ Map.length feature_pmap;
   let feature_pmap = fixpoint_map superset feature_pmap in
   f feature_pmap featureset superset
 
-(* TODO Often using callsites or other features to protect the
- * code. Could just be a lambda protect superset f *)
-(* TODO tag_callsites doesn't need to exist because it is just
- * descendant traversal *)
-(* TODO move all fixpoint functions to fixpoint *)

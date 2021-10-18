@@ -76,7 +76,7 @@ let superset_disasm options =
         let options = options
       end) in
   let t = Sys.time() in
-  let superset = With_options.with_options () in
+  With_options.with_options () >>= fun superset ->
   KB.promise Metrics.Cache.time (fun o ->
       KB.return (Some (int_of_float (Sys.time() -. t))));
   (* Provide the is_valid label as a check on whether a given

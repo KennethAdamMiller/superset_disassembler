@@ -76,7 +76,7 @@ let make_plots summaries =
   make_plot "Size" "Time" "size_time.png" sizes time;
   ()
 
-(* TODO plot cache, show_cache *)
+(* TODO show_cache *)
 let () =
   let summaries =
     Metadata.with_digests Metadata.cache_corpus_metrics in
