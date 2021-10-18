@@ -95,7 +95,7 @@ let superset_disasm options =
        KB.return @@ Some (Superset.Core.mem superset addr)
     | None -> KB.return None
   );
-  superset
+  KB.return superset
       
 let features_used = [
   "disassembler";
