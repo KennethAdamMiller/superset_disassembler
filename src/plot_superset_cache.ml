@@ -11,17 +11,8 @@ let () = match Bap_main.init () with
      let open Bap_main in
      Bap_main.Extension.Error.pp Format.std_formatter err;
      exit 1
-   
- 
-(* Plots:
-   binary size to occlusive rate (occlusion by occ space)
-   occlusive space to occlusion
-   scatter plot occlusive count and number of occ functions
-   size and processing time
-   least value required for safe convergence
-   number of binaries and occ rate
- *)
-let make_plots summaries =
+
+let transform_summaries summaries = 
   let open Metrics in
   let summaries =
     List.filter_map summaries ~f:(fun s ->
@@ -40,14 +31,26 @@ let make_plots summaries =
           Some fns, Some fps, Some tps, Some time ->
            Some (size, occ, occ_space, fe, clean, fns, fps, tps, time)
       ) in
-  let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
     List.fold summaries ~init:([],[],[],[],[],[],[],[],[])
       ~f:(fun (sizes,occ,occ_space,fe,clean,fns,fps,tps,time) s ->
         let _size,_occ,_occ_space,_fe,_clean,_fns,_fps,_tps,_time = s in
         _size :: sizes, _occ :: occ, _occ_space :: occ_space,
         _fe :: fe,_clean :: clean,_fns :: fns,_fps :: fps,_tps :: tps,
         _time :: time
-      ) in
+      )
+
+  (* Plots:
+   binary size to occlusive rate (occlusion by occ space)
+   occlusive space to occlusion
+   scatter plot occlusive count and number of occ functions
+   size and processing time
+   least value required for safe convergence
+   number of binaries and occ rate
+ *)
+let make_plots summaries =
+  let open Metrics in
+  let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
+    transform_summaries summaries in
   let make_plot xlabel ylabel fname x y = 
     let x  = List.map x ~f:float_of_int in
     let y = List.map y ~f:float_of_int in
@@ -76,9 +79,16 @@ let make_plots summaries =
   make_plot "Size" "Time" "size_time.png" sizes time;
   ()
 
-(* TODO show_cache *)
 let () =
   let summaries =
     Metadata.with_digests Metadata.cache_corpus_metrics in
   make_plots summaries;
+  let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
+    transform_summaries summaries in
+  let tot_fns = List.fold fns ~init:0 ~f:(+) in
+  let tot_occ = List.fold occ ~init:0 ~f:(+) in
+  let tot_occ_space = List.fold fns ~init:0 ~f:(+) in
+  let avg_occ =
+    (float_of_int tot_occ) /. (float_of_int tot_occ_space) in
+  printf "fns: %d, avg occ: %f" tot_fns avg_occ
 

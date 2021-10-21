@@ -333,7 +333,7 @@ let heuristics =
     "Specify the features used to converge upon the true positive set" in
   Extension.Command.parameter ~doc
     Extension.Type.(list string =? Heuristics.defaults)
-    "features"
+    "heuristics"
 
 let invariants =
   let doc = "Specify the desired invariants to apply to the superset" in
