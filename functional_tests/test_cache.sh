@@ -18,7 +18,7 @@ if [[ ! (-z ${analyses}) ]]; then
     args+=" --analyses=${analyses} "
 fi
 if [[ ! (-z ${features}) ]]; then
-    args+=" --features=${features} "
+    args+=" --heuristics=${heuristics} "
 fi
 args+="--rounds=${rounds} "
 echo "time bap superset_disasm --u ${args}"

@@ -3,7 +3,7 @@ echo "=====$0====="
 eval $(opam config env)
 rm -f  ${HOME}/.cache/bap/data/*
 source scripts/read_cache.sh
-export features="TrimLimitedClamped,FixpointGrammar,Liveness"
+export heuristics="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
 export gt_bin="${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
 args="${gt_bin} --ground_truth_bin=${gt_bin} --threshold=0.20 "
@@ -13,8 +13,8 @@ fi
 if [[ ! (-z ${analyses}) ]]; then
     args+=" --analyses=${analyses}"
 fi
-if [[ ! (-z ${features}) ]]; then
-    args+=" --features=${features}"
+if [[ ! (-z ${heuristics}) ]]; then
+    args+=" --heuristics=${heuristics}"
 fi
 args+=" --rounds=${rounds} "
 echo "time bap superset_disasm --u ${args}"
