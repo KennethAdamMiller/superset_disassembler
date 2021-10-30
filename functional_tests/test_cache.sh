@@ -15,7 +15,7 @@ if [[ ! (-z ${analyses}) ]]; then
     args+=" --analyses=\"${analyses}\" "
 fi
 if [[ ! (-z ${heuristics}) ]]; then
-    args+=" --heuristics=\"${heuristics}\" "
+    args+=" --heuristics=${heuristics} "
 fi
 args+="--rounds=${rounds} "
 bap superset_cache --reset_cache ${gt_bin}
