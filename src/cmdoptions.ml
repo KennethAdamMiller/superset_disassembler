@@ -98,7 +98,8 @@ module With_options(Conf : Provider)  = struct
     >>= fun graph ->
     let superset = 
       match graph with
-      | None -> 
+      | None ->
+         printf "no graph\n%!";
          let superset = checkpoint options.target invariants in
          let () = Metrics.set_ground_truth superset in
          let trim = Trim.run in
@@ -109,6 +110,7 @@ module With_options(Conf : Provider)  = struct
            (fun _ -> KB.return @@ Some Superset.ISG.(to_list superset));
          superset
       | Some graph ->
+         printf "had_graph\n%!";
          let graph = Seq.of_list graph in
          let graph =
            Seq.concat @@ Seq.map graph ~f:(fun (s,d) ->

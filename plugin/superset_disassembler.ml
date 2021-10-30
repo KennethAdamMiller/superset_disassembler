@@ -295,9 +295,10 @@ let save_metadata options =
       let c = Option.value metadata
                 ~default:Metadata.Cache_metadata.empty in
       KB.promise Metadata.digests (fun o ->
+          let d = Data.Cache.Digest.(to_string digest) in
           KB.return @@ (Some
                           (Metadata.Cache_metadata.set c
-                             options.target Data.Cache.Digest.(to_string digest)))
+                             options.target d))
         );
     );
   Metadata.save ()

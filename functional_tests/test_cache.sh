@@ -3,7 +3,7 @@ echo "====$0===="
 eval $(opam config env)
 source scripts/read_cache.sh
 #export SUPERSET_FRONTEND=1
-export features="TrimLimitedClamped,FixpointGrammar,Liveness"
+export heuristics="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
 export gt_bin="${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
 args="${gt_bin} --ground_truth_bin=${gt_bin} "
@@ -17,7 +17,7 @@ fi
 if [[ ! (-z ${analyses}) ]]; then
     args+=" --analyses=${analyses} "
 fi
-if [[ ! (-z ${features}) ]]; then
+if [[ ! (-z ${heuristics}) ]]; then
     args+=" --heuristics=${heuristics} "
 fi
 args+="--rounds=${rounds} "
