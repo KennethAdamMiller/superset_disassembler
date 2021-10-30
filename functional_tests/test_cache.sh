@@ -7,18 +7,15 @@ export heuristics="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
 export gt_bin="${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
 args="${gt_bin} --ground_truth_bin=${gt_bin} "
-suff+=" --invariants=\"\""
-suff+=" --analyses=\"\""
-suff+=" --features=\"\""
 echo "Executing for ground truth"
-if [[ ! (-z ${phases}) ]]; then
-    args+=" --invariants=${phases} "
+if [[ ! (-z ${invariants}) ]]; then
+    args+=" --invariants=\"${invariants}\" "
 fi
 if [[ ! (-z ${analyses}) ]]; then
-    args+=" --analyses=${analyses} "
+    args+=" --analyses=\"${analyses}\" "
 fi
 if [[ ! (-z ${heuristics}) ]]; then
-    args+=" --heuristics=${heuristics} "
+    args+=" --heuristics=\"${heuristics}\" "
 fi
 args+="--rounds=${rounds} "
 bap superset_cache --reset_cache ${gt_bin}
