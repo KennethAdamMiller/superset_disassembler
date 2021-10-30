@@ -192,20 +192,6 @@ let dis_with_invariants ?superset bytes invariants =
   let offset_one =
     Superset.Core.mem superset min_addr in
   assert_bool msg (not offset_one)
-  
-let test_tag_non_mem_access test_ctxt =
-  let bytes = "\xa1\xef\xbe\xad\xde\x00\x00\x00\x00" in
-  let mem, arch = make_params bytes in
-  let superset = of_mem Arch.(`x86_64) mem in (
-      match Superset.Core.lookup superset Memory.(min_addr mem) with
-      | Some (mem, insn) ->
-         let expect = Invariants.accesses_non_mem superset mem insn () in
-         let msg = "Expected to find non memory access" in
-         assert_bool msg expect
-      | None -> assert_bool "should be an instruction at 0" false  
-    );
-  dis_with_invariants ~superset bytes
-    [Invariants.tag_success; Invariants.tag_non_mem_access]
 
 let test_tag_non_insn test_ctxt =
   dis_with_invariants "\x0f\xff"
@@ -826,7 +812,6 @@ let () =
       "test_lift" >:: test_lift;
       "test_successor_calculation" >:: test_successor_calculation;
       "test_superset_contains_addr" >:: test_superset_contains_addr;
-      "test_tag_non_mem_access" >:: test_tag_non_mem_access;
       "test_target_not_in_mem" >:: test_target_not_in_mem;
       "test_tag_non_insn" >:: test_tag_non_insn;
       "test_tag_target_is_bad" >:: test_tag_target_is_bad;
