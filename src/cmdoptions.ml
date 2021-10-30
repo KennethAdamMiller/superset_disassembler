@@ -129,16 +129,18 @@ module With_options(Conf : Provider)  = struct
               (total > threshold)) in
         Report.collect_distributions superset threshold pmap;
         let superset = 
-          if options.converge then
+          if options.converge then (
+            printf "converge\n%!";
             let f superset =
-              if options.protect then
+              if options.protect then (
+                printf "protect\n%!";
                 Fixpoint.protect superset (fun superset ->
                     Fixpoint.converge superset options.heuristics feature_pmap
                   )
-              else
+              ) else
                 Fixpoint.converge superset options.heuristics feature_pmap in
             Fixpoint.iterate options.rounds f superset
-          else superset in
+          ) else superset in
         Metrics.compute_metrics superset;
       );
     KB.return superset
