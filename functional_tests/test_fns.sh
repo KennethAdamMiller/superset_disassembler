@@ -17,6 +17,7 @@ if [[ ! (-z ${heuristics}) ]]; then
     args+=" --heuristics=${heuristics}"
 fi
 args+=" --rounds=${rounds} "
+bap superset_cache --reset_cache ${gt_bin}
 echo "time bap superset_disasm --u ${args}"
 time bap superset_disasm --u ${args}
 
@@ -26,3 +27,4 @@ if [ 0 -eq ${fns} ]; then
     echo "${fns}"
     exit -1;
 fi
+bap superset_cache --reset_cache ${gt_bin}

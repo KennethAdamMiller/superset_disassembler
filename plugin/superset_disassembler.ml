@@ -95,7 +95,7 @@ let superset_disasm options =
        KB.return @@ Some (Superset.Core.mem superset addr)
     | None -> KB.return None
   );
-  KB.return superset
+  KB.return ()
       
 let features_used = [
   "disassembler";
@@ -307,8 +307,10 @@ let create_and_process
   let () = save_metadata options in
   let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
-  let () = if not had_knowledge then
-             let _ = superset_disasm options in () else () in
+  let () = Toplevel.exec @@
+    if not had_knowledge then
+      superset_disasm options
+    else KB.return () in
   (match options.ground_truth_bin with
    | Some bin ->
       KB.promise Metrics.Cache.ground_truth_source
@@ -373,6 +375,8 @@ let _superset_disassemble_command : unit =
     fun input outputs loader target update kb
         ground_truth_bin invariants analyses tp_threshold heuristics
         save_dot rounds converge protect ctxt  ->
+    let converge = not converge in
+    let protect = not protect in
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
@@ -484,12 +488,33 @@ let _cache_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $target $update $knowledge
+    $show_cache_digest $reset_cache
   in
   Extension.Command.declare ~doc:man "superset_cache"
     ~requires:features_used args @@
     fun input outputs loader target update kb
+        show_cache_digest reset_cache
         ctxt ->
-    let d = compute_digest input loader ~namespace:"knowledge" in
-    info "%a" Data.Cache.Digest.pp d;
+    let get_digest () =
+      let d = compute_digest input loader in
+      let d = d ~namespace:"knowledge" in
+      Data.Cache.Digest.to_string d in
+    let () = 
+      if reset_cache then
+        let path = get_digest () in
+        let cachedir = Bap_main.Extension.Configuration.cachedir in
+        let l = [ ""; "/data/"; "/data2/"] in
+        List.iter l ~f:(fun s ->
+            let path = cachedir ^ "/" ^ s ^ "/" ^ path in
+            try
+              Sys.remove path;
+            with _ -> ()
+          );
+      else () in
+    let () = 
+      if show_cache_digest then
+        let path = get_digest () in
+        printf "%s\n%!" path
+      else () in
     Ok ()
 

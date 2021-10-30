@@ -21,6 +21,7 @@ if [[ ! (-z ${features}) ]]; then
     args+=" --heuristics=${heuristics} "
 fi
 args+="--rounds=${rounds} "
+bap superset_cache --reset_cache ${gt_bin}
 echo "time bap superset_disasm --u ${args}"
 time bap superset_disasm --u ${args}
 
