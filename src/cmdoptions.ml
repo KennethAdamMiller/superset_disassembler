@@ -99,7 +99,6 @@ module With_options(Conf : Provider)  = struct
     let superset = 
       match graph with
       | None ->
-         printf "no graph\n%!";
          let superset = checkpoint options.target invariants in
          let () = Metrics.set_ground_truth superset in
          let trim = Trim.run in
@@ -110,7 +109,6 @@ module With_options(Conf : Provider)  = struct
            (fun _ -> KB.return @@ Some Superset.ISG.(to_list superset));
          superset
       | Some graph ->
-         printf "had_graph\n%!";
          let graph = Seq.of_list graph in
          let graph =
            Seq.concat @@ Seq.map graph ~f:(fun (s,d) ->
@@ -130,17 +128,18 @@ module With_options(Conf : Provider)  = struct
           Map.filter feature_pmap (fun total ->
               (total > threshold)) in
         Report.collect_distributions superset threshold pmap;
-        if options.converge then
-          let f superset =
-            if options.protect then
-              Fixpoint.protect superset (fun superset ->
-                  Fixpoint.converge superset options.heuristics feature_pmap
-                )
-            else
-              Fixpoint.converge superset options.heuristics feature_pmap in
-          let superset = Fixpoint.iterate options.rounds f superset in
-          Metrics.compute_metrics superset;
-        else ()
+        let superset = 
+          if options.converge then
+            let f superset =
+              if options.protect then
+                Fixpoint.protect superset (fun superset ->
+                    Fixpoint.converge superset options.heuristics feature_pmap
+                  )
+              else
+                Fixpoint.converge superset options.heuristics feature_pmap in
+            Fixpoint.iterate options.rounds f superset
+          else superset in
+        Metrics.compute_metrics superset;
       );
     KB.return superset
        

@@ -7,3 +7,4 @@ cp ./empty ./empty_stripped
 strip ./empty_stripped
 bap superset_disasm  --ground_truth_bin="./empty" --heuristics="${1}" --rounds=2 --threshold="0.99" "empty_stripped" > empty_disasm.txt;
 cat empty_disasm.txt
+rm empty.c empty empty_stripped
