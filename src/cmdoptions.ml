@@ -127,13 +127,12 @@ module With_options(Conf : Provider)  = struct
         let feature_pmap = 
           Map.filter feature_pmap (fun total ->
               (total > threshold)) in
+        printf "pmap %d\n%!" Map.(length pmap);
         Report.collect_distributions superset threshold pmap;
         let superset = 
           if options.converge then (
-            printf "converge\n%!";
             let f superset =
               if options.protect then (
-                printf "protect\n%!";
                 Fixpoint.protect superset (fun superset ->
                     Fixpoint.converge superset options.heuristics feature_pmap
                   )
