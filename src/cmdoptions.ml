@@ -103,8 +103,8 @@ module With_options(Conf : Provider)  = struct
          let () = Metrics.set_ground_truth superset in
          let trim = Trim.run in
          let superset = trim superset in
-         (*let superset = with_analyses superset analyses in
-         let superset = trim superset in*)
+         let superset = with_analyses superset analyses in
+         let superset = trim superset in
          KB.promise Superset.Cache.superset_graph
            (fun _ -> KB.return @@ Some Superset.ISG.(to_list superset));
          superset

@@ -376,6 +376,8 @@ let _superset_disassemble_command : unit =
     fun input outputs loader target update kb
         ground_truth_bin invariants analyses tp_threshold heuristics
         save_dot rounds converge protect ctxt  ->
+    let converge = not converge in
+    let protect = not protect in
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
