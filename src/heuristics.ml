@@ -446,7 +446,7 @@ let with_featureset ~f ~init featureset superset =
 
 let fdists = String.Map.empty
 let fdists = String.Map.set fdists "FixpointGrammar" 1
-let fdists = String.Map.set fdists "Liveness" 4
+let fdists = String.Map.set fdists "Liveness" 1
 
 let make_featurepmap featureset superset = 
   List.fold ~f:(fun (feature_pmap) feature -> 
