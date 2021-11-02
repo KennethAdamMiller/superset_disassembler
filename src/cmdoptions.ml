@@ -115,6 +115,13 @@ module With_options(Conf : Provider)  = struct
                              Seq.of_list [s;d]
                            ) in
          checkpoint ~addrs:graph options.target [] in
+    let f superset = 
+      Heuristics.with_featureset options.heuristics superset
+        ~init:(superset)
+        ~f:(fun fname feature (superset) ->
+          Trim.run @@ feature superset
+        ) in
+    let superset = Fixpoint.iterate options.rounds f superset in
     let pnts_of_percent prcnt =
       Int.of_float (1.0/.(1.0-.prcnt)) in
     let threshold = (pnts_of_percent options.tp_threshold) in
