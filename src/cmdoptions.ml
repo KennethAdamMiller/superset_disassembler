@@ -138,12 +138,15 @@ module With_options(Conf : Provider)  = struct
         let superset = 
           if options.converge then (
             let f superset =
-              if options.protect then (
-                Fixpoint.protect superset (fun superset ->
-                    Fixpoint.converge superset options.heuristics feature_pmap
-                  )
-              ) else
-                Fixpoint.converge superset options.heuristics feature_pmap in
+              let superset = 
+                if options.protect then (
+                  Fixpoint.protect superset (fun superset ->
+                      Fixpoint.converge superset options.heuristics feature_pmap
+                    )
+                ) else
+                  Fixpoint.converge superset options.heuristics
+                    feature_pmap in
+              Trim.run superset in
             Fixpoint.iterate options.rounds f superset
           ) else superset in
         Metrics.compute_metrics superset;
