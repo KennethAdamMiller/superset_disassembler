@@ -1,6 +1,7 @@
 #from malamute import MalamuteClient
 import zmq
 from collections import deque
+import os
 #cli arguments: addr
 
 class dealer:
@@ -26,6 +27,8 @@ class dealer:
         #service.set_worker(b'dealer', b'workqueue')
         with open("binaries.txt","r") as f:
             lines=f.readlines()
+            lines=[s.strip() for s in lines]
+            lines.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             bins=deque(lines)
             sent=set()
             results=set()
@@ -43,6 +46,7 @@ class dealer:
                         s=bins.pop()
                         service.send(str.encode(s))
                         sent.add(s)
+                        print("Sent {} tasks".format(len(sent)))
                         #dealer - provide file names to be processed to workers
                         #service.sendfor(b"dealer", b"workqueue", None, 100, [str.encode(bpath)])
                     if msg==b"exit":
@@ -53,5 +57,6 @@ class dealer:
                 if collector in socks and socks[collector] == zmq.POLLIN:
                     c=collector.recv()
                     results.add(c)
+                    print("Recvd {} results".format(len(results)))
         killed.send(b"")
         killed.recv()

@@ -5,6 +5,21 @@ metadata:
 spec:
   containers:
     - image: superset_disasm_flambda:${TAG}
+      command: python3 scripts/distributor.py
+      volumeMounts:
+      - name: x86_64-binaries
+        mountPath: /home/opam/workspace/x86_64-binaries
+      - name: x86-binaries
+        mountPath: /home/opam/workspace/x86-binaries
+      - name: arm-binaries
+        mountPath: /home/opam/workspace/arm-binaries
+  volumes:
+    - name: x86_64-binaries
+      hostPath: ${HOME}/workspace/x86_64-binaries/
+    - name: x86-binaries
+      hostPath: ${HOME}/workspace/x86-binaries/
+    - name: arm-binaries
+      hostPath: ${HOME}/workspace/arm-binaries/
   ports:
     - name: service
       protocol: TCP
