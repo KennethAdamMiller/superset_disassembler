@@ -18,3 +18,4 @@
 /src/META
 /plugin/superset_disassembler.plugin
 *png
+**/**.pyc
