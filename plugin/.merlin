@@ -8,7 +8,7 @@ PKG landmarks
 PKG bap-future
 PKG bap-knowledge
 PKG uuidm
-
+PKG zmq
 
 S ../src/
 

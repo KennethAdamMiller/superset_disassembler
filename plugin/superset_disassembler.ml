@@ -389,6 +389,73 @@ let _superset_disassemble_command : unit =
     Ok (create_and_process input outputs loader
           target update kb options)
 
+let destination =
+  Extension.Command.parameter Extension.Type.string "destination"
+
+let cache_digest =
+  Extension.Command.parameter Extension.Type.string "cache_digest"
+
+type cache_msg = {
+    digest : string;
+    state  : bigstring;
+  } [@@deriving sexp]
+
+exception Cache_not_present
+let _send_cache : unit =
+  let args =
+    let open Extension.Command in
+    args $input $outputs $loader $target $update $knowledge
+    $destination $cache_digest
+  in
+  let man = "" in 
+  Extension.Command.declare ~doc:man "send_cache"
+    ~requires:features_used args @@
+    fun input outputs loader target update kb
+        destination cache_digest ctxt ->
+    let cache = knowledge_cache () in
+    let d = Data.Cache.Digest.of_string cache_digest in
+    let had = load_cache_with_digest cache d in
+    let () = 
+      if had then
+        let state = Toplevel.current () in
+        let msg = {
+            digest = cache_digest;
+            state = Knowledge.to_bigstring state;
+          } in
+        let msg = Sexp.to_string @@ sexp_of_cache_msg msg in
+        let zmq_ctxt = Zmq.Context.create ()  in
+        let socket = Zmq.Socket.create zmq_ctxt Zmq.Socket.push in
+        let () = Zmq.Socket.connect socket destination in
+        Zmq.Socket.send socket msg
+      else
+        raise Cache_not_present in
+    Ok()
+
+let bind_addr =
+  Extension.Command.parameter Extension.Type.string "bind_addr"
+    
+let _recv_cache : unit =
+  let args =
+    let open Extension.Command in
+    args $input $outputs $loader $target $update $knowledge
+    $bind_addr
+  in
+  let man = "" in 
+  Extension.Command.declare ~doc:man "recv_cache" 
+    ~requires:features_used args @@
+    fun input outputs loader target update kb
+        bind_addr ctxt ->
+    let zmq_ctxt = Zmq.Context.create ()  in
+    let socket = Zmq.Socket.create zmq_ctxt Zmq.Socket.pull in
+    let () = Zmq.Socket.bind socket bind_addr in
+    let s = cache_msg_of_sexp @@ Sexp.of_string
+            @@ Zmq.Socket.recv socket in
+    let { digest; state; } = s in
+    let state = Knowledge.of_bigstring state in
+    let cache = knowledge_cache () in
+    let d = Data.Cache.Digest.of_string digest in
+    Ok (Data.Cache.save cache d state)
+
 let metrics =
   let doc =
     sprintf "%s%s%s%s"
