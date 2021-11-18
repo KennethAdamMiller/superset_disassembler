@@ -407,7 +407,9 @@ let _send_cache : unit =
     args $input $outputs $loader $target $update $knowledge
     $destination $cache_digest
   in
-  let man = "" in 
+  let man =
+    "Send a cache state to a designated address. Ex: tcp://host:port"
+  in 
   Extension.Command.declare ~doc:man "send_cache"
     ~requires:features_used args @@
     fun input outputs loader target update kb
@@ -440,7 +442,9 @@ let _recv_cache : unit =
     args $input $outputs $loader $target $update $knowledge
     $bind_addr
   in
-  let man = "" in 
+  let man =
+    "Receive a cache state on the given address bound to. Ex:" ^
+      "tcp://*:<port>" in 
   Extension.Command.declare ~doc:man "recv_cache" 
     ~requires:features_used args @@
     fun input outputs loader target update kb
@@ -473,6 +477,7 @@ let _distribution_command : unit =
     $ground_truth_bin $invariants $analyses
     $tp_threshold $heuristics $rounds
     $converge $metrics in
+  let man = "Perform computational operations on the cache" in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
     fun input outputs loader target update kb
@@ -558,6 +563,7 @@ let _cache_command : unit =
     args $input $outputs $loader $target $update $knowledge
     $show_cache_digest $reset_cache
   in
+  let man = "Apply operations to the superset cache" in
   Extension.Command.declare ~doc:man "superset_cache"
     ~requires:features_used args @@
     fun input outputs loader target update kb
