@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: broker:${TAG}
+  name: broker-${TAG}
 spec:
   containers:
     - image: superset_disasm_flambda:${TAG}
@@ -33,3 +33,7 @@ spec:
       protocol: TCP
       port: 9997
       targetPort: 9997
+    - name: cache_transfer
+      protocol: TCP
+      port: 9996
+      targetPort: 9996

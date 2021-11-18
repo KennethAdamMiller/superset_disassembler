@@ -4,9 +4,7 @@ from distributor import dealer
 import zmq
 
 context=zmq.Context()
-def count(msg):
-    pass
-w=worker("localhost", ctxt=context, work=count)
+w=worker("localhost", ctxt=context)
 d=dealer(ctxt=context)
 
 def run_worker(w):

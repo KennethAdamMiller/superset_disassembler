@@ -304,7 +304,7 @@ let save_metadata options =
   Metadata.save ()
   
 let create_and_process
-      input outputs loader target update kb options =
+      input outputs loader update kb options =
   let () = save_metadata options in
   let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
@@ -367,13 +367,13 @@ let protect =
 let _superset_disassemble_command : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $target $update $knowledge
+    args $input $outputs $loader $update $knowledge
     $ground_truth_bin $invariants $analyses $tp_threshold $heuristics
     $save_dot $rounds $converge $protect
   in
   Extension.Command.declare ~doc:man "superset_disasm"
     ~requires:features_used args @@
-    fun input outputs loader target update kb
+    fun input outputs loader update kb
         ground_truth_bin invariants analyses tp_threshold heuristics
         save_dot rounds converge protect ctxt  ->
     let converge = not converge in
@@ -387,7 +387,7 @@ let _superset_disassemble_command : unit =
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
     Ok (create_and_process input outputs loader
-          target update kb options)
+          update kb options)
 
 let destination =
   Extension.Command.parameter Extension.Type.string "destination"
@@ -404,7 +404,7 @@ exception Cache_not_present
 let _send_cache : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $target $update $knowledge
+    args $input $outputs $loader $update $knowledge
     $destination $cache_digest
   in
   let man =
@@ -412,7 +412,7 @@ let _send_cache : unit =
   in 
   Extension.Command.declare ~doc:man "send_cache"
     ~requires:features_used args @@
-    fun input outputs loader target update kb
+    fun input outputs loader update kb
         destination cache_digest ctxt ->
     let cache = knowledge_cache () in
     let d = Data.Cache.Digest.of_string cache_digest in
@@ -435,30 +435,37 @@ let _send_cache : unit =
 
 let bind_addr =
   Extension.Command.parameter Extension.Type.string "bind_addr"
-    
+
+let perpetuate =
+  Extension.Command.flag "perpetuate"
+
 let _recv_cache : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $target $update $knowledge
-    $bind_addr
+    args $outputs $loader $update $knowledge
+    $bind_addr $perpetuate
   in
   let man =
     "Receive a cache state on the given address bound to. Ex:" ^
       "tcp://*:<port>" in 
   Extension.Command.declare ~doc:man "recv_cache" 
     ~requires:features_used args @@
-    fun input outputs loader target update kb
-        bind_addr ctxt ->
+    fun outputs loader update kb
+        bind_addr perpetuate ctxt ->
     let zmq_ctxt = Zmq.Context.create ()  in
     let socket = Zmq.Socket.create zmq_ctxt Zmq.Socket.pull in
     let () = Zmq.Socket.bind socket bind_addr in
-    let s = cache_msg_of_sexp @@ Sexp.of_string
-            @@ Zmq.Socket.recv socket in
-    let { digest; state; } = s in
-    let state = Knowledge.of_bigstring state in
-    let cache = knowledge_cache () in
-    let d = Data.Cache.Digest.of_string digest in
-    Ok (Data.Cache.save cache d state)
+    let ran = ref false in
+    Ok (while perpetuate || (not !ran) do
+      let s = cache_msg_of_sexp @@ Sexp.of_string
+              @@ Zmq.Socket.recv socket in
+      let { digest; state; } = s in
+      let state = Knowledge.of_bigstring state in
+      let cache = knowledge_cache () in
+      let d = Data.Cache.Digest.of_string digest in
+      Data.Cache.save cache d state;
+      ran := true;
+    done)
 
 let metrics =
   let doc =
@@ -473,14 +480,14 @@ let metrics =
 let _distribution_command : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $target $update $knowledge
+    args $input $outputs $loader $update $knowledge
     $ground_truth_bin $invariants $analyses
     $tp_threshold $heuristics $rounds
     $converge $metrics in
   let man = "Perform computational operations on the cache" in
   Extension.Command.declare ~doc:man "superset_distribution"
     ~requires:features_used args @@
-    fun input outputs loader target update kb
+    fun input outputs loader update kb
         ground_truth_bin invariants
         analyses tp_threshold heuristics rounds 
         converge metrics
@@ -560,13 +567,13 @@ let reset_cache =
 let _cache_command : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $target $update $knowledge
+    args $input $outputs $loader $update $knowledge
     $show_cache_digest $reset_cache
   in
   let man = "Apply operations to the superset cache" in
   Extension.Command.declare ~doc:man "superset_cache"
     ~requires:features_used args @@
-    fun input outputs loader target update kb
+    fun input outputs loader update kb
         show_cache_digest reset_cache
         ctxt ->
     let get_digest () =

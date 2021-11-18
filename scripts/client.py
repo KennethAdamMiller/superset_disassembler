@@ -1,8 +1,6 @@
 import zmq
-import subprocess
-#from malamute import MalamuteClient
+import socket
 
-#TODO setup the cli arguments: addr, corpora dirs,
 class worker:
     def skip(arg):
         pass
@@ -15,8 +13,6 @@ class worker:
         else:
             self.context = ctxt
     def run(self):
-        #worker = MalamuteClient()
-        #worker.connect(addr, 100, b'dealer')
         worker = self.context.socket(zmq.REQ)
         worker.connect("tcp://" + self.addr + ":9999")
         results=self.context.socket(zmq.PUSH)
@@ -34,13 +30,10 @@ class worker:
                 msg=worker.recv()
                 if msg is not None:
                     msg = msg.decode("utf-8")
-                    #results.send(str.encode(msg))
+                    #results.send(socket.gethostname() + ":" + msg)
                     self.processed.add(msg)
-                    self.work(msg)
+                    self.work(self.addr, msg)
                 worker.send(b"request work")
-            #[subject,content] = msg
-            #receive shutdown command
-            #if subject==b"command":
             if killed in socks and socks[killed] == zmq.POLLIN:
                 killed.recv()
                 killed.send(b"")

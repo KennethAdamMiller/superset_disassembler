@@ -1,56 +1,65 @@
-#from malamute import MalamuteClient
 import zmq
 from collections import deque
 import os
-#cli arguments: addr
+import time
 
 class dealer:
-    def __init__(self, ctxt=None):
+    def skip(self):
+        pass
+    def __init__(self, ctxt=None, work=skip):
+        self.work=work
         if ctxt is None:
             self.context = zmq.Context()
         else:
             self.context = ctxt
     def run(self):
-        #channels: command, collect, controller, dealer
-        #service = MalamuteClient()
-        
         service = self.context.socket(zmq.REP)
         collector = self.context.socket(zmq.PULL)
         killed = self.context.socket(zmq.REQ)
-        #service.connect(addr, 100, b'distribution')
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
         killed.bind("tcp://*:9997")
-        #service.set_worker(b'command', b'binaries')
-        #service.set_worker(b'collect', b'cache')
-        #service.set_worker(b'controller', b'command')
-        #service.set_worker(b'dealer', b'workqueue')
         with open("binaries.txt","r") as f:
-            lines=f.readlines()
-            lines=[s.strip() for s in lines]
-            lines.sort(key=lambda f: os.stat(f).st_size, reverse=True)
+            bins=f.readlines()
+            bins=[s.strip() for s in lines]
+            bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
+            reordered=deque(lines)
+            bins=[]
+            while len(reordered)>0:
+                bins.append(reordered.pop())
+                bins.append(reordered.popleft())
             bins=deque(lines)
-            sent=set()
+            sent=deque()
             results=set()
             poller=zmq.Poller()
             poller.register(service, zmq.POLLIN)
             poller.register(collector, zmq.POLLIN)
+            transfer_cmd="bap recv_cache --perpetuate --bind_addr=tcp://*:9996"
+            transfer_cmd=transfer_cmd.split(" ")
+            #transfer=subprocess.Popen(transfer_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             do_work=True
+            worker_timeout=45*60
             while do_work and (len(bins)!=0):
-                #cmd,sender,subject,content = msg
-                #[subject, content] = msg
-                socks = dict(poller.poll())
+                socks = dict(poller.poll(timeout=1000))
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
                     if msg==b"request work" and do_work:
                         s=bins.pop()
                         service.send(str.encode(s))
-                        sent.add(s)
+                        sent.appendleft((s,time.time()))
                         print("Sent {} tasks".format(len(sent)))
-                        #dealer - provide file names to be processed to workers
-                        #service.sendfor(b"dealer", b"workqueue", None, 100, [str.encode(bpath)])
+                    if msg==b"progress report" and do_work:
+                        pass
                     if msg==b"exit":
                         do_work=False
+                    while len(sent) > 0:
+                        (s,t) = sent.pop()
+                        elapsed = time.time() - t
+                        if elapsed > worker_timeout:
+                            bins.append(s)
+                        else:
+                            sent.appendleft((s,t))
+                            break
                 #collect - upon reciept of a branch and commit, keep broadcast
                 #a request for every file name to be recovered from cache
                 #until all have been fulfilled
@@ -58,5 +67,6 @@ class dealer:
                     c=collector.recv()
                     results.add(c)
                     print("Recvd {} results".format(len(results)))
+        #transfer.communicate() #TODO
         killed.send(b"")
         killed.recv()
