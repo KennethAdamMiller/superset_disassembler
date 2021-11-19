@@ -6,7 +6,7 @@ spec:
  containers:
    - name: superset-disasm-flambda-${TAG}
      image: superset_disasm_flambda:${TAG}
-     command: [ scripts/run_broker.sh ]
+     command: [ /bin/bash, scripts/run_broker.sh ]
      volumeMounts:
      - name: x86-64-binaries
        mountPath: /home/opam/workspace/x86_64-binaries
