@@ -8,12 +8,12 @@ spec:
      image: superset_disasm_flambda:${TAG}
      command: [ /bin/bash, scripts/run_broker.sh ]
      volumeMounts:
-     - name: x86-64-binaries
-       mountPath: /home/opam/workspace/x86_64-binaries
-     - name: x86-binaries
-       mountPath: /home/opam/workspace/x86-binaries
-     - name: arm-binaries
-       mountPath: /home/opam/workspace/arm-binaries
+       - name: x86-64-binaries
+         mountPath: /home/opam/workspace/x86_64-binaries
+       - name: x86-binaries
+         mountPath: /home/opam/workspace/x86-binaries
+       - name: arm-binaries
+         mountPath: /home/opam/workspace/arm-binaries
      ports:
        - name: service
          containerPort: 9999
