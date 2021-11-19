@@ -1,5 +1,5 @@
 source scripts/tag.sh
-export replicas=$(($(kubectl get nodes | wc -l) - 1))
+export replicas=1
 cat ../configs/analysis.yaml | envsubst | kubectl apply
-#set the correct autoscaling
+export test_size=1
 cat ../configs/broker.yaml | envsubst | kubectl apply
