@@ -1,39 +1,40 @@
 apiVersion: v1
-kind: Service
+kind: Pod
 metadata:
-  name: broker-${TAG}
+ name: broker-${TAG}
 spec:
-  containers:
-    - image: superset_disasm_flambda:${TAG}
-      command: scripts/run_broker.sh
-      volumeMounts:
-      - name: x86_64-binaries
-        mountPath: /home/opam/workspace/x86_64-binaries
-      - name: x86-binaries
-        mountPath: /home/opam/workspace/x86-binaries
-      - name: arm-binaries
-        mountPath: /home/opam/workspace/arm-binaries
-  volumes:
-    - name: x86_64-binaries
-      hostPath: ${HOME}/workspace/x86_64-binaries/
-    - name: x86-binaries
-      hostPath: ${HOME}/workspace/x86-binaries/
-    - name: arm-binaries
-      hostPath: ${HOME}/workspace/arm-binaries/
-  ports:
-    - name: service
-      protocol: TCP
-      port: 9999
-      targetPort: 9999
-    - name: collector
-      protocol: TCP
-      port: 9998
-      targetPort: 9998
-    - name: killed
-      protocol: TCP
-      port: 9997
-      targetPort: 9997
-    - name: cache_transfer
-      protocol: TCP
-      port: 9996
-      targetPort: 9996
+ containers:
+   - name: superset-disasm-flambda-${TAG}
+     image: superset_disasm_flambda:${TAG}
+     command: [ "scripts/run_broker.sh" ]
+     volumeMounts:
+     - name: x86-64-binaries
+       mountPath: /home/opam/workspace/x86_64-binaries
+     - name: x86-binaries
+       mountPath: /home/opam/workspace/x86-binaries
+     - name: arm-binaries
+       mountPath: /home/opam/workspace/arm-binaries
+     ports:
+       - name: service
+         containerPort: 9999
+         hostPort: 9999
+       - name: collector
+         containerPort: 9998
+         hostPort: 9998
+       - name: killed
+         containerPort: 9997
+         hostPort: 9997
+       - name: cache-transfer
+         containerPort: 9996
+         hostPort: 9996
+ volumes:
+   - name: x86-64-binaries
+     hostPath: 
+       path: ${HOME}/workspace/x86_64-binaries/
+   - name: x86-binaries
+     hostPath: 
+       path: ${HOME}/workspace/x86-binaries/
+   - name: arm-binaries
+     hostPath: 
+       path: ${HOME}/workspace/arm-binaries/
+
