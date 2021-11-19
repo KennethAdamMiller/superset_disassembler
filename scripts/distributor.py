@@ -21,14 +21,14 @@ class dealer:
         killed.bind("tcp://*:9997")
         with open("binaries.txt","r") as f:
             bins=f.readlines()
-            bins=[s.strip() for s in lines]
+            bins=[s.strip() for s in bins]
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
-            reordered=deque(lines)
+            reordered=deque(bins)
             bins=[]
             while len(reordered)>0:
                 bins.append(reordered.pop())
                 bins.append(reordered.popleft())
-            bins=deque(lines)
+            bins=deque(bins)
             sent=deque()
             results=set()
             poller=zmq.Poller()

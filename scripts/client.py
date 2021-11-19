@@ -2,7 +2,7 @@ import zmq
 import socket
 
 class worker:
-    def skip(arg):
+    def skip(addr, msg):
         pass
     def __init__(self, addr, ctxt=None, work=skip):
         self.addr=addr
