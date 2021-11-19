@@ -16,5 +16,5 @@ def run_bap(addr, msg):
     transfer.communicate()
 
 context=zmq.Context()
-worker(sys.argv[1], ctxt=context, work=run_bap)
-worker.run()
+w=worker(sys.argv[1], ctxt=context, work=run_bap)
+w.run()
