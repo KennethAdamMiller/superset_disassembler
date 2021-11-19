@@ -5,15 +5,15 @@ metadata:
 spec:
  containers:
    - name: superset-disasm-flambda-${TAG}
-     image: ${registry}superset_disasm_flambda:${TAG}
+     image: superset_disasm_flambda:${TAG}
      command: [ /bin/bash, scripts/run_broker.sh ]
      volumeMounts:
      - name: x86-64-binaries
-       mountPath: ${HOME}/workspace/x86_64-binaries/
+       mountPath: /home/opam/workspace/x86_64-binaries
      - name: x86-binaries
-       mountPath: ${HOME}/workspace/x86-binaries/
+       mountPath: /home/opam/workspace/x86-binaries
      - name: arm-binaries
-       mountPath: ${HOME}/workspace/arm-binaries/
+       mountPath: /home/opam/workspace/arm-binaries
      ports:
        - name: service
          containerPort: 9999
@@ -30,11 +30,11 @@ spec:
  volumes:
    - name: x86-64-binaries
      hostPath: 
-       path: /home/opam/workspace/x86_64-binaries
+       path: ${HOME}/workspace/x86_64-binaries/
    - name: x86-binaries
      hostPath: 
-       path: /home/opam/workspace/x86-binaries
+       path: ${HOME}/workspace/x86-binaries/
    - name: arm-binaries
      hostPath: 
-       path: /home/opam/workspace/arm-binaries
+       path: ${HOME}/workspace/arm-binaries/
 
