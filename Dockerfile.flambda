@@ -19,11 +19,9 @@ WORKDIR /home/opam
 #TODO this should use git clone
 RUN mkdir -p /home/opam/workspace/superset_disasm/scripts
 WORKDIR $HOME/workspace/superset_disasm
-COPY ./scripts/install_malamute.sh ./scripts
-RUN scripts/install_malamute.sh
 
 USER opam
-RUN sudo apt-get update && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections && sudo apt-get install dc time parallel -y # && sudo apt-get install python3-pip -y && pip3 install matplotlib
+RUN sudo apt-get update && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections && sudo apt-get install dc time parallel -y # && sudo apt-get install python3-pip -y && pip3 install matplotlib pyzmq
 RUN DEBIAN_FRONTEND=noninteractive opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks gnuplot && eval `opam config env` && bap-byteweight update
 
 USER root

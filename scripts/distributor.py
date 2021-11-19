@@ -49,7 +49,8 @@ class dealer:
                         sent.appendleft((s,time.time()))
                         print("Sent {} tasks".format(len(sent)))
                     if msg==b"progress report" and do_work:
-                        pass
+                        report="Processed {}, {} remaining.\n{}".format(len(results), len(bins), bins)
+                        service.send(report)
                     if msg==b"exit":
                         do_work=False
                     while len(sent) > 0:
@@ -66,7 +67,7 @@ class dealer:
                 if collector in socks and socks[collector] == zmq.POLLIN:
                     c=collector.recv()
                     results.add(c)
-                    print("Recvd {} results".format(len(results)))
+                    print("Recvd {}, {} total".format(c,len(results)))
         #transfer.communicate() #TODO
         killed.send(b"")
         killed.recv()

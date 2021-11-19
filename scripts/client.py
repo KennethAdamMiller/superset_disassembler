@@ -30,7 +30,7 @@ class worker:
                 msg=worker.recv()
                 if msg is not None:
                     msg = msg.decode("utf-8")
-                    #results.send(socket.gethostname() + ":" + msg)
+                    results.send(str.encode(socket.gethostname() + ":" + msg))
                     self.processed.add(msg)
                     self.work(self.addr, msg)
                 worker.send(b"request work")

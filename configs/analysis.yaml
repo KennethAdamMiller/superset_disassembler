@@ -3,6 +3,7 @@ kind: Service
 metadata:
   name: analysis_worker:${TAG}
 spec:
+  replicas: ${replicas}
   containers:
     - image: superset_disasm_flambda:${TAG}
       command: python3 scripts/analyze.py ${TAG}
