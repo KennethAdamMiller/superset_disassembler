@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - image: superset_disasm_flambda:${TAG}
-      command: python3 scripts/distributor.py
+      command: scripts/run_broker.sh
       volumeMounts:
       - name: x86_64-binaries
         mountPath: /home/opam/workspace/x86_64-binaries
