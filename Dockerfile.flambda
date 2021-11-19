@@ -22,7 +22,7 @@ WORKDIR $HOME/workspace/superset_disasm
 
 USER opam
 RUN sudo apt-get update && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections && sudo apt-get install dc time parallel -y && sudo apt-get install python3-pip -y && pip3 install matplotlib pyzmq
-RUN DEBIAN_FRONTEND=noninteractive opam depext --install bap-byteweight-frontend.${BAPVERSION} landmarks gnuplot && eval `opam config env` && bap-byteweight update
+RUN DEBIAN_FRONTEND=noninteractive opam depext --install bap-byteweight-frontend.${BAPVERSION} zmq zmq-async landmarks gnuplot && eval `opam config env` && bap-byteweight update
 
 USER root
 COPY ./ /home/opam/workspace/superset_disasm/
