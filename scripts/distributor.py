@@ -26,8 +26,10 @@ class dealer:
             reordered=deque(bins)
             bins=[]
             while len(reordered)>0:
-                bins.append(reordered.pop())
-                bins.append(reordered.popleft())
+                if len(reordered) %2 == 0:
+                    bins.append(reordered.pop())
+                else:
+                    bins.append(reordered.popleft())
             bins=deque(bins)
             sent=deque()
             results=set()
