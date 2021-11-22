@@ -1,2 +1,2 @@
 ./scripts/get_binaries.sh
-python3 scripts/distributor.py
+python3 scripts/run_broker.py
