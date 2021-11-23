@@ -6,7 +6,8 @@ import time
 class dealer:
     def skip(self):
         pass
-    def __init__(self, ctxt=None, work=skip):
+    def __init__(self, ctxt=None, work=skip, test_size):
+        self.test_size=test_size
         self.work=work
         if ctxt is None:
             self.context = zmq.Context()
@@ -25,7 +26,7 @@ class dealer:
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             reordered=deque(bins)
             bins=[]
-            while len(reordered)>0:
+            while len(reordered)>0 && len(reordered) < test_size:
                 if len(reordered) %2 == 0:
                     bins.append(reordered.pop())
                 else:
