@@ -26,7 +26,7 @@ class dealer:
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             reordered=deque(bins)
             bins=[]
-            while len(reordered)>0 and len(reordered) < test_size:
+            while len(reordered)>0 and len(reordered) < self.test_size:
                 if len(reordered) %2 == 0:
                     bins.append(reordered.pop())
                 else:
