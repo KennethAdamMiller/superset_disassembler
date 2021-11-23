@@ -6,7 +6,7 @@ import time
 class dealer:
     def skip(self):
         pass
-    def __init__(self, ctxt=None, work=skip, test_size):
+    def __init__(self, test_size, ctxt=None, work=skip):
         self.test_size=test_size
         self.work=work
         if ctxt is None:
