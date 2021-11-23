@@ -3,6 +3,9 @@ kind: Pod
 metadata:
  name: broker-${TAG}
 spec:
+ selector:
+   matchLabels:
+     app: broker
  containers:
    - name: superset-disasm-flambda-${TAG}
      image: superset_disasm_flambda:${TAG}

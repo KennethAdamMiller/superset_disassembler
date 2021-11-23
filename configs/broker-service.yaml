@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker-service
+spec:
+  selector:
+    app: broker
+  ports:
+    - name: service
+      protocol: TCP
+      port: 9999
+      targetPort: 9999
+    - name: collector
+      protocol: TCP
+      port: 9998
+      targetPort: 9998
+    - name: killed
+      protocol: TCP
+      port: 9997
+      targetPort: 9997
+    - name: cache-transfer
+      protocol: TCP
+      port: 9996
+      targetPort: 9996
+
