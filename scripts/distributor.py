@@ -7,7 +7,7 @@ class dealer:
     def skip(self):
         pass
     def __init__(self, test_size, ctxt=None, work=skip):
-        self.test_size=test_size
+        self.test_size=int(test_size)
         self.work=work
         if ctxt is None:
             self.context = zmq.Context()
