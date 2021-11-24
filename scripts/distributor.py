@@ -44,9 +44,9 @@ class dealer:
             worker_timeout=45*60
             while do_work and (len(bins)!=0):
                 socks = dict(poller.poll())
+                print("msg received!")
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
-                    print("msg received!")
                     print(msg)
                     if msg==b"request work" and do_work:
                         s=bins.pop()
@@ -75,5 +75,6 @@ class dealer:
                     results.add(c)
                     print("Recvd {}, {} total".format(c,len(results)))
         #transfer.communicate() #TODO
+        print("broker exiting")
         killed.send(b"")
         killed.recv()

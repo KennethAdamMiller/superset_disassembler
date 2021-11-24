@@ -39,3 +39,4 @@ class worker:
                 killed.send(b"")
                 do_work=False
                 break
+        print("Worker exiting")
