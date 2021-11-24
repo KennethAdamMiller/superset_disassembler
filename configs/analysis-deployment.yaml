@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ name: analysis-${TAG}
+spec:
+  selector:
+    matchLabels:
+      app: analysis-${TAG}
+  template:
+    metadata:
+      labels:
+        app: analysis-${TAG}
+    spec:
+     containers:
+       - name:  superset-disasm-flambda-${TAG}
+         image: ${registry}superset_disasm_flambda:${TAG}
+         command: [ "python3", "scripts/analyze.py", "broker-service-${TAG}" ]
+         volumeMounts:
+         - name: x86-64-binaries
+           mountPath: /home/opam/workspace/x86_64-binaries
+         - name: x86-binaries
+           mountPath: /home/opam/workspace/x86-binaries
+         - name: arm-binaries
+           mountPath: /home/opam/workspace/arm-binaries
+     volumes:
+       - name: x86-64-binaries
+         hostPath: 
+           path: ${HOME}/workspace/x86_64-binaries/
+       - name: x86-binaries
+         hostPath: 
+           path: ${HOME}/workspace/x86-binaries/
+       - name: arm-binaries
+         hostPath: 
+           path: ${HOME}/workspace/arm-binaries/
+ 

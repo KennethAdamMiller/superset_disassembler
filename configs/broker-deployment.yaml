@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broker-${TAG}
+spec:
+  selector:
+    matchLabels:
+      app: broker-${TAG}
+  template:
+    metadata:
+     name: broker-${TAG}
+     labels:
+       app: broker-${TAG}
+    spec:
+     containers:
+       - name: superset-disasm-flambda-${TAG}
+         image: ${registry}superset_disasm_flambda:${TAG}
+         command: [ /bin/bash, /home/opam/workspace/superset_disasm/scripts/run_broker.sh, "${test_size}" ]
+         volumeMounts:
+           - name: x86-64-binaries
+             mountPath: /home/opam/workspace/x86_64-binaries
+           - name: x86-binaries
+             mountPath: /home/opam/workspace/x86-binaries
+           - name: arm-binaries
+             mountPath: /home/opam/workspace/arm-binaries
+         ports:
+           - name: service
+             containerPort: 9999
+           - name: collector
+             containerPort: 9998
+           - name: killed
+             containerPort: 9997
+           - name: cache-transfer
+             containerPort: 9996
+     volumes:
+       - name: x86-64-binaries
+         hostPath: 
+           path: ${HOME}/workspace/x86_64-binaries/
+       - name: x86-binaries
+         hostPath: 
+           path: ${HOME}/workspace/x86-binaries/
+       - name: arm-binaries
+         hostPath: 
+           path: ${HOME}/workspace/arm-binaries/
+  
