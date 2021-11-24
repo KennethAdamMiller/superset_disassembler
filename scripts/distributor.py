@@ -43,7 +43,7 @@ class dealer:
             do_work=True
             worker_timeout=45*60
             while do_work and (len(bins)!=0):
-                socks = dict(poller.poll(timeout=1000))
+                socks = dict(poller.poll())
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
                     print("msg received!")
