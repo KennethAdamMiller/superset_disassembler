@@ -4,7 +4,8 @@ metadata:
   name: broker-service
 spec:
   selector:
-    app: broker
+    app: broker-${TAG}
+  type: ClusterIP
   ports:
     - name: service
       protocol: TCP
@@ -22,4 +23,8 @@ spec:
       protocol: TCP
       port: 9996
       targetPort: 9996
+    - name: test
+      protocol: TCP
+      port: 5555
+      targetPort: 5555
 
