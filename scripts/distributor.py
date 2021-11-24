@@ -57,6 +57,7 @@ class dealer:
                         report="Processed {}, {} remaining.\n{}".format(len(results), len(bins), bins)
                         service.send(report)
                     if msg==b"exit":
+                        service.send(b"exit received")
                         do_work=False
                     while len(sent) > 0:
                         (s,t) = sent.pop()
