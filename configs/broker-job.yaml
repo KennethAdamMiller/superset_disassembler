@@ -1,11 +1,8 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
   name: broker-${TAG}
 spec:
-  selector:
-    matchLabels:
-      app: broker-${TAG}
   template:
     metadata:
      name: broker-${TAG}
@@ -32,6 +29,7 @@ spec:
              containerPort: 9997
            - name: cache-transfer
              containerPort: 9996
+     restartPolicy: OnFailure
      volumes:
        - name: x86-64-binaries
          hostPath: 

@@ -1,11 +1,8 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
  name: analysis-${TAG}
 spec:
-  selector:
-    matchLabels:
-      app: analysis-${TAG}
   template:
     metadata:
       labels:
@@ -22,6 +19,7 @@ spec:
            mountPath: /home/opam/workspace/x86-binaries
          - name: arm-binaries
            mountPath: /home/opam/workspace/arm-binaries
+     restartPolicy: OnFailure
      volumes:
        - name: x86-64-binaries
          hostPath: 
