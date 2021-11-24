@@ -19,3 +19,7 @@ cat tests.txt
 echo "====test_distribution.py===="
 python3 ./functional_tests/test_distribution.py
 echo "====test_distribution.py terminated===="
+
+echo "====test_broker_client.py===="
+python3 ./functional_tests/test_broker_client.py
+echo "====test_broker_client.py terminated===="
