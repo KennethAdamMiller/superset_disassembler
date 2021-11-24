@@ -46,6 +46,8 @@ class dealer:
                 socks = dict(poller.poll(timeout=1000))
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
+                    print("msg received!")
+                    print(msg)
                     if msg==b"request work" and do_work:
                         s=bins.pop()
                         service.send(str.encode(s))
