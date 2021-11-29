@@ -3,6 +3,7 @@ kind: Job
 metadata:
  name: analysis-${TAG}
 spec:
+  parallelism: ${cores}
   template:
     metadata:
       labels:

@@ -1,5 +1,6 @@
 import zmq
 import socket
+import os
 
 class worker:
     def skip(addr, msg):
@@ -28,13 +29,16 @@ class worker:
             socks = dict(poller.poll())
             if worker in socks and socks[worker] == zmq.POLLIN:
                 msg=worker.recv()
+                print("worker recvd {}".format(msg))
                 if msg is not None:
                     msg = msg.decode("utf-8")
+                    msg = os.path.expandvars(msg)
                     results.send(str.encode(socket.gethostname() + ":" + msg))
                     self.processed.add(msg)
                     self.work(self.addr, msg)
                 worker.send(b"request work")
             if killed in socks and socks[killed] == zmq.POLLIN:
+                print("killed recvd msg")
                 killed.recv()
                 killed.send(b"")
                 do_work=False
