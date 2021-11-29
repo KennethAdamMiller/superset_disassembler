@@ -5,7 +5,7 @@ rm -f  ${HOME}/.cache/bap/data/*
 source scripts/read_cache.sh
 export heuristics="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
-export gt_bin="${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
+export gt_bin="/Volumes/corpus/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
 args="${gt_bin} --ground_truth_bin=${gt_bin} --threshold=0.20 "
 if [[ ! (-z ${phases}) ]]; then
     args+=" --invariants=${phases}"

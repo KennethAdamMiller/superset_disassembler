@@ -23,9 +23,8 @@ class dealer:
         with open("binaries.txt","r") as f:
             bins=f.readlines()
             bins=[s.strip() for s in bins]
-            bins_sorted=[os.path.expandvars(s) for s in bins]
-            bins_sorted.sort(key=lambda f: os.stat(f).st_size, reverse=False)
-            reordered=deque(bins_sorted)
+            bins.sort(key=lambda f: os.stat(f).st_size, reverse=False)
+            reordered=deque(bins)
             bins=[]
             while len(reordered)>0 and len(reordered) < self.test_size:
                 if len(reordered) %2 == 0:
@@ -43,6 +42,7 @@ class dealer:
             #transfer=subprocess.Popen(transfer_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             do_work=True
             worker_timeout=45*60
+            print(len(bins))
             while do_work and (len(bins)!=0):
                 socks = dict(poller.poll())
                 print("msg received!")

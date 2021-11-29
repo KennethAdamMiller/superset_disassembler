@@ -20,6 +20,8 @@ spec:
              mountPath: /home/opam/workspace/x86-binaries
            - name: arm-binaries
              mountPath: /home/opam/workspace/arm-binaries
+           - name: caches
+             mountPath: /home/opam/.cache/bap
          ports:
            - name: service
              containerPort: 9999
@@ -33,11 +35,14 @@ spec:
      volumes:
        - name: x86-64-binaries
          hostPath: 
-           path: ${HOME}/workspace/x86_64-binaries/
+           path: /Volumes/corpus/x86_64-binaries/
        - name: x86-binaries
          hostPath: 
-           path: ${HOME}/workspace/x86-binaries/
+           path: /Volumes/corpus/x86-binaries/
        - name: arm-binaries
          hostPath: 
-           path: ${HOME}/workspace/arm-binaries/
+           path: /Volumes/corpus/arm-binaries/
+       - name: caches
+         hostPath:
+           path: /Volumes/caches/${TAG}/
   

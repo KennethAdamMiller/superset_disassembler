@@ -5,7 +5,7 @@ source scripts/read_cache.sh
 #export SUPERSET_FRONTEND=1
 export heuristics="TrimLimitedClamped,FixpointGrammar,Liveness"
 export rounds=3
-export gt_bin="${HOME}/workspace/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
+export gt_bin="/Volumes/corpus/x86-binaries/elf/findutils/gcc_findutils_32_O0_bigram"
 args="${gt_bin} --ground_truth_bin=${gt_bin} "
 echo "Executing for ground truth"
 if [[ ! (-z ${invariants}) ]]; then
