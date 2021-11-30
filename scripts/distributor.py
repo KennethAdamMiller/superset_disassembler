@@ -78,7 +78,7 @@ class dealer:
                     results.add(c)
                     print("Recvd {}, {} total".format(c,len(results)), flush=True)
                 else:
-                    print("do_work {}, len(bins)={}, len(results)={}, num_bins={}".format(
-                        do_work, len(bins), len(results), num_bins), flush=True)
+                    print("do_work {}, len(bins)={}, len(results)={}".format(
+                        do_work, len(bins), len(results)), flush=True)
         print("broker exiting", flush=True)
         killed.send(b"exit")
