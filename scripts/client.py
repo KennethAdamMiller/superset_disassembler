@@ -41,9 +41,11 @@ class worker:
                     print("workering going to sleep")
                     time.sleep(60)
                 worker.send(b"request work")
-            if killed in socks and socks[killed] == zmq.POLLIN:
+            elif killed in socks and socks[killed] == zmq.POLLIN:
                 print("killed recvd msg")
                 killed.recv()
                 do_work=False
+                break
+            else:
                 break
         print("Worker exiting")
