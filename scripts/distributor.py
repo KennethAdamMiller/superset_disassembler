@@ -22,6 +22,7 @@ class dealer:
         killed.bind("tcp://*:9997")
         with open("./binaries.txt","r") as f:
             bins=f.readlines()
+            num_bins=len(bins)
             bins=[s.strip() for s in bins]
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             reordered=deque(bins)
@@ -43,7 +44,7 @@ class dealer:
             do_work=True
             worker_timeout=45*60
             print(len(bins))
-            while do_work and (len(bins)!=0):
+            while do_work and ((len(bins)!=0) or len(results)!=num_bins):
                 socks = dict(poller.poll())
                 print("msg received!")
                 if service in socks and socks[service] == zmq.POLLIN:
