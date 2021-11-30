@@ -19,7 +19,8 @@ def run_bap(addr, msg):
     transfer_cmd="bap send_cache {} --destination=tcp://" + addr + ":9996 --cache_digest={}".format(msg, digest)
     transfer_cmd=transfer_cmd.split(" ")
     transfer=subprocess.Popen(transfer_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    transfer.communicate()
+    output,_=transfer.communicate()
+    print(output,flush=True)
 
 context=zmq.Context()
 w=worker(sys.argv[1], ctxt=context, work=run_bap)
