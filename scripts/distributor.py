@@ -38,9 +38,6 @@ class dealer:
             poller=zmq.Poller()
             poller.register(service, zmq.POLLIN)
             poller.register(collector, zmq.POLLIN)
-            transfer_cmd="bap recv_cache --perpetuate --bind_addr=tcp://*:9996"
-            transfer_cmd=transfer_cmd.split(" ")
-            #transfer=subprocess.Popen(transfer_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             do_work=True
             worker_timeout=45*60
             print(len(bins))
@@ -50,11 +47,13 @@ class dealer:
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
                     print(msg)
-                    if msg==b"request work" and do_work:
+                    if msg==b"request work" and do_work and len(bins) > 0:
                         s=bins.pop()
                         service.send(str.encode(s))
                         sent.appendleft((s,time.time()))
                         print("Sent {} tasks".format(len(sent)))
+                    if len(bins)==0:
+                        service.send(b"")
                     if msg==b"progress report" and do_work:
                         report="Processed {}, {} remaining.\n{}".format(len(results), len(bins), bins)
                         service.send(report)
