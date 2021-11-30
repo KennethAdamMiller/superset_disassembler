@@ -75,7 +75,6 @@ class dealer:
                     c=collector.recv()
                     results.add(c)
                     print("Recvd {}, {} total".format(c,len(results)))
-        #transfer.communicate() #TODO
         print("broker exiting")
         killed.send(b"")
         killed.recv()

@@ -33,9 +33,9 @@ class worker:
                 print("worker recvd {}".format(msg))
                 if msg is not None and msg!=b"":
                     msg = msg.decode("utf-8")
-                    results.send(str.encode(socket.gethostname() + ":" + msg))
-                    self.processed.add(msg)
                     self.work(self.addr, msg)
+                    self.processed.add(msg)
+                    results.send(str.encode(socket.gethostname() + ":" + msg))
                 if msg==b"":
                     time.sleep(60)
                 worker.send(b"request work")
