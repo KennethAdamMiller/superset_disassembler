@@ -21,7 +21,7 @@ class worker:
         results.connect("tcp://" + self.addr + ":9998")
         killed=self.context.socket(zmq.SUB)
         killed.connect("tcp://" + self.addr + ":9997")
-        killed.setsockopt(zmq.SUBSCRIBE, "exit")
+        killed.setsockopt(zmq.SUBSCRIBE, b"exit")
         poller=zmq.Poller()
         poller.register(worker, zmq.POLLIN)
         poller.register(killed, zmq.POLLIN)
