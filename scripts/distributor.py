@@ -44,7 +44,7 @@ class dealer:
             worker_timeout=45*60
             print("Bins: {}".format(len(bins)), flush=True)
             while do_work and ((len(bins)!=0) or len(results)!=self.test_size):
-                socks = dict(poller.poll(1000))
+                socks = dict(poller.poll(15*1000))
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
                     print(msg, flush=True)
