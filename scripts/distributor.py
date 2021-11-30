@@ -13,16 +13,16 @@ class dealer:
             self.context = zmq.Context()
         else:
             self.context = ctxt
-        print("initialized")
+        print("initialized", flush=True)
     def run(self):
         service = self.context.socket(zmq.REP)
         collector = self.context.socket(zmq.PULL)
         killed = self.context.socket(zmq.PUB)
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
-        print("Binding kill socket")
+        print("Binding kill socket", flush=True)
         killed.bind("tcp://*:9997")
-        print("Entering service loop")
+        print("Entering service loop", flush=True)
         with open("./binaries.txt","r") as f:
             bins=f.readlines()
             num_bins=len(bins)
@@ -43,20 +43,20 @@ class dealer:
             poller.register(collector, zmq.POLLIN)
             do_work=True
             worker_timeout=45*60
-            print("Bins: {}".format(len(bins)))
+            print("Bins: {}".format(len(bins)), flush=True)
             while do_work and ((len(bins)!=0) or len(results)!=num_bins):
                 socks = dict(poller.poll())
-                print("msg received!")
+                print("msg received!", flush=True)
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
-                    print(msg)
+                    print(msg, flush=True)
                     if msg==b"request work" and do_work and len(bins) > 0:
                         s=bins.pop()
                         service.send(str.encode(s))
                         sent.appendleft((s,time.time()))
-                        print("Sent {} tasks".format(len(sent)))
+                        print("Sent {} tasks".format(len(sent)), flush=True)
                     elif len(bins)==0:
-                        print("putting worker to sleep")
+                        print("putting worker to sleep", flush=True)
                         service.send(b"")
                     if msg==b"progress report" and do_work:
                         report="Processed {}, {} remaining.\n{}".format(len(results), len(bins), bins)
@@ -78,6 +78,6 @@ class dealer:
                 if collector in socks and socks[collector] == zmq.POLLIN:
                     c=collector.recv()
                     results.add(c)
-                    print("Recvd {}, {} total".format(c,len(results)))
-        print("broker exiting")
+                    print("Recvd {}, {} total".format(c,len(results)), flush=True)
+        print("broker exiting", flush=True)
         killed.send(b"exit")

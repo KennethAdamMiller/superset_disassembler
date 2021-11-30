@@ -8,9 +8,9 @@ if len(sys.argv) > 1:
 else:
     tests=99999
 
-print("creating context")
+print("creating context", flush=True)
 context=zmq.Context()
-print("created context")
+print("created context", flush=True)
 
 recv_cmd=shlex.split('bap recv_cache --perpetuate --bind_addr="tcp://*:9996"')
 recvr=subprocess.Popen(recv_cmd, start_new_session=True)

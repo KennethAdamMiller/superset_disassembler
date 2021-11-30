@@ -31,21 +31,21 @@ class worker:
             socks = dict(poller.poll(2*60*1000))
             if worker in socks and socks[worker] == zmq.POLLIN:
                 msg=worker.recv()
-                print("worker recvd {}".format(msg))
+                print("worker recvd {}".format(msg), flush=True)
                 if msg is not None and msg!=b"":
                     msg = msg.decode("utf-8")
                     self.work(self.addr, msg)
                     self.processed.add(msg)
                     results.send(str.encode(socket.gethostname() + ":" + msg))
                 if msg==b"":
-                    print("workering going to sleep")
+                    print("workering going to sleep", flush=True)
                     time.sleep(60)
                 worker.send(b"request work")
             elif killed in socks and socks[killed] == zmq.POLLIN:
-                print("killed recvd msg")
+                print("killed recvd msg", flush=True)
                 killed.recv()
                 do_work=False
                 break
             else:
                 break
-        print("Worker exiting")
+        print("Worker exiting", flush=True)
