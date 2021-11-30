@@ -16,7 +16,7 @@ class dealer:
     def run(self):
         service = self.context.socket(zmq.REP)
         collector = self.context.socket(zmq.PULL)
-        killed = self.context.socket(zmq.REQ)
+        killed = self.context.socket(zmq.PUB)
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
         killed.bind("tcp://*:9997")
@@ -76,5 +76,4 @@ class dealer:
                     results.add(c)
                     print("Recvd {}, {} total".format(c,len(results)))
         print("broker exiting")
-        killed.send(b"")
-        killed.recv()
+        killed.send(b"exit")

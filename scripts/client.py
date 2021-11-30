@@ -19,15 +19,16 @@ class worker:
         worker.connect("tcp://" + self.addr + ":9999")
         results=self.context.socket(zmq.PUSH)
         results.connect("tcp://" + self.addr + ":9998")
-        killed=self.context.socket(zmq.REP)
+        killed=self.context.socket(zmq.SUB)
         killed.connect("tcp://" + self.addr + ":9997")
+        killed.setsockopt(zmq.SUBSCRIBE, "exit")
         poller=zmq.Poller()
         poller.register(worker, zmq.POLLIN)
         poller.register(killed, zmq.POLLIN)
         worker.send(b"request work")
         do_work=True
         while do_work:
-            socks = dict(poller.poll())
+            socks = dict(poller.poll(2*60*1000))
             if worker in socks and socks[worker] == zmq.POLLIN:
                 msg=worker.recv()
                 print("worker recvd {}".format(msg))
@@ -42,7 +43,6 @@ class worker:
             if killed in socks and socks[killed] == zmq.POLLIN:
                 print("killed recvd msg")
                 killed.recv()
-                killed.send(b"")
                 do_work=False
                 break
         print("Worker exiting")
