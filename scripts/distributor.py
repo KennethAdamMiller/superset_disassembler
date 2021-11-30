@@ -53,6 +53,7 @@ class dealer:
                         sent.appendleft((s,time.time()))
                         print("Sent {} tasks".format(len(sent)))
                     elif len(bins)==0:
+                        print("putting worker to sleep")
                         service.send(b"")
                     if msg==b"progress report" and do_work:
                         report="Processed {}, {} remaining.\n{}".format(len(results), len(bins), bins)

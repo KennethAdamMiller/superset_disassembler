@@ -38,6 +38,7 @@ class worker:
                     self.processed.add(msg)
                     results.send(str.encode(socket.gethostname() + ":" + msg))
                 if msg==b"":
+                    print("workering going to sleep")
                     time.sleep(60)
                 worker.send(b"request work")
             if killed in socks and socks[killed] == zmq.POLLIN:
