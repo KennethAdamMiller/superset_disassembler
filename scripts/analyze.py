@@ -9,6 +9,7 @@ def run_bap(addr, msg):
     disasm=disasm.format(msg, msg)
     print(disasm)
     path=os.environ["PATH"]
+    print(path)
     disasm=['/usr/bin/env', '-P', path] + disasm.split(" ")
     analysis=subprocess.Popen(disasm, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     analysis.communicate()
