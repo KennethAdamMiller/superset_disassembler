@@ -25,7 +25,6 @@ class dealer:
         print("Entering service loop", flush=True)
         with open("./binaries.txt","r") as f:
             bins=f.readlines()
-            num_bins=len(bins)
             bins=[s.strip() for s in bins]
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             reordered=deque(bins)
@@ -44,7 +43,7 @@ class dealer:
             do_work=True
             worker_timeout=45*60
             print("Bins: {}".format(len(bins)), flush=True)
-            while do_work and ((len(bins)!=0) or len(results)!=num_bins):
+            while do_work and ((len(bins)!=0) or len(results)!=self.test_size):
                 socks = dict(poller.poll(1000))
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
