@@ -13,6 +13,7 @@ class dealer:
             self.context = zmq.Context()
         else:
             self.context = ctxt
+        print("initialized")
     def run(self):
         service = self.context.socket(zmq.REP)
         collector = self.context.socket(zmq.PULL)
