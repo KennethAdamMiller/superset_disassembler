@@ -20,13 +20,13 @@ class dealer:
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
         killed.bind("tcp://*:9997")
-        with open("binaries.txt","r") as f:
+        with open("./binaries.txt","r") as f:
             bins=f.readlines()
             bins=[s.strip() for s in bins]
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=False)
             reordered=deque(bins)
             bins=[]
-            while len(reordered)>0 and len(reordered) < self.test_size:
+            while len(reordered)>0 and len(bins) < self.test_size:
                 if len(reordered) %2 == 0:
                     bins.append(reordered.pop())
                 else:
