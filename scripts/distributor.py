@@ -20,6 +20,7 @@ class dealer:
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
         killed.bind("tcp://*:9997")
+        print("Entering service loop")
         with open("./binaries.txt","r") as f:
             bins=f.readlines()
             num_bins=len(bins)
@@ -40,7 +41,7 @@ class dealer:
             poller.register(collector, zmq.POLLIN)
             do_work=True
             worker_timeout=45*60
-            print(len(bins))
+            print("Bins: {}".format(len(bins)))
             while do_work and ((len(bins)!=0) or len(results)!=num_bins):
                 socks = dict(poller.poll())
                 print("msg received!")
