@@ -23,7 +23,7 @@ class dealer:
         with open("./binaries.txt","r") as f:
             bins=f.readlines()
             bins=[s.strip() for s in bins]
-            bins.sort(key=lambda f: os.stat(f).st_size, reverse=False)
+            bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             reordered=deque(bins)
             bins=[]
             while len(reordered)>0 and len(bins) < self.test_size:
