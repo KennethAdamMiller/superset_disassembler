@@ -8,4 +8,4 @@ python3 scripts/run_broker.py ${test_size}
 #recvr=$!
 #wait ${broker}
 #kill ${recvr}
-plot_superset_cache
+#plot_superset_cache

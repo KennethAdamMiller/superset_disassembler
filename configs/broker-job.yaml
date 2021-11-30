@@ -9,7 +9,6 @@ spec:
      labels:
        app: broker-${TAG}
     spec:
-     restartPolicy: Never
      containers:
        - name: superset-disasm-flambda-${TAG}
          image: ${registry}superset_disasm_flambda:${TAG}
@@ -32,6 +31,7 @@ spec:
              containerPort: 9997
            - name: cache-transfer
              containerPort: 9996
+     restartPolicy: Never
      volumes:
        - name: x86-64-binaries
          hostPath: 
