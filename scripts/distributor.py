@@ -19,6 +19,7 @@ class dealer:
         killed = self.context.socket(zmq.PUB)
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
+        print("Binding kill socket")
         killed.bind("tcp://*:9997")
         print("Entering service loop")
         with open("./binaries.txt","r") as f:
