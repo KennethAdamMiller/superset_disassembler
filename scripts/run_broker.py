@@ -17,4 +17,5 @@ recvr=subprocess.Popen(recv_cmd, start_new_session=True)
 
 b=dealer(ctxt=context, test_size=sys.argv[1])
 b.run()
-recvr.communicate()
+output,_=recvr.communicate()
+print(output)
