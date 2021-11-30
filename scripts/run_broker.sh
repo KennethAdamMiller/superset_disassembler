@@ -7,6 +7,8 @@ eval $(opam env)
 bap recv_cache --perpetuate --bind_addr="tcp://*:9996" & 
 recvr=$!
 echo "Starting run_broker.py"
-python3 scripts/run_broker.py ${test_size}
+python3 scripts/run_broker.py ${test_size} &
+broker=$!
+wait ${broker}
 kill ${recvr}
 plot_superset_cache
