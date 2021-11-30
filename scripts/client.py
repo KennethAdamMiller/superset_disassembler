@@ -28,7 +28,7 @@ class worker:
         worker.send(b"request work")
         do_work=True
         while do_work:
-            socks = dict(poller.poll(30*1000))
+            socks = dict(poller.poll(60*1000))
             if worker in socks and socks[worker] == zmq.POLLIN:
                 msg=worker.recv()
                 print("worker recvd {}".format(msg), flush=True)
