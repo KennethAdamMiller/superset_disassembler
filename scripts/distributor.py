@@ -46,7 +46,6 @@ class dealer:
             print("Bins: {}".format(len(bins)), flush=True)
             while do_work and ((len(bins)!=0) or len(results)!=num_bins):
                 socks = dict(poller.poll(1000))
-                print("msg received!", flush=True)
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
                     print(msg, flush=True)
@@ -75,9 +74,12 @@ class dealer:
                 #collect - upon reciept of a branch and commit, keep broadcast
                 #a request for every file name to be recovered from cache
                 #until all have been fulfilled
-                if collector in socks and socks[collector] == zmq.POLLIN:
+                elif collector in socks and socks[collector] == zmq.POLLIN:
                     c=collector.recv()
                     results.add(c)
                     print("Recvd {}, {} total".format(c,len(results)), flush=True)
+                else:
+                    print("do_work {}, len(bins)={}, len(results)={}, num_bins={}".format(
+                        do_work, len(bins), len(results), num_bins), flush=True)
         print("broker exiting", flush=True)
         killed.send(b"exit")
