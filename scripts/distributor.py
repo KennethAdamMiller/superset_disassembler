@@ -52,7 +52,7 @@ class dealer:
                         service.send(str.encode(s))
                         sent.appendleft((s,time.time()))
                         print("Sent {} tasks".format(len(sent)))
-                    if len(bins)==0:
+                    elif len(bins)==0:
                         service.send(b"")
                     if msg==b"progress report" and do_work:
                         report="Processed {}, {} remaining.\n{}".format(len(results), len(bins), bins)
