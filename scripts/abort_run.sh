@@ -4,3 +4,4 @@ if [[ -z ${TAG} ]]; then
 fi	
 kubectl delete job/analysis-${TAG}
 kubectl delete job/broker-${TAG}
+kubectl delete service/broker-service-${TAG}
