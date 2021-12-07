@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synchronize-${TGT_HOST}
+  labels:
+    app: synchronizer
+spec:
+  selector:
+    matchLabels:
+      app: synchronizer
+  template:
+    metadata:
+      labels:
+        app: synchronizer
+    spec:
+      containers:
+        - name: synchronizer
+          image: redis:6.2
+          imagePullPolicy: Always
+
+          volumeMounts:
+          - name: x86-64-binaries
+            mountPath: /Volumes/corpus/x86_64-binaries
+          - name: x86-binaries
+            mountPath: /Volumes/corpus/x86-binaries
+          - name: arm-binaries
+            mountPath: /Volumes/corpus/arm-binaries
+          - name: caches
+            mountPath: /home/opam/.cache/bap
+      # containers
+      volumes:
+        - name: x86-64-binaries
+          hostPath:
+            path: /Volumes/corpus/x86_64-binaries/
+        - name: x86-binaries
+          hostPath:
+            path: /Volumes/corpus/x86-binaries/
+        - name: arm-binaries
+          hostPath:
+            path: /Volumes/corpus/arm-binaries/
+        - name: caches
+          hostPath:
+            path: /Volumes/caches/${TAG}/
+      #nodeSelector:
+        #kubernetes.io/hostname: ${TGT_HOST}
+      nodeName: ${TGT_HOST}
+    # spec
+  # template
+# spec

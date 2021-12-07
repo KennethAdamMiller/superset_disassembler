@@ -8,4 +8,6 @@ kubectl wait --for=condition=complete --timeout=-1s job/analysis-${TAG}
 if [[ $? -eq 0 ]]; then
 	kubectl delete service broker-service-${TAG}
 	kubectl delete job/analysis-${TAG}
+	kubectl delete job/broker-${TAG}
 fi
+#build the latex document

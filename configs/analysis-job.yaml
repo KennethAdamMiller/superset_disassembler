@@ -20,6 +20,8 @@ spec:
            mountPath: /home/opam/workspace/x86-binaries
          - name: arm-binaries
            mountPath: /home/opam/workspace/arm-binaries
+         - name: caches
+           mountPath: /home/opam/.cache/bap
      restartPolicy: OnFailure
      volumes:
        - name: x86-64-binaries
@@ -31,4 +33,7 @@ spec:
        - name: arm-binaries
          hostPath: 
            path: /Volumes/corpus/arm-binaries/
+       - name: caches
+         hostPath:
+           path: /Volumes/caches/${TAG}/
  
