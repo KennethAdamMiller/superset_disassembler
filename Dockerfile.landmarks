@@ -1,5 +1,0 @@
-ARG TAG
-FROM superset_disasm:${TAG}
-
-WORKDIR $HOME/workspace/superset_disasm
-RUN ./scripts/profile.sh
