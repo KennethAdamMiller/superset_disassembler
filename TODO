@@ -1,0 +1,3 @@
+write and use feature_suffix in docker builds
+rewrite docker files to use arguments and env vars
+remove the need for verify cache

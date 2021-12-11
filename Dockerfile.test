@@ -1,6 +1,0 @@
-ARG TAG=master
-FROM superset_disasm:$TAG
-
-WORKDIR ${HOME}/workspace/superset_disasm
-COPY ./ ${HOME}/workspace/superset_disasm
-RUN make clean && make && ./test_superset_disasm.native > "test_results.txt" && ./run_tests.sh 

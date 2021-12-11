@@ -29,7 +29,6 @@ depends: [
     "bap"
     "core_kernel"
     "cmdliner"
-    "ocamlgraph"
     "landmarks"
     "bap-future"
 ]

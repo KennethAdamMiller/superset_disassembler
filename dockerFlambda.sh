@@ -9,3 +9,4 @@ sudo docker build . -f Dockerfile.flambda \
      --build-arg BAPVERSION=${BAPVERSION} \
      -t superset_disasm_flambda:${TAG}
 
+docker tag superset_disasm_flambda:${TAG} superset_disasm_flambda:latest

@@ -15,11 +15,11 @@ spec:
          command: [ /bin/bash, /home/opam/workspace/superset_disasm/scripts/run_broker.sh, "${test_size}" ]
          volumeMounts:
            - name: x86-64-binaries
-             mountPath: /home/opam/workspace/x86_64-binaries
+             mountPath: /Volumes/corpus/x86_64-binaries
            - name: x86-binaries
-             mountPath: /home/opam/workspace/x86-binaries
+             mountPath: /Volumes/corpus/x86-binaries
            - name: arm-binaries
-             mountPath: /home/opam/workspace/arm-binaries
+             mountPath: /Volumes/corpus/arm-binaries
          ports:
            - name: service
              containerPort: 9999

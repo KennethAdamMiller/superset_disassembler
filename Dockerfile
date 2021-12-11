@@ -1,9 +1,10 @@
 FROM ocaml/opam2:ubuntu-20.04
 ARG BAPVERSION=2.3.0
+ARG OPAMSWITCH=4.10.0+flambda
 
 RUN sudo apt-get update  \
  && opam update \
- && opam switch create 4.10.0+flambda \
+ && opam switch create ${OPAMSWITCH} \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
 # && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
@@ -12,12 +13,10 @@ RUN sudo apt-get update  \
  && opam clean -acrs \
  && rm -rf /home/opam/.opam/4.0[2-8,10] \
  && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
- && rm -rf /home/opam/opam-repository
+ && rm -rf /home/opam/opam-repository \
+ && mkdir -p $HOME/workspace/superset_disasm
 
 USER root
-WORKDIR /home/opam
-#TODO this should use git clone
-RUN mkdir -p /home/opam/workspace/superset_disasm/scripts
 WORKDIR $HOME/workspace/superset_disasm
 
 USER opam
