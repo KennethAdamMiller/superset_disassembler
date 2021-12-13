@@ -1,10 +1,10 @@
 FROM ocaml/opam2:ubuntu-20.04
 ARG BAPVERSION=2.3.0
-ARG OPAMSWITCH=4.10.0+flambda
+ARG SWITCH=4.10.0+flambda
 
 RUN sudo apt-get update  \
  && opam update \
- && opam switch create ${OPAMSWITCH} \
+ && opam switch create ${SWITCH} \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
 # && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
