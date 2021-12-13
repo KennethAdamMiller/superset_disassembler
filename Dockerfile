@@ -26,5 +26,5 @@ RUN DEBIAN_FRONTEND=noninteractive opam depext --install bap-byteweight-frontend
 USER root
 COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace/superset_disasm/ && chown opam:opam /home/opam/workspace
-RUN rm setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver ;
+RUN rm setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver ;chown -R $(id -u):$(id -u) ${HOME}/.opam/
 USER opam
