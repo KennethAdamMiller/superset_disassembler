@@ -1,4 +1,4 @@
-export OPAM_SWITCH=4.11.0+flambda
+export SWITCH=4.11.0+flambda
 
 export BAPVERSION=2.3.0
 export USE_LANDMARKS=false

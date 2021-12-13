@@ -1,6 +1,6 @@
 FROM ocaml/opam2:ubuntu-20.04
 ARG BAPVERSION=2.3.0
-ARG SWITCH=4.10.0+flambda
+ARG SWITCH=4.11.0+flambda
 
 RUN sudo apt-get update  \
  && opam update \
