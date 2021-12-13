@@ -2,7 +2,9 @@ echo "Usage: $0 <BAPVERSION>(${1})"
 BAPVERSION=${1}
 if [ -z ${1} ]; then BAPVERSION=2.3.0; fi
 
-IMG_TGT=superset_disasm:$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)_${BAPVERSION}
+source scripts/tag.sh
+source scripts/feature_suffix.sh
+IMG_TGT=superset_disasm_${FSUFFIX}:${TAG}
 echo "Building ${IMG_TGT} with BAPVERSION=${BAPVERSION}"
 sudo docker build . -f Dockerfile \
      -t  ${IMG_TGT} \
