@@ -1,6 +1,7 @@
-opam-version: "1.2"
+opam-version: "2.0.5"
 name: "superset_disasm"
 version: "master"
+synopsis: "Probabilistic disassembly algorithms using fixpoints to converge on the minimal superset disassembly"
 maintainer: "Kenneth Adam Miller <kennethadammiller@gmail.com>"
 authors: [
     "Kenneth Adam Miller <kennethadammiller@gmail.com>" 
@@ -37,7 +38,6 @@ depexts: [
     [["ubuntu"] [
         "libzip-dev"
         "clang"
-        "llvm"
         "m4"
      ]]
      [["osx" "macports"] [
