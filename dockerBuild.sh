@@ -9,6 +9,7 @@ IMG_TGT=superset_disasm:${TAG}-${FSUFFIX}
 echo "Building ${IMG_TGT} with BAPVERSION=${BAPVERSION}"
 sudo docker build . -f Dockerfile \
      -t  ${IMG_TGT} \
+     ${DOCKER_BLD_ARGS} \
      --build-arg SWITCH=${OPAMSWITCH} \
      --build-arg BAPVERSION=${BAPVERSION} 
 
