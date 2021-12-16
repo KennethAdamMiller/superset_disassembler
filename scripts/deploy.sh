@@ -1,4 +1,4 @@
 source scripts/tag.sh
-export replicas=$(($(kubectl get nodes | wc -l) - 1))
+source scripts/feature_suffix.sh
 cat ../configs/analysis.yaml | envsubst | kubectl apply
 cat ../configs/broker.yaml | envsubst | kubectl apply
