@@ -1,14 +1,10 @@
 source scripts/tag.sh
+source scripts/feature_suffix.sh
 
 sudo docker run --name superset_disasm_${TAG}_tests  \
-     -v /Volumes/corpus/x86-binaries/:/home/opam/workspace/x86-binaries \
-     -v /Volumes/corpus/x86_64-binaries/:/home/opam/workspace/x86_64-binaries \
-     -v /Volumes/corpus/arm-binaries/:/home/opam/workspace/arm-binaries \
-     superset_disasm:${TAG} ./run_tests.sh
+     -v /Volumes/corpus/x86-binaries/:/Volumes/corpus/workspace/x86-binaries \
+     -v /Volumes/corpus/x86_64-binaries/:/Volumes/corpus/workspace/x86_64-binaries \
+     -v /Volumes/corpus/arm-binaries/:/Volumes/corpus/workspace/arm-binaries \
+     superset_disasm:${TAG}-${FSUFFIX} ./run_tests.sh
 
-sudo docker run --name superset_disasm_flambda_${TAG}_tests \
-     -v /Volumes/corpus/x86-binaries/:/home/opam/workspace/x86-binaries \
-     -v /Volumes/corpus/x86_64-binaries/:/home/opam/workspace/x86_64-binaries \
-     -v /Volumes/corpus/arm-binaries/:/home/opam/workspace/arm-binaries \
-    superset_disasm_flambda:${TAG} ./run_tests.sh
 
