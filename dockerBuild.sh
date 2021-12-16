@@ -8,7 +8,7 @@ source vars.sh
 IMG_TGT=superset_disasm:${TAG}-${FSUFFIX}
 
 docker manifest inspect $IMG_TGT > /dev/null ;
-if [[ $? == 0 ]]; then
+if [[ $? == 1 ]]; then
 	echo "Building ${IMG_TGT} with BAPVERSION=${BAPVERSION}"
 	sudo docker build . -f Dockerfile \
 	     -t  ${IMG_TGT} \
@@ -16,5 +16,5 @@ if [[ $? == 0 ]]; then
 	     --build-arg SWITCH=${OPAMSWITCH} \
 	     --build-arg BAPVERSION=${BAPVERSION} 
 
-	docker tag superset_disasm:${TAG}-${FSUFFIX} superset_disasm:latest-${FSUFFIX}
 fi
+docker tag superset_disasm:${TAG}-${FSUFFIX} superset_disasm:latest-${FSUFFIX}
