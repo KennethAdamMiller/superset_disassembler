@@ -10,8 +10,8 @@ spec:
        app: broker-${TAG}
     spec:
      containers:
-       - name: superset-disasm-flambda-${TAG}
-         image: ${registry}superset_disasm_flambda:${TAG}
+       - name: superset-disasm-${TAG}-${FSUFFIX}
+         image: ${registry}superset_disasm:${TAG}-${FSUFFIX}
          command: [ /bin/bash, /home/opam/workspace/superset_disasm/scripts/run_broker.sh, "${test_size}" ]
          volumeMounts:
            - name: x86-64-binaries

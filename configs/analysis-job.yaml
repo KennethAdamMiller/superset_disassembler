@@ -1,17 +1,17 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
- name: analysis-${TAG}
+ name: analysis-${TAG}-${FSUFFIX}
 spec:
   parallelism: ${cores}
   template:
     metadata:
       labels:
-        app: analysis-${TAG}
+        app: analysis-${TAG}-${FSUFFIX}
     spec:
      containers:
-       - name:  superset-disasm-flambda-${TAG}
-         image: ${registry}superset_disasm_flambda:${TAG}
+       - name:  superset-disasm-${TAG}-${FSUFFIX}
+         image: ${registry}superset_disasm:${TAG}-${FSUFFIX}
          command: [ "/bin/bash", "scripts/client_analyze.sh", "${TAG}" ]
          volumeMounts:
          - name: x86-64-binaries
