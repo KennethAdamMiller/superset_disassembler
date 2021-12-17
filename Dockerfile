@@ -25,4 +25,4 @@ USER root
 COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R $(id -u):$(id -u) /home/opam/workspace/superset_disasm/ 
 USER opam
-RUN rm setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver ;chown -R $(id -u):$(id -u) ${HOME}/.opam/${SWITCH}/.opam-switch/
+RUN rm -f setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver 
