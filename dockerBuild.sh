@@ -7,8 +7,7 @@ source scripts/feature_suffix.sh
 source vars.sh
 IMG_TGT=superset_disasm:${TAG}-${FSUFFIX}
 
-docker manifest inspect $IMG_TGT > /dev/null ;
-if [[ $? == 1 ]]; then
+if [[ "$(docker images -q superset_disasm:latest-${FSUFFIX} 2> /dev/null)" == "" ]]; then
 	echo "Building ${IMG_TGT} with BAPVERSION=${BAPVERSION}"
 	sudo docker build . -f Dockerfile \
 	     -t  ${IMG_TGT} \
