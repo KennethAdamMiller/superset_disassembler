@@ -14,6 +14,5 @@ if [[ "$(docker images -q superset_disasm:${TAG}-${FSUFFIX} 2> /dev/null)" == ""
 	     ${DOCKER_BLD_ARGS} \
 	     --build-arg SWITCH=${OPAMSWITCH} \
 	     --build-arg BAPVERSION=${BAPVERSION} 
-
 fi
 docker tag superset_disasm:${TAG}-${FSUFFIX} superset_disasm:latest-${FSUFFIX}

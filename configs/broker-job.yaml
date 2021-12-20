@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: broker-${TAG}
+  name: broker-${TAG}-${FSUFFIX}
 spec:
   template:
     metadata:
-     name: broker-${TAG}
+     name: broker-${TAG}-${FSUFFIX}
      labels:
-       app: broker-${TAG}
+       app: broker-${TAG}-${FSUFFIX}
     spec:
      containers:
        - name: superset-disasm-${TAG}-${FSUFFIX}
