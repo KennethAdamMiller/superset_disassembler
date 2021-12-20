@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: broker-service-${TAG}
+  name: broker-service-${TAG}-${FSUFFIX}
 spec:
   selector:
-    app: broker-${TAG}
+    app: broker-${TAG}-${FSUFFIX}
   type: ClusterIP
   ports:
     - name: service
