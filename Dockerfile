@@ -26,3 +26,4 @@ COPY ./ /home/opam/workspace/superset_disasm/
 RUN chown -R opam:opam /home/opam/workspace/superset_disasm/ 
 USER opam
 RUN rm -f setup.data ; eval `opam config env` ; opam pin add superset_disasm ./ -y --use-internal-solver 
+RUN mkdir -p /home/opam/.cache/bap
