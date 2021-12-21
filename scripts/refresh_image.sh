@@ -1,4 +1,5 @@
 source scripts/tag.sh
-./dockerFlambda.sh
-docker tag superset_disasm_flambda:${TAG} ${registry}superset_disasm_flambda:${TAG} 
-docker push ${registry}superset_disasm_flambda:${TAG}
+source scripts/feature_suffix.sh
+./dockerBuild.sh
+docker tag superset_disasm:${TAG}-${FSUFFIX} ${registry}superset_disasm:${TAG}-${FSUFFIX}
+docker push ${registry}superset_disasm:${TAG}-${FSUFFIX}

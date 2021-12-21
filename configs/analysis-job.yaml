@@ -21,7 +21,7 @@ spec:
          - name: arm-binaries
            mountPath: /Volumes/corpus/arm-binaries
          - name: caches
-           mountPath: /home/opam/.cache/bap
+           mountPath: /home/opam/.cache/
      restartPolicy: OnFailure
      volumes:
        - name: x86-64-binaries
