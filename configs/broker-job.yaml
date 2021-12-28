@@ -27,7 +27,7 @@ spec:
              containerPort: 9998
            - name: killed
              containerPort: 9997
-           - name: cache-transfer
+           - name: update
              containerPort: 9996
      restartPolicy: Never
      volumes:

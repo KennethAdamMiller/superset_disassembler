@@ -19,12 +19,9 @@ spec:
       protocol: TCP
       port: 9997
       targetPort: 9997
-    - name: cache-transfer
+    - name: update
       protocol: TCP
       port: 9996
       targetPort: 9996
-    - name: test
-      protocol: TCP
-      port: 5555
-      targetPort: 5555
+
 
