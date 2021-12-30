@@ -65,14 +65,16 @@ class dealer:
                     if msg==b"exit":
                         service.send(b"exit received")
                         do_work=False
-                    while len(sent) > 0:
-                        (s,t) = sent.pop()
-                        elapsed = time.time() - t
-                        if elapsed > worker_timeout:
-                            bins.append(s)
-                        else:
-                            sent.appendleft((s,t))
-                            break
+                _sent=deque()
+                while len(sent) > 0:
+                    (s,t) = sent.pop()
+                    elapsed = time.time() - t
+                    if elapsed > worker_timeout:
+                        bins.append(s)
+                    else:
+                        _sent.appendleft((s,t))
+                        break
+                sent=_sent
                 #collect - upon reciept of a branch and commit, keep broadcast
                 #a request for every file name to be recovered from cache
                 #until all have been fulfilled
