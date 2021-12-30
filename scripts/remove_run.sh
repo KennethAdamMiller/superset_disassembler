@@ -5,3 +5,4 @@ fi
 kubectl delete deployment/analysis-${TAG}-${FSUFFIX} 
 kubectl delete job/broker-${TAG}-${FSUFFIX}
 kubectl delete service/broker-service-${TAG}-${FSUFFIX}
+kubectl delete hpa/autoscaler-${TAG}-${FSUFFIX}
