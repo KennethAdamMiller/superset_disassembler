@@ -4,7 +4,7 @@ export test_size=4
 export cores=4
 cat ./configs/broker-job.yaml | envsubst | kubectl apply -f -
 cat ./configs/broker-service.yaml | envsubst | kubectl apply -f -
-cat ./configs/analysis-job.yaml | envsubst | kubectl apply -f -
+cat ./configs/analysis-deployment.yaml | envsubst | kubectl apply -f -
 kubectl wait --for=condition=complete --timeout=120s job/analysis-${TAG}-${FSUFFIX}
 kubectl wait --for=condition=complete --timeout=120s job/broker-${TAG}-${FSUFFIX}
 if [[ $? -eq 0 ]]; then

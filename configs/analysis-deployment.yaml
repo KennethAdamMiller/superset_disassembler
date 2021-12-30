@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ name: analysis-${TAG}-${FSUFFIX}
+spec:
+  selector:
+    matchLabels:
+      app: analysis-${TAG}-${FSUFFIX}
+  template:
+    metadata:
+      labels:
+        app: analysis-${TAG}-${FSUFFIX}
+    spec:
+     containers:
+       - name:  superset-disasm-${TAG}-${FSUFFIX}
+         image: ${registry}superset_disasm:${TAG}-${FSUFFIX}
+         command: [ "/bin/bash", "scripts/client_analyze.sh", "${TAG}-${FSUFFIX}" ]
+         volumeMounts:
+         - name: x86-64-binaries
+           mountPath: /Volumes/corpus/x86_64-binaries
+         - name: x86-binaries
+           mountPath: /Volumes/corpus/x86-binaries
+         - name: arm-binaries
+           mountPath: /Volumes/corpus/arm-binaries
+         - name: caches
+           mountPath: /home/opam/.cache/
+     restartPolicy: Always
+     volumes:
+       - name: x86-64-binaries
+         hostPath: 
+           path: /Volumes/corpus/x86_64-binaries/
+       - name: x86-binaries
+         hostPath: 
+           path: /Volumes/corpus/x86-binaries/
+       - name: arm-binaries
+         hostPath: 
+           path: /Volumes/corpus/arm-binaries/
+       - name: caches
+         hostPath:
+           path: /Volumes/caches/${TAG}/
+ 
+---
+
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: autoscaler-${TAG}-${FSUFFIX}
+  namespace: default
+spec:
+  minReplicas: 10
+  maxReplicas: 108
+  #  selector:
+  #    matchLabels:
+  #      app: analysis-${TAG}-${FSUFFIX}
+  scaleTargetRef:
+    apiVersion: apps/v1beta1
+    kind: Deployment
+    name: analysis-${TAG}-${FSUFFIX}
+  metrics:
+    - type: Resource
+      resource:
+        name: memory
+        targetAverageUtilization: 90
+
