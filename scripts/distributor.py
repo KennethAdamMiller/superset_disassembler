@@ -78,7 +78,7 @@ class dealer:
                 #collect - upon reciept of a branch and commit, keep broadcast
                 #a request for every file name to be recovered from cache
                 #until all have been fulfilled
-                elif collector in socks and socks[collector] == zmq.POLLIN:
+                if collector in socks and socks[collector] == zmq.POLLIN:
                     c=collector.recv()
                     results.add(c.split(":")[1])
                     print("Recvd {}, {} total".format(c,len(results)), flush=True)
