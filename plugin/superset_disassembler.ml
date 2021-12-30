@@ -305,7 +305,7 @@ let save_metadata options =
   
 let create_and_process
       input outputs loader update kb options =
-  let () = save_metadata options in
+  (*let () = save_metadata options in*)
   let digest = superset_digest options in
   let had_knowledge = load_knowledge digest kb in
   let () = Toplevel.exec @@
