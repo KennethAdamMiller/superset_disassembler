@@ -79,7 +79,7 @@ class dealer:
                 #a request for every file name to be recovered from cache
                 #until all have been fulfilled
                 if collector in socks and socks[collector] == zmq.POLLIN:
-                    c=collector.recv()
+                    c=collector.recv().decode("utf-8")
                     results.add(c.split(":")[1])
                     print("Recvd {}, {} total".format(c,len(results)), flush=True)
                 else:
