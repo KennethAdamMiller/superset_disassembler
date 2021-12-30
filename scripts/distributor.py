@@ -18,13 +18,16 @@ class dealer:
         service = self.context.socket(zmq.REP)
         collector = self.context.socket(zmq.PULL)
         killed = self.context.socket(zmq.PUB)
+        update = self.context.socket(zmq.PULL)
         service.bind("tcp://*:9999")
         collector.bind("tcp://*:9998")
         print("Binding kill socket", flush=True)
         killed.bind("tcp://*:9997")
         print("Entering service loop", flush=True)
+        update.bind("tcp://*:9996")
         with open("./binaries.txt","r") as f:
             bins=f.readlines()
+            orig_count=len(bins)
             bins=[s.strip() for s in bins]
             bins.sort(key=lambda f: os.stat(f).st_size, reverse=True)
             reordered=deque(bins)
@@ -43,7 +46,7 @@ class dealer:
             do_work=True
             worker_timeout=45*60
             print("Bins: {}".format(len(bins)), flush=True)
-            while do_work and ((len(bins)!=0) or len(results)!=self.test_size):
+            while do_work and ((len(bins)!=0) or len(results)>=self.test_size or len(results)>=orig_count):
                 socks = dict(poller.poll(15*1000))
                 if service in socks and socks[service] == zmq.POLLIN:
                     msg = service.recv()
@@ -75,7 +78,7 @@ class dealer:
                 #until all have been fulfilled
                 elif collector in socks and socks[collector] == zmq.POLLIN:
                     c=collector.recv()
-                    results.add(c)
+                    results.add(c.split(":")[1])
                     print("Recvd {}, {} total".format(c,len(results)), flush=True)
                 else:
                     print("do_work {}, len(bins)={}, len(results)={}".format(
