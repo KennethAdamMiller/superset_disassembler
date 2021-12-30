@@ -300,8 +300,8 @@ let save_metadata options =
                           (Metadata.Cache_metadata.set c
                              options.target d))
         );
-    );
-  Metadata.save ()
+      Metadata.save ()
+    )
   
 let create_and_process
       input outputs loader update kb options =
