@@ -320,7 +320,8 @@ let create_and_process
   let ro = Metrics.Cache.reduced_occlusion in
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   let _ = Toplevel.eval Metrics.Cache.size Metrics.Cache.sym_label in
-  save_knowledge ~had_knowledge ~update digest kb
+  store_knowledge_in_cache digest
+  (*save_knowledge ~had_knowledge ~update digest kb*)
   
 let rounds =
   let doc = "Number of analysis cycles" in
