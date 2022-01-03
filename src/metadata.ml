@@ -59,12 +59,7 @@ let store_knowledge_in_cache digest =
 
 let import_knowledge_from_cache digest =
   let cache = knowledge_cache () in
-  (*let d = Data.Cache.Digest.to_string digest in
-  let path = "/home/kennethadammiller/.cache/bap/data/" ^ d in
-  if (Sys.file_exists path) then (
-    Toplevel.set @@ Knowledge.load path; true
-  ) else*)
-    load_cache_with_digest cache digest
+  load_cache_with_digest cache digest
 
 let load_knowledge digest p =
   let digest = digest ~namespace:"knowledge" in
@@ -86,7 +81,6 @@ let guide = KB.Symbol.intern "cache_map" Theory.Program.cls
 let metadata_digest =
   (make_digest [ "superset-cache-metadata" ])
 
-(* Either save isn't working or load isn't working *)
 let save () =
   let _ = Toplevel.eval digests guide in
   store_knowledge_in_cache metadata_digest
@@ -96,8 +90,9 @@ let with_digests f =
   let state = Toplevel.current () in
   let _ = load_knowledge metadata_digest None in
   let ds = Toplevel.eval digests guide in
+  let r = f ds in
   Toplevel.set state;
-  f ds
+  r
   
 let cache_corpus_metrics ds =
   match ds with
