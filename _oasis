@@ -16,6 +16,7 @@ BuildDepends:
               graphlib,
               landmarks,
               bap-future,
+              zmq,
               gnuplot
 
 Library superset_disassemblers

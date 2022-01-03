@@ -31,6 +31,8 @@ depends: [
     "core_kernel"
     "cmdliner"
     "landmarks"
+    "gnuplot"
+    "zmq"
     "bap-future"
 ]
 
