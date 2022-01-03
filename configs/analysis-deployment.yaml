@@ -14,6 +14,10 @@ spec:
      containers:
        - name:  superset-disasm-${TAG}-${FSUFFIX}
          image: ${registry}superset_disasm:${TAG}-${FSUFFIX}
+         resources:
+           requests:
+             cpu: "1000m"
+             memory: "1Gi"
          command: [ "/bin/bash", "scripts/client_analyze.sh", "${TAG}-${FSUFFIX}" ]
          volumeMounts:
          - name: x86-64-binaries
@@ -41,7 +45,7 @@ spec:
  
 ---
 
-apiVersion: autoscaling/v2beta1
+apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
   name: autoscaler-${TAG}-${FSUFFIX}
@@ -60,5 +64,12 @@ spec:
     - type: Resource
       resource:
         name: memory
-        targetAverageUtilization: 90
-
+        target:
+          type: Utilization
+          averageUtilization: 90
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 90
