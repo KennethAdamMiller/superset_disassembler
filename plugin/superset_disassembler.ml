@@ -566,7 +566,7 @@ let reset_cache =
   Extension.Command.flag "reset_cache"
 
 let is_present =
-  Extension.Command.flag "is_present"
+  Extension.Command.flag "verify_cache"
   
 let _cache_command : unit =
   let args =
@@ -578,23 +578,26 @@ let _cache_command : unit =
   Extension.Command.declare ~doc:man "superset_cache"
     ~requires:features_used args @@
     fun input outputs loader update kb
-        show_cache_digest reset_cache is_present
+        show_cache_digest reset_cache verify_cache
         ctxt ->
-    let get_raw_digest () = 
-      compute_digest input loader ~namespace:"knowledge" in
-    let get_digest () =
-      let d = get_raw_digest () in
+    let get_raw_digest bin = 
+      compute_digest bin loader ~namespace:"knowledge" in
+    let get_digest bin =
+      let d = get_raw_digest bin in
       Data.Cache.Digest.to_string d in
-    let path = get_digest () in
     let () =
-      if is_present then
-        let d = get_raw_digest () in
-        let cache = knowledge_cache () in
-        let b =  load_cache_with_digest cache d in
-        print_endline @@ sprintf "Present in cache: %b" b;
+      if verify_cache then
+        let lines = In_channel.read_lines input in
+        List.iter lines ~f:(fun bin ->
+            let d = get_raw_digest bin in
+            let cache = knowledge_cache () in
+            let b =  load_cache_with_digest cache d in
+            print_endline @@ sprintf "%s Present in cache: %b" bin b;
+          )
       else () in
-    let () = 
+    let () =
       if reset_cache then
+        let path = get_digest input in
         let cachedir = Bap_main.Extension.Configuration.cachedir in
         let l = [ ""; "/data/"; "/data2/"] in
         List.iter l ~f:(fun s ->
@@ -606,6 +609,7 @@ let _cache_command : unit =
       else () in
     let () = 
       if show_cache_digest then
+        let path = get_digest input in
         printf "%s\n%!" path
       else () in
     Ok ()
