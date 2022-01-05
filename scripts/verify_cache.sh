@@ -6,6 +6,6 @@ docker run --rm \
      -v /Volumes/corpus/x86_64-binaries/:/Volumes/corpus/x86_64-binaries \
      -v /Volumes/corpus/arm-binaries/:/Volumes/corpus/arm-binaries \
      -v /Volumes/caches/${TAG}:/home/opam/.cache/ \
-     superset_disasm:${TAG}-${FSUFFIX} ./scripts/get_binaries.sh ; bap superset_cache --verify_cache ./binaries.txt
+     superset_disasm:${TAG}-${FSUFFIX} bap superset_cache --verify_cache ./binaries.txt
 
 
