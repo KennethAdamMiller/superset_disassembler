@@ -6,10 +6,10 @@ import time
 class worker:
     def skip(addr, msg):
         pass
-    def __init__(self, addr, ctxt=None, work=skip):
+    def __init__(self, addr, hostname, ctxt=None, work=skip):
         self.addr=addr
         self.work=work
-        self.processed=set()
+        self.hostname=hostname
         if ctxt is None:
             self.context = zmq.Context()
         else:
@@ -25,7 +25,7 @@ class worker:
         poller=zmq.Poller()
         poller.register(worker, zmq.POLLIN)
         poller.register(killed, zmq.POLLIN)
-        worker.send(b"request work")
+        worker.send(str.encode("request work:" + self.hostname))
         do_work=True
         while do_work:
             socks = dict(poller.poll(60*1000))
@@ -35,8 +35,7 @@ class worker:
                 if msg is not None and msg!=b"":
                     msg = msg.decode("utf-8")
                     self.work(self.addr, msg)
-                    self.processed.add(msg)
-                    results.send(str.encode(socket.gethostname() + ":" + msg))
+                    results.send(str.encode(self.hostname + ":" + msg))
                 if msg==b"":
                     print("worker told to wait")
                     time.sleep(30)

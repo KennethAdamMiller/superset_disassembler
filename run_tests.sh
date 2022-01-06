@@ -16,6 +16,8 @@ cat report_tests.txt
 ./functional_tests/test_run.sh > tests.txt
 cat tests.txt
 
+python3 functional_tests/test_broker.py > broker_tests.txt
+
 echo "====test_distribution.py===="
 python3 ./functional_tests/test_distribution.py
 echo "====test_distribution.py terminated===="
