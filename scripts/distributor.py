@@ -27,6 +27,9 @@ class dealer:
     def scale_to_complexity(self, size):
         return 1024*size
 
+    def scale_from_complexity(self, resource):
+        return resource / 1024
+
     def above_outbound_limit(self, host):
         o = self.outbound.get(host)
         if o is not None:
@@ -42,7 +45,7 @@ class dealer:
             if o is not None:
                 mem_outb = self.scale_to_complexity(sum([outb for _,outb in o]))
             if cpus > 1 and ((mem - mem_outb - self.mem_adjustment) > 0):
-                return self.find_nearest(mem - mem_outb)
+                return self.find_nearest(self.scale_from_complexity(mem - mem_outb))
         return None
 
     def find_nearest(self, search_key):

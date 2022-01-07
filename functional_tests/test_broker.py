@@ -90,7 +90,14 @@ class TestDistributor(unittest.TestCase):
 
     def test_nearest_below_resources(self):
         #TODO if a keys above current resources aren't picked and keys below are found
-        pass
+        self.d.add_to_size_map(3,"example_file")
+        self.d.add_to_size_map(5,"example_file2")
+        self.d.update_resources("test_hostname",4000,24)
+        proj=self.d.send_bin(self.sndr, "test_hostname")
+        self.assertEqual(proj is not None, True)
+        name,size=proj
+        self.assertEqual(size,3)
+
     
     def test_receive_results(self):
         #results of an analysis are put in results and removed from sent
