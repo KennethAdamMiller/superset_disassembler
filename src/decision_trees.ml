@@ -257,7 +257,7 @@ let calculate_deltas ?entries ?is_option superset =
         delta := Some(insns, datas);
         insns, datas in
     if is_option addr then (
-      deltas := Addr.Map.set !deltas addr (insns, datas);
+      deltas := Addr.Map.set !deltas ~key:addr ~data:(insns, datas);
       delta := None
     ) else (
       add_data_of_insn datas addr;

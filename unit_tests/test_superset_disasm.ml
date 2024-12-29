@@ -37,7 +37,7 @@ let init () =
 
 let min_addr = 1
 let addr_size= Size.in_bits @@ Arch.addr_size arch
-let min_addr = Addr.of_int addr_size min_addr
+let min_addr = Addr.of_int ~width:addr_size min_addr
 
 let make_params ?(mina=min_addr) bytes =
   let memory = create_memory arch min_addr bytes |> ok_exn in
@@ -251,16 +251,16 @@ let test_trims_invalid_jump test_ctxt =
     (List.length expected_results)
 
 let test_addr_map test_ctxt =
-  let min_addr  = Addr.of_int addr_size 0 in
+  let min_addr  = Addr.of_int ~width:addr_size 0 in
   let insn_map  = Addr.Map.empty in
-  let insn_map  = Addr.Map.set insn_map min_addr () in
-  let insn_map  = Addr.Map.set insn_map min_addr () in
+  let insn_map  = Addr.Map.set insn_map ~key:min_addr ~data:() in
+  let insn_map  = Addr.Map.set insn_map ~key:min_addr ~data:() in
   let msg = "expected length to be one" in
   assert_bool msg ((Addr.Map.length insn_map) = 1)
 
 let test_insn_isg test_ctxt = 
   let insn_risg = Graphlib.create (module G) () in
-  let addr  = Addr.of_int addr_size 0 in
+  let addr  = Addr.of_int ~width:addr_size 0 in
   let insn_risg = G.Node.insert addr insn_risg in
   let insn_risg = G.Node.insert addr insn_risg in
   let msg = "expected length to be one" in
@@ -283,9 +283,9 @@ let construct_loop insn_map insn_isg start finish =
     let insn_isg = add_edge insn_isg start finish in
     let junk_data = String.of_char ' ' in
     let start_mem = create_memory arch start junk_data |> ok_exn in
-    let insn_map = Addr.Map.set insn_map start (start_mem, None) in
+    let insn_map = Addr.Map.set insn_map ~key:start ~data:(start_mem, None) in
     let finish_mem = create_memory arch finish junk_data |> ok_exn in
-    let insn_map = Addr.Map.set insn_map finish (finish_mem, None) in
+    let insn_map = Addr.Map.set insn_map ~key:finish ~data:(finish_mem, None) in
     let one  = (Addr.of_int 1 ~width) in
     let two  = (Addr.of_int 2 ~width) in
     let rec construct_loop_body insn_isg insn_map start finish = 
@@ -646,12 +646,12 @@ let test_topological_revisit ctxt =
     match Map.find visit_count addr with
     | Some (count) -> 
       let visit_count = Map.remove visit_count addr in
-      Map.set visit_count addr (count+1)
-    | None -> Map.set visit_count addr 1 in
+      Map.set visit_count ~key:addr ~data:(count+1)
+    | None -> Map.set visit_count ~key:addr ~data:1 in
   
   let visit_count = Topological.fold 
       update_count insn_risg Addr.Map.empty in
-  Map.iteri visit_count (fun ~key ~data -> assert_equal ~ctxt data 1)
+  Map.iteri visit_count ~f:(fun ~key ~data -> assert_equal ~ctxt data 1)
 
 let rec extend_back insn_map insn_isg ?(step=1) addr num =
   let make_link len =
@@ -659,7 +659,7 @@ let rec extend_back insn_map insn_isg ?(step=1) addr num =
     let insn_isg = add_edge insn_isg addr dest in
     let junk_data = String.make len ' ' in
     let mem = create_memory arch dest junk_data |> ok_exn in
-    let insn_map = Map.set insn_map dest (mem, None) in
+    let insn_map = Map.set insn_map ~key:dest ~data:(mem, None) in
     (insn_map, insn_isg) in
   if not (num = 0) then 
     let (insn_map, insn_isg) = make_link step in
@@ -690,7 +690,7 @@ let make_extended_cross tail_addr =
   insn_map, insn_risg
 
 let test_calculate_delta test_ctxt = 
-  let tail_addr = Addr.of_int addr_size 50 in
+  let tail_addr = Addr.of_int ~width:addr_size 50 in
   let insn_map, insn_risg = make_extended_cross tail_addr in
   let superset = Superset_impl.of_components
                    ~insn_map ~insn_risg arch in  
@@ -731,13 +731,13 @@ let construct_branch insn_map insn_risg branch_at incr =
   let left = Addr.(branch_at ++ incr) in
   let junk_data = String.make incr ' ' in
   let left_mem = create_memory arch left junk_data |> ok_exn in
-  let insn_map = Map.set insn_map left (left_mem, None) in
+  let insn_map = Map.set insn_map ~key:left ~data:(left_mem, None) in
   let right = Addr.(left ++ incr) in
   let right_mem = create_memory arch right junk_data |> ok_exn in
-  let insn_map = Map.set insn_map right (right_mem, None) in
+  let insn_map = Map.set insn_map ~key:right ~data:(right_mem, None) in
   let rejoin = Addr.(right ++ incr) in
   let rejoin_mem = create_memory arch rejoin junk_data |> ok_exn in
-  let insn_map = Map.set insn_map rejoin (rejoin_mem, None) in
+  let insn_map = Map.set insn_map ~key:rejoin ~data:(rejoin_mem, None) in
   let insn_risg = add_edge insn_risg left branch_at in
   let insn_risg = add_edge insn_risg right branch_at in
   let insn_risg = add_edge insn_risg rejoin right in
@@ -745,7 +745,7 @@ let construct_branch insn_map insn_risg branch_at incr =
   insn_map, insn_risg
 
 let test_branch_recognition test_ctxt =
-  let tail_addr = Addr.of_int addr_size 50 in
+  let tail_addr = Addr.of_int ~width:addr_size 50 in
   let insn_map, insn_risg = init () in
   let insn_map, insn_risg = 
     construct_branch insn_map insn_risg tail_addr 2 in
@@ -780,7 +780,7 @@ let test_dfs_redundancy_elimination test_ctxt = ()
 
 let test_dfs_iter_order test_ctxt = 
   let insn_map, insn_risg = init () in
-  let start = Addr.of_int addr_size 40 in
+  let start = Addr.of_int ~width:addr_size 40 in
   let insn_risg = add_edge insn_risg start Addr.(succ start) in
   let insn_risg = add_edge insn_risg start Addr.(start ++ 2) in
   let visit_order = ref [] in
@@ -811,7 +811,7 @@ let test_overlay_construction test_ctxt = ()
 (* and the instruction whose body it is inside. *)
 let test_find_all_conflicts test_ctxt =
   let insn_map, insn_risg = init () in
-  let tail_addr = Addr.of_int addr_size 50 in
+  let tail_addr = Addr.of_int ~width:addr_size 50 in
   let num_conflicts = 2 in
   let insn_map, insn_risg =
     construct_tail_conflict
@@ -826,7 +826,7 @@ let test_find_all_conflicts test_ctxt =
 (* Establish the idempotency or addition of edges. *)
 let test_graph_edge_behavior test_ctxt =
   let _, insn_risg = init () in
-  let start = Addr.of_int addr_size 50 in
+  let start = Addr.of_int ~width:addr_size 50 in
   let insn_risg = add_edge insn_risg start Addr.(succ start) in
   let insn_risg = add_edge insn_risg start Addr.(succ start) in
   let insn_risg = add_edge insn_risg start Addr.(succ start) in

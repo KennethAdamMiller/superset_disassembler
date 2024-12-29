@@ -22,7 +22,7 @@ let identify_branches superset =
             let ft = Superset.fall_through_of superset addr in
             if not Addr.(ft = child) && 
                not Addr.(addr = child) then
-              deferred := Map.set !deferred ft (child, addr)
+              deferred := Map.set !deferred ~key:ft ~data:(child, addr)
         );
   in
   let confirm_branches addr = 
@@ -74,7 +74,7 @@ let linear_branch_sweep superset entries =
     | None -> ();
   in
   let post _ _ _ = () in
-  let superset = Traverse.visit_by_block superset ~pre ~post entries in
+  let _ = Traverse.visit_by_block superset ~pre ~post entries in
   let final_jmps = Addr.Hash_set.create () in
   Map.iteri !jmp_hit_cnt ~f:(fun ~key ~data  -> 
       let jmp_addr = key in

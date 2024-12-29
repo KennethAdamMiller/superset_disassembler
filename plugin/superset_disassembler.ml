@@ -14,12 +14,13 @@ let () =
   Theory.declare ~name:"is-valid" (
       Theory.instance () >>=
         Theory.require >>|
-        fun (module Base) : Theory.core -> (module struct
-                                             include Base
-                                             let add x y =
-                                               printf "add is called!\n%!";
-                                               add x y
-                                           end)
+        fun (module Base) : Theory.core ->
+                            (module struct
+                               include Base
+                               let add x y =
+                                 printf "add is called!\n%!";
+                                 add x y
+                             end)
     )
            
 let superdisasm options =

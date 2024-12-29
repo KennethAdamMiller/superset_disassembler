@@ -17,7 +17,7 @@ let get_graph superset = superset.insn_risg
 let add_to_map superset mem insn = 
   let insn_map = get_map superset in
   let addr = (Memory.min_addr mem) in
-  let insn_map = Addr.Map.set insn_map addr (mem, insn) in
+  let insn_map = Addr.Map.set insn_map ~key:addr ~data:(mem, insn) in
   { superset with insn_map }
 
 module OG = Graphlib.To_ocamlgraph(G)
@@ -327,7 +327,7 @@ module Occlusion = struct
   let range_seq superset =
     let insn_map = superset.insn_map in
     let map_seq = Addr.Map.to_sequence insn_map in
-    Seq.bind map_seq (fun (addr, (mem, _)) -> 
+    Seq.bind map_seq ~f:(fun (addr, (mem, _)) -> 
         seq_of_addr_range addr (Memory.length mem)
       )
 
@@ -339,7 +339,7 @@ module Occlusion = struct
     let insn_map = superset.insn_map in
     let insn_map_seq = Addr.Map.to_sequence insn_map in
     let check_mem = Addr.Map.(mem insn_map) in
-    Seq.bind insn_map_seq (fun (addr, (mem, _)) -> 
+    Seq.bind insn_map_seq ~f:(fun (addr, (mem, _)) -> 
         range_seq_of_conflicts ~mem:check_mem addr (Memory.length mem)
       )
 

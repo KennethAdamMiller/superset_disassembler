@@ -35,7 +35,7 @@ let get_non_fall_through_edges superset =
   Superset.ISG.fold_edges superset
     (fun child parent jmps -> 
        if Superset.is_fall_through superset parent child then
-         Map.set jmps child parent
+         Map.set jmps ~key:child ~data:parent
        else jmps
     ) Addr.Map.empty
 
@@ -136,7 +136,7 @@ let extract_loop_addrs superset =
         if List.length loop >= 2 then
           Option.value ~default:addrs 
             Option.(map List.(hd loop) ~f:(fun addr -> 
-                Map.set addrs addr loop))
+                Map.set addrs ~key:addr ~data:loop))
         else addrs
       )
 
@@ -171,7 +171,7 @@ let extract_constants superset =
         | Ok constant -> 
           if Superset.Inspection.contains_addr superset constant
           && Superset.Core.(mem superset constant) then
-            Map.set constants Memory.(min_addr m) constant
+            Map.set constants ~key:Memory.(min_addr m) ~data:constant
           else constants
         | _ -> constants
       )
@@ -199,7 +199,7 @@ let pre_ssa superset lift factors var_use addr =
        Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
            let use_vars = Abstract_ssa.use_ssa bil in
            Set.iter use_vars ~f:(fun use_var -> 
-               var_use := Map.set !var_use use_var addr
+               var_use := Map.set !var_use ~key:use_var ~data:addr
              )
          )
      with _ -> ()
@@ -214,7 +214,7 @@ let pre_freevarssa superset lift factors var_use addr =
       Option.value_map ~default:() bil ~f:(fun (mem,bil) -> 
           let use_vars = Abstract_ssa.use_freevars bil in
           Set.iter use_vars ~f:(fun use_var -> 
-              var_use := Map.set !var_use use_var addr
+              var_use := Map.set !var_use ~key:use_var ~data:addr
             )
         )
     with _ -> ()
@@ -279,7 +279,7 @@ let extract_ssa_to_map superset =
   let var_use = ref Exp.Map.empty in
   let defuse_map = ref Addr.Map.empty in
   let add_to_map def use = 
-    defuse_map := Map.set !defuse_map def use in
+    defuse_map := Map.set !defuse_map ~key:def ~data:use in
   let lift (mem, insn) =
     Superset.Core.lift_insn superset ( (mem, insn)) in
   let pre = pre_ssa superset lift () var_use in
@@ -296,7 +296,7 @@ let extract_freevarssa_to_map superset =
   let var_use = ref Var.Map.empty in
   let defuse_map = ref Addr.Map.empty in
   let add_to_map def use = 
-    defuse_map := Map.set !defuse_map def use in
+    defuse_map := Map.set !defuse_map ~key:def ~data:use in
   let lift (mem, insn) =
     Superset.Core.lift_insn superset ((mem, insn)) in
   let pre = pre_freevarssa superset lift () var_use in
@@ -325,7 +325,7 @@ let extract_cross_section_jmps superset =
            let ft2 = Superset.is_fall_through superset dst src in
            if (ft1 || ft2) then (
              (*Superset_risg.G.remove_edge insn_risg src dst;*)
-             Map.set csedges src dst
+             Map.set csedges ~key:src ~data:dst
            ) else csedges
          else csedges
       ) Addr.Map.empty in
@@ -403,7 +403,7 @@ let fixpoint_map superset feature_pmap =
             | None -> ()
             | Some(p) ->
               prev :=  List.append p  !prev;
-              feature_pmap := Map.set !feature_pmap v !prev;
+              feature_pmap := Map.set !feature_pmap ~key:v ~data:!prev;
           ) ~visited superset cur;
         !feature_pmap
       else feature_pmap
@@ -471,7 +471,7 @@ let branch_map_of_branches superset branches =
       let target = 
         List.find_exn Superset.ISG.(descendants superset fpbranch) 
           ~f:Superset.(is_fall_through superset fpbranch) in
-      Map.set fpbranchmap fpbranch target
+      Map.set fpbranchmap ~key:fpbranch ~data:target
     )
 let extract_fp_branches superset = 
   let branches = get_branches superset in
@@ -723,7 +723,7 @@ let _exfiltset = [
 let exfiltset :(setexfilt) String.Map.t
   = List.fold ~init:String.Map.empty _exfiltset
     ~f:(fun exfiltset (name, f) ->
-        String.Map.set exfiltset name f
+        String.Map.set exfiltset ~key:name ~data:f
       )
 
 let _exfiltmap = [
@@ -737,7 +737,7 @@ let _exfiltmap = [
 let exfiltmap : ((unit, Addr.t) mapexfilt) String.Map.t
   = List.fold ~init:String.Map.empty _exfiltmap
     ~f:(fun exfiltmap (name, f) ->
-        String.Map.set exfiltmap name f
+        String.Map.set exfiltmap ~key:name ~data:f
       )
 
 let featureflist =
@@ -757,7 +757,7 @@ let featureflist =
   ]
 let featuremap = List.fold featureflist ~init:String.Map.empty
     ~f:(fun featuremap (name, f) ->
-        Map.set featuremap name f
+        Map.set featuremap ~key:name ~data:f
       )
 
 let apply_featureset featureset superset = 
@@ -773,8 +773,8 @@ let apply_featureset featureset superset =
   superset
 
 let fdists = String.Map.empty
-let fdists = String.Map.set fdists "FixpointGrammar" 5
-let fdists = String.Map.set fdists "FixpointFreevarSSA" 3
+let fdists = String.Map.set fdists ~key:"FixpointGrammar"    ~data:5
+let fdists = String.Map.set fdists ~key:"FixpointFreevarSSA" ~data:3
 
 let make_featurepmap featureset superset = 
   List.fold ~f:(fun (feature_pmap) feature -> 
@@ -803,7 +803,7 @@ let apply_featurepmap featureset ?(threshold=50) superset =
   let feature_pmap = 
     Map.map feature_pmap ~f:(total_of_features) in
   let feature_pmap = 
-    Map.filter feature_pmap (fun total -> total > threshold) in
+    Map.filter feature_pmap ~f:(fun total -> total > threshold) in
   let visited = Addr.Hash_set.create () in
   let callsites = get_callsites ~threshold:0 superset in
   let superset = tag_callsites visited ~callsites superset in

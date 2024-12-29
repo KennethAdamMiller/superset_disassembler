@@ -254,8 +254,8 @@ let time ?(name="") f x =
   fx
 
 let add_tag_loop analyses = 
-  Map.set analyses (Map.length analyses)
-    (None, Some("Tag loop contradictions",
+  Map.set analyses ~key:(Map.length analyses)
+    ~data:(None, Some("Tag loop contradictions",
                 Sheathed.tag_loop_contradictions), None)
 
 let build_tracker trim phases = 
@@ -267,7 +267,7 @@ let build_tracker trim phases =
       | Some (name,p) ->
          let accu = ref Addr.Map.empty in
          let instance_trim = Metrics.make_mark_tracker accu in
-         (fun x -> instance_trim @@ trim x), Map.set trackers name accu
+         (fun x -> instance_trim @@ trim x), Map.set trackers ~key:name ~data:accu
       | None -> trim,trackers
     )
 
@@ -280,7 +280,7 @@ let build_metrics trim phases =
       | Some (name,p) ->
          let accu = (Addr.Hash_set.create ()) in
          let instance_trim = Metrics.make_gatherer accu in
-         (fun x -> instance_trim @@ trim x), Map.set metrics name accu
+         (fun x -> instance_trim @@ trim x), Map.set metrics ~key:name ~data:accu
       | None -> trim,metrics
     )
 
@@ -293,7 +293,7 @@ let build_setops trim setops =
         else
           let accu = (Addr.Hash_set.create ()) in
           let instance_trim = Metrics.make_gatherer accu in
-          let metrics = Map.set metrics f accu in
+          let metrics = Map.set metrics ~key:f ~data:accu in
           ((fun x -> instance_trim @@ trim x), metrics) in
       add (add (trim,metrics) f1) f2
     )
@@ -356,9 +356,9 @@ let collect_results superset ground_truth_file results metrics setops tracker =
                ) ; 
            )
        );
-     let results = String.Map.set results "True Positives" tps in
-     let results = String.Map.set results "False Positives" fps in
-     let results = String.Map.set results "False Negatives" fns in
+     let results = String.Map.set results ~key:"True Positives"  ~data:tps in
+     let results = String.Map.set results ~key:"False Positives" ~data:fps in
+     let results = String.Map.set results ~key:"False Negatives" ~data:fns in
      results
   | None -> results 
 
@@ -378,7 +378,7 @@ let apply_setops metrics setops =
                if not (Hash_set.mem fmetric2 fv) then
                  Hash_set.add s fv
              );
-           Map.set results colr s
+           Map.set results ~key:colr ~data:s
         | Union ->
            let s = Addr.Hash_set.create () in
            Hash_set.iter fmetric1 ~f:(fun fv ->
@@ -387,7 +387,7 @@ let apply_setops metrics setops =
            Hash_set.iter fmetric2 ~f:(fun fv ->
                Hash_set.add s fv
              );
-           Map.set results colr s
+           Map.set results ~key:colr ~data:s
         | Intersection ->
            let s = Addr.Hash_set.create () in
            Hash_set.iter fmetric1 ~f:(fun fv ->
@@ -398,7 +398,7 @@ let apply_setops metrics setops =
                if (Hash_set.mem fmetric1 fv) then
                  Hash_set.add s fv
              );
-           Map.set results colr s
+           Map.set results ~key:colr ~data:s
       )
       | None, None ->
          report_err colr f1;
@@ -425,18 +425,18 @@ module With_options(Conf : Provider)  = struct
       (Invariants.tag_superset ~invariants) superset
 
   let with_analyses superset analyses =
-    let tps = Addr.Hash_set.create () in
+    (*let tps = Addr.Hash_set.create () in
     let fps = Addr.Hash_set.create () in
-    let ro = Addr.Hash_set.create () in
+    let ro = Addr.Hash_set.create () in*)
     List.fold analyses ~init:superset ~f:(fun superset analyze ->
         if options.collect_report then (
           let analysis = "" in
           match Map.find Features.exfiltmap analysis with
           | Some (extractf, filterf) ->
-             let pmap = Features.make_featurepmap options.featureset superset in
-             let report = 
+             (*let pmap = Features.make_featurepmap options.featureset superset in
+             let _ = 
                Report.collect_map_report superset extractf filterf tps
-                 ro fps  in ()
+                 ro fps pmap in*) ()
           | None -> ()
         );
         analyze superset

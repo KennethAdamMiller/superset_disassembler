@@ -56,7 +56,7 @@ let visit_by_block superset
          let is_branch = Superset.is_branch superset target in
          let is_jmp_edge = not (Superset.is_fall_through superset src target) in
          if is_branch && is_jmp_edge then
-           (Map.set jmps src target, Set.add targets target)
+           (Map.set jmps ~key:src ~data:target, Set.add targets target)
          else (jmps, targets)
       ) (Addr.Map.empty,Addr.Set.empty) in
   (*let loop_addrs = Superset_risg.get_loop_addrs insn_risg in
