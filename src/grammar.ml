@@ -22,7 +22,7 @@ let identify_branches superset =
             let ft = Superset.fall_through_of superset addr in
             if not Addr.(ft = child) && 
                not Addr.(addr = child) then
-              deferred := Map.set !deferred ft (child, addr)
+              deferred := Map.set !deferred ~key:ft ~data:(child, addr)
         );
   in
   let confirm_branches addr = 

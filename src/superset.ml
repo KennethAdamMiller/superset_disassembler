@@ -19,7 +19,7 @@ let get_graph superset = superset.insn_risg
 let add_to_map superset mem insn = 
   let insn_map = get_map superset in
   let addr = (Memory.min_addr mem) in
-  let insn_map = Addr.Map.set insn_map addr (mem, insn) in
+  let insn_map = Addr.Map.set insn_map ~key:addr ~data:(mem, insn) in
   { superset with insn_map }
 
 module OG = Graphlib.To_ocamlgraph(G)
