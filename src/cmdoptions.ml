@@ -132,7 +132,7 @@ module With_options(Conf : Provider)  = struct
         let feature_pmap = 
           Map.map pmap ~f:(total_of_features) in
         let feature_pmap = 
-          Map.filter feature_pmap (fun total ->
+          Map.filter feature_pmap ~f:(fun total ->
               (total > threshold)) in
         Report.collect_distributions superset threshold pmap;
         let superset = 

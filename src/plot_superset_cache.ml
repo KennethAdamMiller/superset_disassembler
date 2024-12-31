@@ -71,7 +71,7 @@ let make_plots summaries =
   make_plot "Actual Occlusion" "Possible Occlusion"
     "occlusion_and_occspace.png" occ occ_space;
   let () =
-    match List.map2 fe clean (fun x y -> x - y) with
+    match List.map2 fe clean ~f:(fun x y -> x - y) with
     | List.Or_unequal_lengths.Ok occfuncs ->
        make_plot "Total Occlusion" "# Unclean functions"
          "occcnt_occfuncs.png" occ occfuncs

@@ -152,7 +152,7 @@ let extract_loop_addrs superset =
         if List.length loop >= 2 then
           Option.value ~default:addrs 
             Option.(map List.(hd loop) ~f:(fun addr -> 
-                Map.set addrs addr loop))
+                Map.set addrs ~key:addr ~data:loop))
         else addrs
       )
 
@@ -187,7 +187,7 @@ let extract_constants superset =
         | Ok constant -> 
           if Superset.Inspection.contains_addr superset constant
           && Superset.Core.(mem superset constant) then
-            Map.set constants Memory.(min_addr m) constant
+            Map.set constants ~key:Memory.(min_addr m) ~data:constant
           else constants
         | _ -> constants
       )
@@ -208,7 +208,7 @@ let extract_cross_section_jmps superset =
            let ft2 = Superset.is_fall_through superset dst src in
            if (ft1 || ft2) then (
              (*Superset_risg.G.remove_edge insn_risg src dst;*)
-             Map.set csedges src dst
+             Map.set csedges ~key:src ~data:dst
            ) else csedges
          else csedges
       ) Addr.Map.empty in
@@ -275,7 +275,7 @@ let fixpoint_map superset feature_pmap =
             | None -> ()
             | Some(p) ->
               prev :=  List.append p  !prev;
-              feature_pmap := Map.set !feature_pmap v !prev;
+              feature_pmap := Map.set !feature_pmap ~key:v ~data:!prev;
           ) ~visited superset cur;
         !feature_pmap
       else feature_pmap
@@ -420,7 +420,7 @@ let _exfiltset = [
 let exfiltset :(setexfilt) String.Map.t
   = List.fold ~init:String.Map.empty _exfiltset
     ~f:(fun exfiltset (name, f) ->
-        String.Map.set exfiltset name f
+        String.Map.set exfiltset ~key:name ~data:f
       )
 
 let featureflist =
@@ -432,7 +432,7 @@ let featureflist =
   ]
 let featuremap = List.fold featureflist ~init:String.Map.empty
     ~f:(fun featuremap (name, f) ->
-        Map.set featuremap name f
+        Map.set featuremap ~key:name ~data:f
       )
 
 let with_featureset ~f ~init featureset superset =
@@ -445,8 +445,8 @@ let with_featureset ~f ~init featureset superset =
   superset
 
 let fdists = String.Map.empty
-let fdists = String.Map.set fdists "FixpointGrammar" 1
-let fdists = String.Map.set fdists "Liveness" 1
+let fdists = String.Map.set fdists ~key:"FixpointGrammar" ~data:1
+let fdists = String.Map.set fdists ~key:"Liveness"        ~data:1
 
 let make_featurepmap featureset superset = 
   List.fold ~f:(fun (feature_pmap) feature -> 

@@ -18,7 +18,7 @@ let transitions superset =
   Superset.ISG.fold_vertex superset (fun addr fs ->
       match Superset.Core.lift_at superset addr with
       | Some bil ->
-         Addr.Map.add_exn fs addr {
+         Addr.Map.add_exn fs ~key:addr ~data:{
              defs = stmt_def_freevars#run bil Var.Set.empty;
              uses = Bil.free_vars bil;
            }

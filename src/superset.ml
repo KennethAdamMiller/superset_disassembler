@@ -316,7 +316,7 @@ module ISG = struct
       post v
     in if Core.mem superset v then visit v
 
-  let fixpoint superset ?steps ?start ?rev ?step =
+  let fixpoint ?steps ?start ?rev ?step superset =
     Graphlib.fixpoint ?steps ?start ?rev ?step
       (module G) superset.insn_risg
 
@@ -619,7 +619,7 @@ let get_non_fall_through_edges superset =
   ISG.fold_edges superset
     (fun child parent jmps -> 
        if is_fall_through superset parent child then
-         Map.set jmps child parent
+         Map.set jmps ~key:child ~data:parent
        else jmps
     ) Addr.Map.empty
   
