@@ -49,11 +49,11 @@ module ISG : sig
 
   val to_list : t -> (addr * addr) list
 
-  val fixpoint : t ->
-                 ?steps:int ->
+  val fixpoint : ?steps:int ->
                  ?start:addr ->
                  ?rev:bool ->
                  ?step:(int -> addr -> 'a -> 'a -> 'a) ->
+                 t ->
                  init:(addr, 'a) Solution.t ->
                  equal:('a -> 'a -> bool) ->
                  merge:('a -> 'a -> 'a) ->
