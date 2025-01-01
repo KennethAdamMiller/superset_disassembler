@@ -298,7 +298,7 @@ let save_metadata options =
           let d = Data.Cache.Digest.(to_string digest) in
           KB.return @@ (Some
                           (Metadata.Cache_metadata.set c
-                             options.target d))
+                             ~key:options.target ~data:d))
         );
       Metadata.save ()
     )
@@ -533,7 +533,7 @@ let _distribution_command : unit =
               ) >>= fun slots ->
           let metric_vals =
             List.fold ~init:String.Map.empty slots
-              ~f:(fun m (name,v) -> String.Map.set m name v) in
+              ~f:(fun m (name,v) -> String.Map.set m ~key:name ~data:v) in
           let fmt,rem = List.hd metrics, List.tl metrics in
           let s = 
             match fmt, rem with
