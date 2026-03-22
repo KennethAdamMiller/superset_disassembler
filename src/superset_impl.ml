@@ -18,7 +18,7 @@ type t = {
   brancher    : Brancher.t;
   endianness  : endian option;
   lifter      : lifter;
-  insn_map    : (mem * (Dis.full_insn option)) Addr.Map.t;
+  insn_map    : (mem * (Dis.full_insn option)) Addr.Table.t;
   lifted      : bil Addr.Table.t;
   insn_risg   : G.t;
   bad         : Addr.Hash_set.t;
